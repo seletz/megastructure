@@ -16,6 +16,8 @@ status: current
 
 ## Unreleased
 
+## 0.1.0 - 2026-09-13
+
 ### Added
 
 - Publishing a GitHub release builds and attaches Linux and macOS archives, and `mise run release:release` tags the version in `project.godot`, then moves `develop` on to the next patch version. (#109)
