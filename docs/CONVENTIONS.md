@@ -115,6 +115,16 @@ and, if the PDF is stored, under which licence.
   A search for the old path under `docs/` finds them.
 - New notes are linked from [[Home]] or from a note that is.
 
+## Running Godot
+
+- Anything that does not need pixels runs Godot with `--headless`: checks,
+  dumps, imports, smoke runs.
+- An image of a scene comes from `mise run shot <scene> <out.png>`, which
+  renders inside Xvfb so no window opens on the maintainer's desktop
+  ([[screenshots]]). Workers never write ad-hoc capture scripts and never
+  start a plain windowed `godot` run to look at something.
+- Shots go under `build/shots/` and are never committed.
+
 ## Changelog
 
 - A pull request that changes behaviour, controls, defaults, tooling or

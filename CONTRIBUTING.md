@@ -70,6 +70,13 @@ It must pass. CI runs the same task as the required `check` status.
 
 GDScript files use tabs for indentation.
 
+Run Godot with `--headless` for everything that does not need pixels. To get
+an image of a scene, use `mise run shot <scene> <out.png>` (seed, pose,
+params and resolution as flags); it renders under `xvfb-run` so no window
+opens. Workers and agents never write ad-hoc capture scripts or open a Godot
+window. Details in
+[`docs/process/screenshots.md`](docs/process/screenshots.md).
+
 ## Releases
 
 **`develop` always carries the NEXT version.** The version is `config/version`
