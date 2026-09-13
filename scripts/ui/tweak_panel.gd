@@ -1,10 +1,13 @@
 class_name TweakPanel
 extends CanvasLayer
-## Collapsible, scrollable panel of every tweakable shader parameter.
+## Collapsible, scrollable panel of every tweakable shader and script parameter.
 ##
 ## Controls are generated from a ParamRegistry built on the target material,
-## and every change is written straight back to the ShaderMaterial. Tab toggles
-## the panel; while it is open the mouse is released and camera look is off.
+## and every change is written straight back to the ShaderMaterial. Nodes in
+## `param_sources` add script parameters through their
+## `register_params(registry: ParamRegistry)` method before the panel is built;
+## their changes go to the setter they registered. Tab toggles the panel; while
+## it is open the mouse is released and camera look is off.
 ##
 ## The Presets section at the top saves, loads and deletes PresetStore presets;
 ## the last used preset is restored when the panel starts.
@@ -13,7 +16,12 @@ const PANEL_WIDTH := 480.0
 const LABEL_WIDTH := 160.0
 
 ## MeshInstance3D whose active surface material is the raymarch ShaderMaterial.
+## May be empty in scenes without a shader, where only script params show.
 @export var material_source: NodePath
+## Nodes with a `register_params(registry: ParamRegistry)` method.
+@export var param_sources: Array[NodePath] = []
+## Show the presets section (presets only make sense for the main scene).
+@export var show_presets := true
 ## FreeFlyCamera whose look input is suspended while the panel is open.
 @export var camera: NodePath
 @export var start_open := false
@@ -39,23 +47,32 @@ var _preset_status: Label
 
 
 func _ready() -> void:
-	var mesh := get_node_or_null(material_source) as MeshInstance3D
 	var material: ShaderMaterial = null
-	if mesh != null:
-		material = mesh.get_active_material(0) as ShaderMaterial
-	if material == null:
-		push_warning("TweakPanel: no ShaderMaterial found at %s" % material_source)
-		return
+	if not material_source.is_empty():
+		var mesh := get_node_or_null(material_source) as MeshInstance3D
+		if mesh != null:
+			material = mesh.get_active_material(0) as ShaderMaterial
+		if material == null:
+			push_warning("TweakPanel: no ShaderMaterial found at %s" % material_source)
+			return
 	registry = ParamRegistry.from_material(material)
-	presets = PresetStore.create(registry, _camera(), preset_directory)
+	for path in param_sources:
+		var source := get_node_or_null(path)
+		if source == null or not source.has_method("register_params"):
+			push_warning("TweakPanel: no register_params() on %s" % path)
+			continue
+		source.call("register_params", registry)
 	var restored := PresetStore.BUILTIN_NAME
-	if restore_last:
-		var preset := presets.load_preset(presets.last_used_name())
-		if preset != null:
-			presets.apply(preset, _camera())
-			restored = preset.name
+	if show_presets:
+		presets = PresetStore.create(registry, _camera(), preset_directory)
+		if restore_last:
+			var preset := presets.load_preset(presets.last_used_name())
+			if preset != null:
+				presets.apply(preset, _camera())
+				restored = preset.name
 	_build()
-	_refresh_preset_list(restored)
+	if show_presets:
+		_refresh_preset_list(restored)
 	_panel.visible = false
 	if start_open:
 		_set_open(true)
@@ -167,8 +184,9 @@ func _build() -> void:
 	title.text = "Parameters (Tab to close)"
 	_sections.add_child(title)
 
-	_build_presets()
-	_sections.add_child(HSeparator.new())
+	if show_presets:
+		_build_presets()
+		_sections.add_child(HSeparator.new())
 
 	_sections.add_child(SeedControl.new())
 	_sections.add_child(HSeparator.new())
