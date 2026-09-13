@@ -1,9 +1,10 @@
-[gd_scene load_steps=10 format=3 uid="uid://c3fr4k8xm2n1q"]
+[gd_scene load_steps=11 format=3 uid="uid://c3fr4k8xm2n1q"]
 
 [ext_resource type="Script" path="res://scripts/free_fly_camera.gd" id="1_camera"]
 [ext_resource type="Shader" path="res://shaders/raymarch_world.gdshader" id="2_raymarch"]
 [ext_resource type="PackedScene" uid="uid://epjp3hm7equ7" path="res://scenes/ui/tweak_panel.tscn" id="3_tweak_panel"]
 [ext_resource type="Script" path="res://scripts/seed_uniform.gd" id="4_seed_uniform"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="5_hud"]
 
 [sub_resource type="Environment" id="Environment_dark"]
 background_mode = 1
@@ -54,3 +55,7 @@ mesh = SubResource("BoxMesh_test")
 [node name="TweakPanel" parent="." instance=ExtResource("3_tweak_panel")]
 material_source = NodePath("../Camera/RaymarchQuad")
 camera = NodePath("../Camera")
+
+[node name="Hud" parent="." instance=ExtResource("5_hud")]
+camera = NodePath("../Camera")
+hidden_during_capture = Array[NodePath]([NodePath("../TweakPanel")])

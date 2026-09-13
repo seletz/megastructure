@@ -126,3 +126,7 @@ run = "godot --headless --path . --script res://scripts/tools/registry_dump.gd"
 [tasks.seed-check]
 description = "Verify seed control, shader uniform and seed-reproducible frames (opens a window)"
 run = "godot --path . --script res://scripts/tools/seed_check.gd"
+
+[tasks.screenshot-check]
+description = "Verify the HUD screenshot is saved with the HUD hidden (opens a window)"
+run = "godot --path . --script res://scripts/tools/screenshot_check.gd"
