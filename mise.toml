@@ -767,3 +767,17 @@ run = "godot --headless --path . --script res://scripts/tools/preset_check.gd"
 depends = ["import"]
 description = "Verify every file under scripts/, shaders/ and scenes/ is linked from exactly one docs/code note (headless)"
 run = "godot --headless --path . --script res://scripts/tools/code_map_check.gd"
+
+[tasks.skeleton-histogram]
+depends = ["import"]
+description = "Print the seed 0 sector type histogram, check sector_type is total and deterministic, and compare with docs/skeleton_histogram_seed0.md (headless). --update rewrites the reference"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+[[ "${usage_update:-false}" == "true" ]] && args+=(--update)
+godot --headless --path . --script res://scripts/tools/skeleton_histogram.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--update" help="Rewrite docs/skeleton_histogram_seed0.md from the current grammar instead of comparing"
+'''
