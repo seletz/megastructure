@@ -8,9 +8,16 @@ camera pose, with every structural and lighting constant exposed as a knob.
 
 The concept and the longer-term architecture (skeleton, walkable graph, WFC
 fill) are described in [`MEGASTRUCTURE_CONCEPT.md`](MEGASTRUCTURE_CONCEPT.md).
-This milestone is a stepping stone towards its "look pass" and "chasm sector
-type" milestones and deliberately keeps the SDF renderer, because it is the
-cheapest way to see the world at full scale.
+
+**Scope.** The ray-marched renderer built here is a throwaway prototype. Its
+only job is to get something on screen to fly around in and to settle how the
+visuals should look, with every constant adjustable live. It is not the
+rendering architecture of the project. From milestone 0.0.2 on, the
+three-layer generative approach (skeleton, walkable graph, WFC fill) is built
+on Godot's own functionality: meshes, `GridMap`/`MultiMeshInstance3D`, lights,
+fog, global illumination and physics. Nothing in this milestone should be
+made production-grade for its own sake, and the SDF code is expected to be
+dropped once the mesh-based world catches up with it visually.
 
 ## Approach
 
@@ -19,9 +26,10 @@ and a spatial shader covers the whole view from the near plane. The shader
 reconstructs the world-space ray per pixel from the inverse projection and
 view matrices, marches the distance field, shades the hit, and writes `DEPTH`
 so ordinary Godot meshes intersect and occlude correctly. This keeps the port
-a near line-by-line translation of the prototype's GLSL while leaving the door
-open for regular geometry (props, human-scale anchors, later the WFC output)
-in the same scene.
+a near line-by-line translation of the prototype's GLSL and lets the tweak
+panel drive every constant directly. Depth compositing is there so reference
+meshes can be dropped into the scene for scale checks, not as a path towards
+mixing the SDF with the later mesh-based world.
 
 **Port the chasm distance field feature by feature.** Facades, openings,
 pillars, bridges and cables land as separate pull requests, each with a
