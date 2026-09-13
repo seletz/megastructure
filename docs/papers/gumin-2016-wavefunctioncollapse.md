@@ -51,4 +51,4 @@ repository.
 - [[RESEARCH_WFC]], sections 1 (algorithm choice), 2 (socket authoring),
   3 (cell choice and propagation) and 6 (reference implementations).
 - [[MEGASTRUCTURE_CONCEPT]], section 2.3 (fill layer).
-- No code yet; the solver is planned for milestone 0.0.2.
+- No code yet; the solver is planned for milestone 0.2.0.

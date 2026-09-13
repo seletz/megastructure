@@ -42,4 +42,4 @@ go through `RenderingServer` and `PhysicsServer3D`, such as assigning
 
 - [[RESEARCH_WFC]], section 4 (threads).
 - Related: [[godot-docs-workerthreadpool]], [[godot-docs-multimesh]].
-- No code yet; planned for milestone 0.0.2.
+- No code yet; planned for milestone 0.2.0.

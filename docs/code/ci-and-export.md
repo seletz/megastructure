@@ -11,11 +11,13 @@ status: current
 > Every pull request and every push to `develop` is checked automatically on
 > GitHub: a fresh Linux machine installs the pinned tools and runs the same
 > `mise run check` a developer runs locally. `develop` only accepts changes
-> whose check has passed on an up-to-date branch. Building a standalone Linux
-> program from the project uses one export preset and two tasks: one fetches
-> Godot's export templates, the other produces the executable.
+> whose check has passed on an up-to-date branch. Building a standalone
+> program uses an export preset per platform (Linux and macOS) and two tasks:
+> one fetches Godot's export templates, the other produces the build. A second
+> workflow builds both platforms for every published GitHub release and
+> attaches the archives to it.
 
-## CI workflow
+## Check workflow
 
 [check.yml](../../.github/workflows/check.yml) defines one job, `check`, on
 `ubuntu-latest`. It runs for every pull request and for pushes to `develop`.
@@ -51,33 +53,71 @@ apply.
 - administrators are not forced through these rules, and linear history is
   not required, so merges keep their merge commits.
 
+## Release workflow
+
+[release.yml](../../.github/workflows/release.yml) runs when a GitHub release
+is published (normally by `mise run release:release`, see [[releasing]]). It
+has two jobs, `linux` on `ubuntu-latest` and `macos` on `macos-latest`, and
+every build step is a mise task:
+
+1. Check out the tagged commit and install mise with `jdx/mise-action`
+   (cached).
+2. Linux only: install the same Godot runtime libraries as the check workflow.
+3. `mise run templates`.
+4. `mise run export linux build/linux/megastructure.x86_64` or
+   `mise run export macos build/macos/megastructure.zip`.
+5. `mise run release:package linux|macos`: writes the archive to
+   `build/release/` and fails if the tag is not `v` plus `config/version`.
+6. `gh release upload "$GITHUB_REF_NAME" build/release/* --clobber`, with
+   `contents: write` permission.
+
+A pull request that changes `release.yml` or `export_presets.cfg` runs both
+jobs without the upload step, so a broken pipeline shows up before a release.
+
 ## Export
 
-[export_presets.cfg](../../export_presets.cfg) has one preset, `linux`: an
-x86_64 Linux build with the `.pck` embedded in the executable, exporting all
-resources except `build/*` and `docs/*`, to
-`build/linux/megastructure.x86_64` by default.
+[export_presets.cfg](../../export_presets.cfg) has two presets. Both export
+all resources except `build/*` and `docs/*`.
+
+- `linux`: an x86_64 Linux build with the `.pck` embedded in the executable,
+  to `build/linux/megastructure.x86_64` by default.
+- `macos`: a universal (x86_64 and arm64) macOS app in a zip, to
+  `build/macos/megastructure.zip` by default, with the `.pck` inside the app
+  bundle. Code signing and notarization are off, so the app is unsigned and
+  Gatekeeper asks for a right-click Open on first launch. The bundle
+  identifier is `io.github.seletz.megastructure`. Universal and arm64 exports
+  need ETC2/ASTC textures, so [project.godot](../../project.godot) imports
+  them (`rendering/textures/vram_compression/import_etc2_astc`). Godot
+  exports this zip from Linux too, because nothing is signed.
+
+Godot writes `config/version` from `project.godot` into the exports, for
+example as the macOS bundle version.
 
 Exporting needs Godot's export templates for exactly the pinned version:
 
 ```sh
 mise run templates                                        # once per Godot version
 mise run export linux build/linux/megastructure.x86_64    # release build
+mise run export macos build/macos/megastructure.zip
 mise run export-debug linux build/linux/megastructure.x86_64
 ```
 
 `templates` reads the version from `godot --version`, derives the release tag
 (a zero patch level is dropped, so 4.7.0 is `4.7-stable`), downloads the
-`.tpz` from the Godot GitHub release and unpacks it into
-`~/.local/share/godot/export_templates/<version>`. The output folder `build/`
-is ignored by git and removed by `mise run clean`.
+`.tpz` from the Godot GitHub release and unpacks it into Godot's data folder:
+`~/.local/share/godot/export_templates/<version>` on Linux,
+`~/Library/Application Support/Godot/export_templates/<version>` on macOS.
+The output folder `build/` is ignored by git and removed by `mise run clean`.
 
 ## How to run or check it
 
 - `mise run check` locally gives the same result as CI.
 - The workflow result is shown as the `check` status on each pull request.
 - `mise run templates && mise run export linux build/linux/megastructure.x86_64`,
-  then run the produced file.
+  then run the produced file; `mise run release:package linux` packs it like
+  the release workflow does.
+- Release workflow runs: `gh run list --workflow release.yml`; the archives
+  appear as assets on the release.
 
 ## References
 
@@ -86,3 +126,6 @@ is ignored by git and removed by `mise run clean`.
 - [[0002-issue-branch-worktrees-and-merge-commits]]: the branch and merge
   workflow the protection rules support.
 - [[tools-and-tasks]]: every task in detail.
+- [[releasing]]: the release process that triggers the release workflow.
+- [[0014-develop-is-always-the-next-version]]: which version a release
+  builds.

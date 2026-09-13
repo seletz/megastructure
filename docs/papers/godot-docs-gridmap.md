@@ -41,4 +41,4 @@ culling) are why placement later moves to `MultiMeshInstance3D`; see
 
 - [[RESEARCH_WFC]], section 5 (placement), issue E1 in section 7, and
   decision 5 (GridMap lifetime).
-- No code yet; placement is planned for milestone 0.0.2.
+- No code yet; placement is planned for milestone 0.2.0.

@@ -1,11 +1,11 @@
 ---
 tags:
   - plan
-  - milestone/0.0.1
+  - milestone/0.1.0
 status: current
 ---
 
-# Plan for milestone 0.0.1: exterior prototype in Godot
+# Plan for milestone 0.1.0: exterior prototype in Godot
 
 > [!summary]
 > The plan for the first milestone: bring the ray-marched chasm prototype
@@ -13,10 +13,10 @@ status: current
 > and adjust every structural and lighting constant from a live panel until it
 > matches the HTML page for the same seed and camera position. The renderer is
 > a throwaway used to settle the look; the real world will be built from Godot
-> meshes from milestone 0.0.2 on. The note also records the switch to a shared
+> meshes from milestone 0.2.0 on. The note also records the switch to a shared
 > integer hash and lists the epics of the milestone.
 
-Milestone 0.0.1 brings the exterior (chasm) HTML prototype into Godot 4 as a
+Milestone 0.1.0 brings the exterior (chasm) HTML prototype into Godot 4 as a
 fullscreen ray-marched scene with a free-fly camera and a live tweak panel.
 No gameplay, no streaming, no WFC yet: the goal is pixel parity with
 [`megastructure-chasm.html`](megastructure-chasm.html) for the same seed and
@@ -28,7 +28,7 @@ fill) are described in [`MEGASTRUCTURE_CONCEPT.md`](MEGASTRUCTURE_CONCEPT.md).
 **Scope.** The ray-marched renderer built here is a throwaway prototype. Its
 only job is to get something on screen to fly around in and to settle how the
 visuals should look, with every constant adjustable live. It is not the
-rendering architecture of the project. From milestone 0.0.2 on, the
+rendering architecture of the project. From milestone 0.2.0 on, the
 three-layer generative approach (skeleton, walkable graph, WFC fill) is built
 on Godot's own functionality: meshes, `GridMap`/`MultiMeshInstance3D`, lights,
 fog, global illumination and physics. Nothing in this milestone should be
@@ -72,7 +72,7 @@ That function depends on GPU float rounding and cannot be reproduced
 bit-exactly on the CPU, so GDScript could never agree with the shader about
 where a pillar or bridge is.
 
-Milestone 0.0.1 replaces it with an integer hash defined once and implemented
+Milestone 0.1.0 replaces it with an integer hash defined once and implemented
 three times: in a shader include using `uint` arithmetic only, in GDScript
 using 64-bit ints masked to 32 bits, and in both HTML prototypes using
 `Math.imul` and `>>> 0`. A table of reference vectors and a

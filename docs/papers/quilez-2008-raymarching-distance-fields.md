@@ -33,7 +33,7 @@ copied here.
 
 ## Why it matters here
 
-Milestone 0.0.1 renders the whole world this way: one fullscreen shader
+Milestone 0.1.0 renders the whole world this way: one fullscreen shader
 marches the chasm's distance function. Besides the march loop, the
 five-sample ambient occlusion (sample the distance function at growing
 offsets along the normal and darken where geometry is closer than expected)
@@ -42,7 +42,7 @@ also keeps open the option of ray-marched impostors for distant sectors.
 
 ## Used by
 
-- [[PLAN_0.0.1]]: the fullscreen ray-march quad and marching quality
+- [[PLAN_0.1.0]]: the fullscreen ray-march quad and marching quality
   controls.
 - [[MEGASTRUCTURE_CONCEPT]]: open question on SDF impostors for distant
   sectors.

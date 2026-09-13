@@ -56,7 +56,7 @@ sources:
 
 - `tags`: a short list of lowercase topics (`concept`, `plan`, `research`,
   `algorithm`, `paper`, `decision`, `code-map`, ...). Nested tags such as
-  `milestone/0.0.2` are fine.
+  `milestone/0.2.0` are fine.
 - `status`: one of
   - `draft`: being written, may be incomplete or wrong;
   - `current`: describes the project as it is;
@@ -69,14 +69,14 @@ sources:
 - Titles (the level-one heading) are in Title Case: `# Walkable Graph`.
 - Paper notes are named `<first-author>-<year>-<short-title>`.
 - The documents that predate the wiki (`MEGASTRUCTURE_CONCEPT.md`,
-  `PLAN_0.0.1.md`, `RESEARCH_WFC.md`, `hash_vectors.md`) keep their names so
+  `PLAN_0.1.0.md`, `RESEARCH_WFC.md`, `hash_vectors.md`) keep their names so
   existing links from code, issues and pull requests keep working.
   `Home.md` and `CONVENTIONS.md` are named to stand out as entry points.
 
 ## Linking
 
 - **Between notes:** wikilinks, `[[walkable-graph]]`, or with a heading,
-  `[[PLAN_0.0.1#Decision: shared integer hash]]`. Link only to notes that
+  `[[PLAN_0.1.0#Decision: shared integer hash]]`. Link only to notes that
   exist; mention planned notes as plain text.
 - **To code:** relative markdown links from the note to the file in the
   repository, for example
@@ -124,4 +124,5 @@ and, if the PDF is stored, under which licence.
 - Newest items come first everywhere: the new line goes at the top of its
   list, and the newest version section sits directly under `Unreleased`.
 - A release moves the `Unreleased` entries under a new `<version> - <date>`
-  heading and gets a git tag.
+  heading and gets a git tag; `mise run release:release` does both
+  ([[releasing]]).

@@ -4,9 +4,9 @@
 
 Work is tracked in GitHub issues and grouped in three levels:
 
-- **Milestones** (`gh` milestones, e.g. `0.0.1`) mark a releasable state.
+- **Milestones** (`gh` milestones, e.g. `0.1.0`) mark a releasable state.
   Each milestone has a plan document in `docs/` (e.g.
-  [`docs/PLAN_0.0.1.md`](docs/PLAN_0.0.1.md)).
+  [`docs/PLAN_0.1.0.md`](docs/PLAN_0.1.0.md)).
 - **Epics** are issues that describe a larger feature. They carry no code of
   their own and are closed when all their sub-issues are done.
 - **Sub-issues** hang off an epic (GitHub sub-issues) and are the unit of
@@ -50,7 +50,7 @@ Fixed or Docs list. Each entry is one short plain sentence ending with the pull
 request number, for example `(#33)`. Newest items come first everywhere: the
 new line goes at the top of its list, and the newest version section sits
 directly under `Unreleased`. A release moves the `Unreleased` entries under a
-new `<version> - <date>` heading and gets a git tag.
+new `<version> - <date>` heading and gets a git tag (see Releases).
 
 ## Checks
 
@@ -64,6 +64,31 @@ mise run check
 It must pass. CI runs the same task as the required `check` status.
 
 GDScript files use tabs for indentation.
+
+## Releases
+
+**`develop` always carries the NEXT version.** The version is `config/version`
+in `project.godot` (semantic versioning). A release tags the version that is
+already there and immediately bumps `develop` to the next patch, so at no time
+does `develop` sit on an already released version. A release never edits the
+version before tagging.
+
+- Patch release, on a clean and up-to-date `develop`:
+
+  ```sh
+  mise run release:release --dry-run   # prints every command
+  mise run release:release
+  ```
+
+  It dates the changelog (`release:changelog-roll`), tags `v<version>`,
+  pushes, creates the GitHub release, bumps the patch version
+  (`release:bump patch`) and pushes again. The release workflow then attaches
+  a Linux and a macOS build to the release.
+- Milestone release: first run `mise run release:bump minor` (e.g. 0.1.3 to
+  0.2.0) on an issue branch and merge it, then run `release:release`.
+
+The full process, including how to verify a release, is in
+[`docs/process/releasing.md`](docs/process/releasing.md).
 
 ## Pull requests
 

@@ -21,7 +21,7 @@ links:
 
 ## Context
 
-By milestone 0.0.2 the reasoning behind the project was scattered across a
+By milestone 0.2.0 the reasoning behind the project was scattered across a
 concept document, a plan, a research report and dozens of pull request
 descriptions. Pull requests are hard to find later, and loose markdown files
 do not link to each other.

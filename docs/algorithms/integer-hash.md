@@ -41,7 +41,7 @@ deterministic world:
 
 Integer arithmetic has none of these problems: unsigned 32-bit
 multiplication and xor wrap the same way in every language that offers them.
-The decision is recorded in [[PLAN_0.0.1#Decision: shared integer hash]]; the
+The decision is recorded in [[PLAN_0.1.0#Decision: shared integer hash]]; the
 accepted cost was that the prototypes' layouts changed once for a given seed.
 
 ## How the hash is built
@@ -114,7 +114,7 @@ salt 32, so the offset is not correlated with the presence. The chasm uses
 salts in bands per feature (3 to 11 for facades, 21 to 24 for pillars, 31 to
 37 for bridges, 41 to 44 for cables, 50 and 51 for grime, 60 for film grain);
 the full table is in [[chasm-distance-field]]. The fill layer of milestone
-0.0.2 will draw from the same hash and fold an attempt counter into the salt
+0.2.0 will draw from the same hash and fold an attempt counter into the salt
 (see [[wave-function-collapse]]).
 
 The **seed** is a `uniform uint` in the shader. `WorldState` clamps the seed
@@ -180,7 +180,7 @@ Sources:
   Good Algorithms for Random Number Generation
 - Jarzynski and Olano 2020, Hash Functions for GPU Rendering
 
-Related notes: [[hash_vectors]], [[PLAN_0.0.1]], [[chasm-distance-field]],
+Related notes: [[hash_vectors]], [[PLAN_0.1.0]], [[chasm-distance-field]],
 [[wave-function-collapse]].
 
 Code: [hash.gdshaderinc](../../shaders/include/hash.gdshaderinc),

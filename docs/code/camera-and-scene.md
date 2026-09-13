@@ -103,4 +103,4 @@ same view. `set_pose()` places the camera in one call; presets use it.
 - [[0003-ray-marcher-is-a-throwaway-prototype]]: why the world is a single
   shader on a quad.
 - [[sdf-ray-marching]]: the rendering technique.
-- [[PLAN_0.0.1]]: the milestone this scene implements.
+- [[PLAN_0.1.0]]: the milestone this scene implements.

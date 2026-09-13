@@ -7,7 +7,7 @@ links:
   - https://github.com/seletz/megastructure/issues/36
   - https://github.com/seletz/megastructure/pull/37
   - https://github.com/seletz/megastructure/pull/42
-  - "[[PLAN_0.0.1]]"
+  - "[[PLAN_0.1.0]]"
   - "[[RESEARCH_WFC]]"
   - "[[0003-ray-marcher-is-a-throwaway-prototype]]"
 ---
@@ -15,7 +15,7 @@ links:
 # Godot-Native Rendering for the Generative World
 
 > [!summary]
-> From milestone 0.0.2 on, the generated megastructure is made of ordinary
+> From milestone 0.2.0 on, the generated megastructure is made of ordinary
 > Godot objects: tile meshes placed on a grid, Godot's lights, fog and
 > physics. We do not write our own renderer. This lets the world have
 > collision, streaming and level of detail using features the engine already
@@ -25,7 +25,7 @@ links:
 
 The world is generated in three layers: a skeleton of 48 m sectors, a
 walkable graph, and a fill of hand-authored tiles on a 2 m grid
-([[MEGASTRUCTURE_CONCEPT]]). The 0.0.1 ray-marcher can draw formulas, but not
+([[MEGASTRUCTURE_CONCEPT]]). The 0.1.0 ray-marcher can draw formulas, but not
 placed tiles the player can walk on
 ([[0003-ray-marcher-is-a-throwaway-prototype]]).
 
@@ -54,5 +54,5 @@ Build the generative world on Godot features, as set out in the plan's
 ## Links
 
 - #36, PR #37: plan scope; PR #42: WFC research.
-- [[PLAN_0.0.1]], "Scope"; [[RESEARCH_WFC]], "5. Placement in Godot".
+- [[PLAN_0.1.0]], "Scope"; [[RESEARCH_WFC]], "5. Placement in Godot".
 - Related: [[0011-typed-gdscript-solver-first]].

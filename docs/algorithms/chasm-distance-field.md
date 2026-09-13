@@ -10,7 +10,7 @@ status: current
 # Chasm Distance Field
 
 > [!summary]
-> The chasm of milestone 0.0.1 is a canyon 280 m wide between two stratified
+> The chasm of milestone 0.1.0 is a canyon 280 m wide between two stratified
 > facades, with free-standing pillars, bridges and hanging cables in the void.
 > All of it is one distance function built from a handful of repeating
 > patterns: ledges every stratum, decks every 30 m, buttresses every 40 m. The
@@ -196,7 +196,7 @@ in [[sdf-ray-marching]].
 ## References
 
 Related notes: [[sdf-ray-marching]], [[integer-hash]],
-[[MEGASTRUCTURE_CONCEPT]] (tile vocabulary, exterior), [[PLAN_0.0.1]].
+[[MEGASTRUCTURE_CONCEPT]] (tile vocabulary, exterior), [[PLAN_0.1.0]].
 
 Code: [chasm.gdshaderinc](../../shaders/include/chasm.gdshaderinc),
 [sdf.gdshaderinc](../../shaders/include/sdf.gdshaderinc),

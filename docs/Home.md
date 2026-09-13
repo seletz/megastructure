@@ -29,7 +29,7 @@ status: current
 
 ## Plan and milestones
 
-- [[PLAN_0.0.1]]: milestone 0.0.1, the ray-marched chasm prototype ported to
+- [[PLAN_0.1.0]]: milestone 0.1.0, the ray-marched chasm prototype ported to
   Godot with a free-fly camera and a live tweak panel.
 - Milestones and epics are tracked on
   [GitHub](https://github.com/seletz/megastructure/milestones).
@@ -37,7 +37,7 @@ status: current
 ## Research
 
 - [[RESEARCH_WFC]]: how to fill a sector with Wave Function Collapse / model
-  synthesis in Godot, with a proposed breakdown of milestone 0.0.2.
+  synthesis in Godot, with a proposed breakdown of milestone 0.2.0.
 
 ## Algorithms
 
@@ -61,6 +61,12 @@ status: current
 - [[decisions/README|Decision log]]: one dated note per decision with its
   context, the decision and its consequences. Open questions are marked.
 
+## Process
+
+- [[process/README|Process]]: how work becomes a published version:
+  [[releasing]] explains versioning, the release task and workflow, and how
+  to verify a release. `develop` always carries the next version.
+
 ## Code map
 
 - [[code/README|Code map]]: one note per area of the source tree (camera and
@@ -75,4 +81,4 @@ browser; Obsidian hands them to the system's default application.
 - [megastructure.html](megastructure.html): interior strata, shafts and
   cavities.
 - [megastructure-chasm.html](megastructure-chasm.html): the exterior chasm
-  between facades, the reference for milestone 0.0.1.
+  between facades, the reference for milestone 0.1.0.

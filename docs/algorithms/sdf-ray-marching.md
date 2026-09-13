@@ -9,7 +9,7 @@ status: current
 # SDF Ray Marching
 
 > [!summary]
-> The milestone 0.0.1 renderer draws the chasm without any meshes. The scene
+> The milestone 0.1.0 renderer draws the chasm without any meshes. The scene
 > is a single function that, for any point in space, answers "how far is the
 > nearest surface?". A ray from the camera repeatedly asks that question and
 > jumps forward by the answer, which can never carry it through a wall, until
@@ -180,10 +180,10 @@ bound that differs from the true distance can tilt normals near borders.
 
 The ray marcher exists to reproduce the prototypes' look inside Godot, with a
 free-fly camera and a tweak panel, and to give later milestones a reference
-to compare against. It is not the production path: milestone 0.0.2 and later
+to compare against. It is not the production path: milestone 0.2.0 and later
 place hand-authored tile meshes chosen by
 [[wave-function-collapse]], rendered by Godot's own pipeline (see
-[[RESEARCH_WFC]] and [[PLAN_0.0.1]]). Nothing in the fill layer depends on
+[[RESEARCH_WFC]] and [[PLAN_0.1.0]]). Nothing in the fill layer depends on
 this renderer except the [[integer-hash]].
 
 ## Open questions
@@ -206,7 +206,7 @@ Sources:
 - Quilez, Distance Functions (article)
 - Quilez, Soft Shadows in Raymarched SDFs (article)
 
-Related notes: [[chasm-distance-field]], [[integer-hash]], [[PLAN_0.0.1]].
+Related notes: [[chasm-distance-field]], [[integer-hash]], [[PLAN_0.1.0]].
 
 Code: [raymarch_world.gdshader](../../shaders/raymarch_world.gdshader),
 [raymarch.gdshaderinc](../../shaders/include/raymarch.gdshaderinc),

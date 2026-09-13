@@ -67,6 +67,6 @@ automatic check of the shader version; it is kept identical by reading.
   float hash.
 - [[hash_vectors]]: definition and reference values.
 - [[0004-shared-integer-hash-replaces-float-hash]]: the decision.
-- [[PLAN_0.0.1#Decision: shared integer hash]]: where it was first recorded.
+- [[PLAN_0.1.0#Decision: shared integer hash]]: where it was first recorded.
 - Papers: [[oneill-2014-pcg]], [[jarzynski-2020-hash-functions-gpu-rendering]].
 - [[raymarch-shader]]: the shader that includes the hash.

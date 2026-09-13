@@ -2,14 +2,14 @@
 tags:
   - research
   - wfc
-  - milestone/0.0.2
+  - milestone/0.2.0
 status: current
 ---
 
 # Research: WFC / model synthesis for the sector fill layer
 
 > [!summary]
-> Research for the fill layer of milestone 0.0.2: how to fill each 48 m
+> Research for the fill layer of milestone 0.2.0: how to fill each 48 m
 > sector with tiles using Wave Function Collapse in Godot. The recommendation
 > is the simple-tiled variant with socket-based adjacency, each sector solved
 > as one block whose faces are fixed first so neighbouring sectors always fit,
@@ -21,8 +21,8 @@ status: current
 Scope: the fill layer of `MEGASTRUCTURE_CONCEPT.md` §2.3 (2 m voxels, 24³ = 13 824
 cells per 48 m sector, hand-authored tiles with a socket per face, walkable-graph
 cells pre-collapsed, deterministic per `(seed, sector)`), implemented in Godot
-4.7 with Godot-native rendering. The ray-marched renderer from 0.0.1 is a
-throwaway (`PLAN_0.0.1.md`, "Scope"); nothing below depends on it except the
+4.7 with Godot-native rendering. The ray-marched renderer from 0.1.0 is a
+throwaway (`PLAN_0.1.0.md`, "Scope"); nothing below depends on it except the
 shared integer hash (`docs/hash_vectors.md`), which the fill layer must reuse.
 
 Short version: use a simple-tiled adjacency solver, treat each sector as one
@@ -403,7 +403,7 @@ Verdict: write the solver fresh in typed GDScript (it is ~500 lines), borrow
 the tileset conventions from Marian42 and the propagator structure from
 DeBroglie/Merrell, and reuse nothing from the Godot addons except ideas.
 
-## 7. Proposed breakdown of milestone 0.0.2
+## 7. Proposed breakdown of milestone 0.2.0
 
 Five epics, following the concept's milestone order. Each sub-issue is one
 branch/worktree `<number>-<slug>` and one PR against `develop`. "AC" =

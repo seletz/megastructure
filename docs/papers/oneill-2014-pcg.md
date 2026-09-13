@@ -45,7 +45,7 @@ The GPU-specific evaluation that picked it is
 ## Used by
 
 - [[hash_vectors]]: the definition of `pcg` and `hash3_u`.
-- [[PLAN_0.0.1]], decision "shared integer hash".
+- [[PLAN_0.1.0]], decision "shared integer hash".
 - Code: [hash.gdshaderinc](../../shaders/include/hash.gdshaderinc),
   [hash.gd](../../scripts/hash.gd), and the `pcg()` functions in
   [megastructure.html](../megastructure.html) and

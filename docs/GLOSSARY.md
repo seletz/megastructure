@@ -11,7 +11,7 @@ Entries are alphabetical and short on purpose. Where a term has a specific
 meaning here, an "In this project" line says where it shows up; "See also"
 points to the note that goes deeper. Names in plain text (not links) are notes
 that are planned but not written yet. The main sources are
-[[MEGASTRUCTURE_CONCEPT]], [[PLAN_0.0.1]], [[RESEARCH_WFC]] and
+[[MEGASTRUCTURE_CONCEPT]], [[PLAN_0.1.0]], [[RESEARCH_WFC]] and
 [[hash_vectors]].
 
 ## A
@@ -56,7 +56,7 @@ decision, the options considered and why one was picked. A series of them forms
 a decision log.
 
 In this project: the vault's planned Decisions log uses this format; the
-shared integer hash decision in [[PLAN_0.0.1]] is an early example.
+shared integer hash decision in [[PLAN_0.1.0]] is an early example.
 
 See also: Decisions log (planned).
 
@@ -90,7 +90,7 @@ In this project: the ray marcher samples the distance field a few times along
 the surface normal (`ao_taps`, `ao_step`); see
 [surface.gdshaderinc](../shaders/include/surface.gdshaderinc).
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Arc consistency
 
@@ -138,7 +138,7 @@ The rule that every issue is worked on in its own branch named
 
 In this project: enforced by GitHub branch protection (issue #25).
 
-See also: [[PLAN_0.0.1]], Worktree.
+See also: [[PLAN_0.1.0]], Worktree.
 
 ### Bridge
 
@@ -201,11 +201,11 @@ See also: [[hash_vectors]], Voxel.
 A very rare sector type: a long vertical canyon, about 280 m wide, with
 stratified facades on both sides.
 
-In this project: the subject of milestone 0.0.1, ported from
+In this project: the subject of milestone 0.1.0, ported from
 `megastructure-chasm.html` into
 [chasm.gdshaderinc](../shaders/include/chasm.gdshaderinc).
 
-See also: [[MEGASTRUCTURE_CONCEPT]], [[PLAN_0.0.1]].
+See also: [[MEGASTRUCTURE_CONCEPT]], [[PLAN_0.1.0]].
 
 ### Chebyshev distance
 
@@ -223,7 +223,7 @@ can merge.
 
 In this project: GitHub Actions runs `mise run check`.
 
-See also: [[PLAN_0.0.1]], mise task.
+See also: [[PLAN_0.1.0]], mise task.
 
 ### ConcavePolygonShape3D
 
@@ -270,7 +270,7 @@ nearer objects hide farther ones.
 In this project: the ray-march shader writes `DEPTH`, so ordinary Godot meshes
 intersect correctly with the ray-marched world.
 
-See also: [[PLAN_0.0.1]], Reversed-Z.
+See also: [[PLAN_0.1.0]], Reversed-Z.
 
 ### Determinism
 
@@ -333,7 +333,7 @@ See also: [[RESEARCH_WFC]], Minimum remaining values.
 A large GitHub issue that groups related smaller issues, its sub-issues, into
 one piece of work.
 
-In this project: epics for 0.0.1 are listed in [[PLAN_0.0.1]]; the design
+In this project: epics for 0.1.0 are listed in [[PLAN_0.1.0]]; the design
 wiki is epic #55.
 
 See also: Milestone.
@@ -417,7 +417,7 @@ A camera that moves freely through space, ignoring gravity and collision.
 In this project: mouse look plus WASD and Q/E, matching the prototype's
 controls ([free_fly_camera.gd](../scripts/free_fly_camera.gd)).
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Fullscreen quad
 
@@ -427,7 +427,7 @@ that computes every pixel itself.
 In this project: a `QuadMesh` pinned to the near plane carries the ray-march
 shader.
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ## G
 
@@ -509,7 +509,7 @@ controls line; H (or F1) toggles it, leaving a dimmed "H: HUD   Tab: panel"
 hint, and P (or F12) saves a screenshot without it
 ([hud.gd](../scripts/ui/hud.gd)).
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Hysteresis
 
@@ -581,9 +581,9 @@ See also: [[RESEARCH_WFC]], GridMap.
 ### Milestone
 
 A GitHub grouping of issues that together form one release step, such as
-0.0.1 or 0.0.2.
+0.1.0 or 0.2.0.
 
-See also: [[PLAN_0.0.1]], Epic.
+See also: [[PLAN_0.1.0]], Epic.
 
 ### Minimum remaining values
 
@@ -602,7 +602,7 @@ A named command defined in `mise.toml` and run with `mise run <name>`.
 In this project: all build, run, check and export automation lives in mise
 tasks, for example `check`, `run`, `hash-vectors` and `preset-check`.
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Model synthesis
 
@@ -694,7 +694,7 @@ group, range, default) so the tweak panel can be built automatically.
 
 In this project: [param_registry.gd](../scripts/ui/param_registry.gd).
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Parapet
 
@@ -721,10 +721,10 @@ deck level.
 Getting the same image, pixel for pixel as far as practical, as a reference
 renderer for the same inputs.
 
-In this project: the 0.0.1 goal against the chasm HTML prototype for the same
+In this project: the 0.1.0 goal against the chasm HTML prototype for the same
 seed and camera pose.
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Portal
 
@@ -747,7 +747,7 @@ A saved snapshot of every tweakable parameter, the seed and the camera pose.
 In this project: JSON files under `user://presets`, with a built-in
 "Prototype defaults" preset ([preset_store.gd](../scripts/ui/preset_store.gd)).
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Propagation
 
@@ -771,10 +771,10 @@ See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]].
 Rendering by stepping along the ray through each pixel and asking a distance
 function how far the nearest surface is, until a surface is hit.
 
-In this project: the throwaway 0.0.1 renderer
+In this project: the throwaway 0.1.0 renderer
 ([raymarch_world.gdshader](../shaders/raymarch_world.gdshader)).
 
-See also: [[PLAN_0.0.1]], Sphere tracing.
+See also: [[PLAN_0.1.0]], Sphere tracing.
 
 ### Render scale
 
@@ -782,7 +782,7 @@ Rendering the 3D view at a fraction of the window resolution, then upscaling.
 
 In this project: 0.5 by default (`rendering/scaling_3d/scale`).
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Restart
 
@@ -800,7 +800,7 @@ gives better depth precision at a distance.
 
 In this project: Godot 4.3+ uses it, so the shader writes 0 for misses.
 
-See also: [[PLAN_0.0.1]], Depth buffer.
+See also: [[PLAN_0.1.0]], Depth buffer.
 
 ### Rotation expansion
 
@@ -873,7 +873,7 @@ In this project: primitives in
 [sdf.gdshaderinc](../shaders/include/sdf.gdshaderinc), the chasm in
 [chasm.gdshaderinc](../shaders/include/chasm.gdshaderinc).
 
-See also: [[PLAN_0.0.1]], Lower bound, Ray marching.
+See also: [[PLAN_0.1.0]], Lower bound, Ray marching.
 
 ### Simple-tiled model
 
@@ -904,7 +904,7 @@ A shadow with a gradual edge (penumbra) instead of a hard one.
 In this project: estimated by marching towards the light and tracking how
 closely the ray grazes geometry (`shadow_softness`).
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Solid tile
 
@@ -1013,7 +1013,7 @@ presets and screenshots.
 In this project: [tweak_panel.gd](../scripts/ui/tweak_panel.gd), built from
 the parameter registry.
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ## U
 
@@ -1025,7 +1025,7 @@ changed from outside the shader.
 In this project: every prototype constant is a uniform whose default is the
 prototype value.
 
-See also: [[PLAN_0.0.1]].
+See also: [[PLAN_0.1.0]].
 
 ### Union-find
 

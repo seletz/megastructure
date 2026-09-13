@@ -122,4 +122,4 @@ frame, and saves it at window resolution to
 - [[camera-and-scene]]: where the panel, HUD and seed node sit in the scene.
 - [[raymarch-shader]]: the uniforms the panel exposes.
 - [[hash]]: what the seed feeds.
-- [[PLAN_0.0.1]]: the tweak UI epic of milestone 0.0.1.
+- [[PLAN_0.1.0]]: the tweak UI epic of milestone 0.1.0.

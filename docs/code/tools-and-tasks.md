@@ -38,6 +38,11 @@ up to date.
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
 | `export-debug` | import | Same as `export` with a debug build. |
+| `release:notes` | | Prints the Unreleased section of [[CHANGELOG]], the notes of the next release. |
+| `release:changelog-roll` | | `release:changelog-roll <version> [--date YYYY-MM-DD] [--dry-run]`: renames Unreleased to `<version> - <date>`, opens a fresh Unreleased section above it and commits `chore(release): <version>`. |
+| `release:bump` | | `release:bump <patch\|minor\|major> [--dry-run]`: raises `config/version` in `project.godot`, commits `chore(release): start <new>` and prints the new version. |
+| `release:package` | | `release:package <linux\|macos>`: packs the exported build into `build/release/megastructure-<version>-linux-x86_64.tar.gz` or `-macos-universal.zip`; in the release workflow it fails if the tag does not match the version. |
+| `release:release` | | Releases the version in `project.godot`: checks it runs on a clean, up-to-date `develop` with `gh` logged in, then calls `release:notes` and `release:changelog-roll`, tags `v<version>`, pushes, creates the GitHub release and calls `release:bump patch` and pushes. `--dry-run` prints every command instead. See [[releasing]]. |
 | `mcp` | | Runs the Godot MCP server over stdio, used by `.mcp.json`. |
 | `clean` | | Deletes `.godot/` and `build/`. |
 | `hash-vectors` | import | Prints the hash reference table ([[hash]]). Headless. |
@@ -55,6 +60,12 @@ caught by `smoke`.
 
 The window-based checks need a real rendering device because they read back
 rendered frames, so they do not run in CI.
+
+The `release:*` tasks follow one rule: `develop` always carries the NEXT
+version. `release:release` tags the version already in `project.godot` and
+never edits it before tagging; right afterwards `release:bump patch` moves
+`develop` on ([[0014-develop-is-always-the-next-version]]). The file-changing
+release tasks print each command as `+ command` and accept `--dry-run`.
 
 ## Tool scripts
 
@@ -83,6 +94,7 @@ exit with status 1 on any failure.
 ## References
 
 - [[0001-all-automation-through-mise]]: why every command is a mise task.
-- [[ci-and-export]]: the CI workflow and export tasks in context.
+- [[ci-and-export]]: the CI workflows and export tasks in context.
+- [[releasing]]: the release tasks in the release process.
 - [[tweak-ui]], [[hash]]: what the checks test.
 - [[CONVENTIONS]]: keeping these notes in step with the code.

@@ -39,7 +39,7 @@ article.
 
 ## Used by
 
-- [[PLAN_0.0.1]], epic #12 (fog, tone mapping, grain, vignette).
+- [[PLAN_0.1.0]], epic #12 (fog, tone mapping, grain, vignette).
 - [[MEGASTRUCTURE_CONCEPT]], look and lighting.
 - Code: the fog functions in
   [post.gdshaderinc](../../shaders/include/post.gdshaderinc).

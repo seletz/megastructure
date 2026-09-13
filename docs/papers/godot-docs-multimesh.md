@@ -46,4 +46,4 @@ Link only: living web pages. The class reference is MIT-licensed.
 
 - [[RESEARCH_WFC]], section 5 (placement) and issues E2 to E4 in section 7.
 - Related: [[godot-docs-gridmap]], [[godot-docs-workerthreadpool]].
-- No code yet; placement is planned for milestone 0.0.2.
+- No code yet; placement is planned for milestone 0.2.0.

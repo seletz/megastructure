@@ -11,9 +11,9 @@ status: current
 > One note per algorithm the project uses or plans to use, each readable in
 > about five minutes: a plain-language summary, a worked example or diagram,
 > the details, open questions, and links to the papers and code behind it.
-> The first three describe code that exists in milestone 0.0.1 (the hash and
+> The first three describe code that exists in milestone 0.1.0 (the hash and
 > the ray-marched chasm). The other four describe the tile-based generator
-> planned for milestone 0.0.2 and follow the recommendations in
+> planned for milestone 0.2.0 and follow the recommendations in
 > [[RESEARCH_WFC]]. Unfamiliar terms are defined in [[GLOSSARY]].
 
 ## Suggested reading order
@@ -33,7 +33,7 @@ either follow the renderer (left) or the generator (right).
 
 ## Notes
 
-### Implemented (milestone 0.0.1)
+### Implemented (milestone 0.1.0)
 
 | Note | What it covers |
 | --- | --- |
@@ -41,7 +41,7 @@ either follow the renderer (left) or the generator (right).
 | [[sdf-ray-marching]] | Distance fields, sphere tracing, why every term must be a lower bound, the bounds we tightened, normals, AO and soft shadows, and why this renderer is a throwaway. |
 | [[chasm-distance-field]] | How facades, openings, pillars, bridges and cables are built from hashed cells, with every cell size and salt. |
 
-### Planned (milestone 0.0.2)
+### Planned (milestone 0.2.0)
 
 | Note | What it covers |
 | --- | --- |
@@ -55,7 +55,7 @@ either follow the renderer (left) or the generator (right).
 - [[hash_vectors]]: the hash definition and its reference values.
 - [[MEGASTRUCTURE_CONCEPT]]: the three-layer architecture these algorithms
   implement.
-- [[PLAN_0.0.1]] and [[RESEARCH_WFC]]: where the decisions behind these notes
+- [[PLAN_0.1.0]] and [[RESEARCH_WFC]]: where the decisions behind these notes
   were taken or proposed.
 - Paper notes are being collected in `papers/` (issue #57); the notes here
   name their sources in plain text until those exist.

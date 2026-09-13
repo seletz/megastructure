@@ -95,8 +95,14 @@ else
 	tag="${major}.${minor}.${patch}-${status}"
 fi
 
-data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
-dest="$data_home/godot/export_templates/$version"
+# Godot's editor data folder: ~/Library/Application Support/Godot on macOS,
+# $XDG_DATA_HOME/godot elsewhere.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+	data_dir="$HOME/Library/Application Support/Godot"
+else
+	data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/godot"
+fi
+dest="$data_dir/export_templates/$version"
 if [[ -f "$dest/version.txt" ]]; then
 	echo "Export templates $version already installed in $dest"
 	exit 0
@@ -140,6 +146,226 @@ run = [
 usage = '''
 arg "<preset>" help="Export preset name from export_presets.cfg"
 arg "<output>" help="Output file path"
+'''
+
+[tasks."release:notes"]
+description = "Print the Unreleased section of docs/CHANGELOG.md (the notes of the next release)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# Everything between "## Unreleased" and the next "## " heading, without
+# leading and trailing blank lines.
+awk '
+/^## Unreleased[[:space:]]*$/ { inside = 1; next }
+inside && /^## / { exit }
+inside && NF == 0 { if (started) blank++; next }
+inside { while (blank > 0) { print ""; blank-- }; started = 1; print }
+' docs/CHANGELOG.md
+'''
+
+[tasks."release:changelog-roll"]
+description = "Rename Unreleased in docs/CHANGELOG.md to '<version> - <date>', open a fresh Unreleased section and commit. Usage: mise run release:changelog-roll <version>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+
+version="${usage_version}"
+date="${usage_date:-$(date +%Y-%m-%d)}"
+changelog=docs/CHANGELOG.md
+
+if ! grep -q '^## Unreleased[[:space:]]*$' "$changelog"; then
+	echo "release:changelog-roll: $changelog has no '## Unreleased' heading" >&2
+	exit 1
+fi
+if grep -q "^## $version " "$changelog"; then
+	echo "release:changelog-roll: $changelog already has a $version section" >&2
+	exit 1
+fi
+
+run() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; $dry_run || "$@"; }
+run perl -0pi -e "s/^## Unreleased[ \\t]*\\n/## Unreleased\\n\\n## $version - $date\\n/m" "$changelog"
+run git add "$changelog"
+run git commit --quiet -m "chore(release): $version"
+'''
+usage = '''
+arg "<version>" help="Version the Unreleased entries are released as, e.g. 0.1.0"
+flag "--date <date>" help="Release date, YYYY-MM-DD (default: today)"
+flag "-n --dry-run" help="Print the commands instead of editing and committing"
+'''
+
+[tasks."release:bump"]
+description = "Bump config/version in project.godot, commit it and print the new version. Usage: mise run release:bump <patch|minor|major>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# RULE: develop always carries the NEXT, unreleased version. release:release
+# calls this with "patch" right after tagging; run it by hand with "minor" or
+# "major" at a milestone boundary (e.g. 0.1.3 -> 0.2.0), before releasing that
+# milestone. Only the new version goes to stdout.
+
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+
+old="$(sed -n 's/^config\/version="\(.*\)"$/\1/p' project.godot)"
+if [[ ! "$old" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+	echo "release:bump: config/version in project.godot is not MAJOR.MINOR.PATCH: '$old'" >&2
+	exit 1
+fi
+major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
+case "${usage_part}" in
+	patch) new="$major.$minor.$((patch + 1))" ;;
+	minor) new="$major.$((minor + 1)).0" ;;
+	major) new="$((major + 1)).0.0" ;;
+	*) echo "release:bump: part must be patch, minor or major, not '${usage_part}'" >&2; exit 1 ;;
+esac
+
+run() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; $dry_run || "$@"; }
+run perl -pi -e "s/^config\\/version=\"\\Q$old\\E\"\$/config\\/version=\"$new\"/" project.godot
+run git add project.godot
+run git commit --quiet -m "chore(release): start $new"
+echo "release:bump: $old -> $new" >&2
+echo "$new"
+'''
+usage = '''
+arg "<part>" help="Which part to bump: patch, minor or major"
+flag "-n --dry-run" help="Print the commands instead of editing and committing"
+'''
+
+[tasks."release:package"]
+description = "Package an exported build into build/release/. Usage: mise run release:package <linux|macos>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+version="$(sed -n 's/^config\/version="\(.*\)"$/\1/p' project.godot)"
+if [[ -z "$version" ]]; then
+	echo "release:package: no config/version in project.godot" >&2
+	exit 1
+fi
+# In the release workflow the packaged version must be the released tag.
+if [[ "${GITHUB_EVENT_NAME:-}" == "release" && "${GITHUB_REF_NAME:-}" != "v$version" ]]; then
+	echo "release:package: tag ${GITHUB_REF_NAME} does not match config/version $version" >&2
+	exit 1
+fi
+
+mkdir -p build/release
+case "${usage_preset}" in
+	linux)
+		binary=build/linux/megastructure.x86_64
+		[[ -f "$binary" ]] || { echo "release:package: $binary missing, run: mise run export linux $binary" >&2; exit 1; }
+		files=(megastructure.x86_64)
+		[[ -f build/linux/megastructure.pck ]] && files+=(megastructure.pck)
+		archive="build/release/megastructure-$version-linux-x86_64.tar.gz"
+		tar -czf "$archive" -C build/linux "${files[@]}"
+		;;
+	macos)
+		zip=build/macos/megastructure.zip
+		[[ -f "$zip" ]] || { echo "release:package: $zip missing, run: mise run export macos $zip" >&2; exit 1; }
+		archive="build/release/megastructure-$version-macos-universal.zip"
+		cp "$zip" "$archive"
+		;;
+	*)
+		echo "release:package: unknown preset '${usage_preset}' (linux or macos)" >&2
+		exit 1
+		;;
+esac
+echo "$archive"
+'''
+usage = '''
+arg "<preset>" help="Export preset that was exported: linux or macos"
+'''
+
+[tasks."release:release"]
+description = "Release the version in project.godot: changelog, tag, GitHub release, then bump develop to the next patch"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# RULE: develop always carries the NEXT version. This task tags the version
+# that is already in project.godot and never edits the version before
+# tagging; right after the release it bumps develop to the next patch. So the
+# version in project.godot on develop is always unreleased.
+#
+# Steps (each change is its own task): check preconditions, release:notes,
+# release:changelog-roll (commits), tag vVERSION and push, create the GitHub
+# release (the release workflow builds and attaches the Linux and macOS
+# archives), release:bump patch (commits) and push. With --dry-run every command
+# is printed instead of executed; the sub-tasks run in their own dry-run mode.
+
+dry_run=false
+dry_flag=()
+if [[ "${usage_dry_run:-false}" == "true" ]]; then
+	dry_run=true
+	dry_flag=(--dry-run)
+fi
+
+show() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; }
+run() { show "$@"; $dry_run || "$@"; }
+# Sub-tasks always run; they honour --dry-run themselves.
+task() { show mise run "$@"; mise run --quiet "$@"; }
+
+fail() {
+	if $dry_run; then
+		echo "dry-run: would refuse: $*" >&2
+	else
+		echo "release:release: $*" >&2
+		exit 1
+	fi
+}
+
+# 1. Preconditions. Fetching is read-only, so it also runs in a dry run.
+branch="$(git rev-parse --abbrev-ref HEAD)"
+[[ "$branch" == "develop" ]] || fail "not on develop (on $branch)"
+[[ -z "$(git status --porcelain)" ]] || fail "working tree is not clean"
+show git fetch --quiet origin develop --tags
+git fetch --quiet origin develop --tags
+if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/develop)" ]]; then
+	fail "develop is not up to date with origin/develop"
+fi
+gh auth status >/dev/null 2>&1 || fail "gh is not authenticated (gh auth login)"
+
+# 2. The version to release is the one develop already carries.
+version="$(sed -n 's/^config\/version="\(.*\)"$/\1/p' project.godot)"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+	echo "release:release: config/version in project.godot is not MAJOR.MINOR.PATCH: '$version'" >&2
+	exit 1
+fi
+tag="v$version"
+git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "tag $tag already exists"
+
+notes="$(mktemp)"
+trap 'rm -f "$notes"' EXIT
+task release:notes > "$notes"
+[[ -s "$notes" ]] || fail "the Unreleased section of docs/CHANGELOG.md is empty"
+echo "Releasing $tag"
+if $dry_run; then
+	echo "dry-run: release notes:"
+	sed 's/^/  | /' "$notes"
+fi
+
+# 3. Date the changelog section, open a fresh Unreleased one above it, commit.
+task release:changelog-roll "$version" "${dry_flag[@]}"
+
+# 4. Tag and push develop and the tag together.
+run git tag -a "$tag" -m "$tag"
+run git push --atomic origin develop "refs/tags/$tag"
+
+# 5. The GitHub release triggers .github/workflows/release.yml.
+run gh release create "$tag" --verify-tag --title "$tag" --notes-file "$notes"
+
+# 6. develop moves on to the next, unreleased version (commits).
+task release:bump patch "${dry_flag[@]}" >/dev/null
+run git push origin develop
+
+# 7. Where to find it.
+if $dry_run; then
+	show gh release view "$tag" --json url --jq .url
+else
+	gh release view "$tag" --json url --jq .url
+fi
+'''
+usage = '''
+flag "-n --dry-run" help="Print every command instead of executing it"
 '''
 
 [tasks.mcp]
