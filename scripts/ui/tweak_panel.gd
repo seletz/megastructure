@@ -350,12 +350,25 @@ func _build_scalar(row: HBoxContainer, param: ParamRegistry.Param, value: Varian
 
 func _build_bool(row: HBoxContainer, param: ParamRegistry.Param, value: Variant) -> void:
 	var check := CheckBox.new()
+	# The whole row right of the label is the hit target, and the box toggles on
+	# press, like the sliders react, so a release that lands elsewhere still
+	# counts. Clicking the label toggles it too.
+	check.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	check.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	check.button_pressed = bool(value)
 	check.toggled.connect(func(on: bool) -> void:
 		if not _refreshing:
 			registry.set_value(param, on)
 	)
 	row.add_child(check)
+	var label := row.get_child(0) as Label
+	label.mouse_filter = Control.MOUSE_FILTER_STOP
+	label.gui_input.connect(func(event: InputEvent) -> void:
+		var button := event as InputEventMouseButton
+		if button != null and button.pressed and button.button_index == MOUSE_BUTTON_LEFT:
+			check.button_pressed = not check.button_pressed
+			label.accept_event()
+	)
 	_refreshers[param.name] = func(v: Variant) -> void:
 		check.button_pressed = bool(v)
 
