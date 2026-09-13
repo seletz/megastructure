@@ -68,7 +68,8 @@ status: current
 - [[process/README|Process]]: how work becomes a published version:
   [[maintaining]] covers the worktree and pull request tasks, [[releasing]]
   explains versioning, the release task and workflow, and how to verify a
-  release. `develop` always carries the next version.
+  release. `develop` always carries the next version. [[screenshots]]
+  explains how `mise run shot` renders a scene to a PNG without a window.
 
 ## Code map
 

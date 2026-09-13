@@ -18,6 +18,7 @@ status: current
 | Process | Note | Covers |
 | --- | --- | --- |
 | Maintaining | [[maintaining]] | Creating and removing issue worktrees, the state of open pull requests, rebasing, waiting for the check and merging with `wt:new`, `wt:rm`, `pr:status` and `pr:merge`. |
+| Screenshots | [[screenshots]] | Rendering a scene to a PNG without a window with `mise run shot`: why headless cannot render, Xvfb and the x11 and opengl3 drivers, seed, pose and params, outputs, CI and troubleshooting. |
 | Releasing | [[releasing]] | Versioning, `mise run release:release`, the release workflow, patch and milestone releases, verifying a release. |
 
 ## References
