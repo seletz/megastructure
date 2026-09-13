@@ -22,10 +22,16 @@ status: current
 | Key | Effect | Handled in |
 | --- | --- | --- |
 | Tab | Open or close the panel. While open, the mouse is free and camera look is off. | tweak panel |
-| F1 | Show or hide the HUD overlay. | HUD |
-| F12 | Save a screenshot without the HUD and panel. | HUD |
-| R | Pick a random seed, unless a text field has focus (and without Ctrl, Alt or Meta). | seed control |
+| H (or F1) | Show or hide the HUD overlay. While hidden, a dimmed "H: HUD   Tab: panel" hint stays in the corner. | HUD |
+| P (or F12) | Save a screenshot without the HUD and panel. | HUD |
+| R | Pick a random seed. | seed control |
 | Esc | Capture or release the mouse for looking around. | camera ([[camera-and-scene]]) |
+| WASD, Q/E, Shift, wheel | Fly the camera. | camera ([[camera-and-scene]]) |
+
+H, P, F1, F12 and R are ignored while a text field has focus or with Ctrl,
+Alt or Meta held, and the movement keys are ignored while a text field has
+focus, so typing a seed or preset name does nothing else. Every action has a
+letter key, so keyboards without an F row reach all of them.
 
 ## Parts
 
@@ -94,14 +100,17 @@ fall back to their defaults.
 label on a translucent backdrop, driven by
 [hud.gd](../../scripts/ui/hud.gd) (`class_name Hud`). It shows FPS, frame
 time, camera position, yaw and pitch (in the prototype's convention, so they
-can be pasted there) and the seed. A screenshot hides the HUD and the layers
+can be pasted there), the seed and a one-line summary of the controls. It is
+shown on start; hidden, it leaves only a small dimmed hint naming H and Tab.
+A screenshot hides the HUD and the layers
 listed in `hidden_during_capture` (the tweak panel, in the main scene) for one
 frame, and saves it at window resolution to
-`user://screenshots/<seed>_<yyyymmdd-hhmmss>.png`.
+`user://screenshots/<seed>_<yyyymmdd-hhmmss>.png` and emits
+`screenshot_saved`.
 
 ## How to run or check it
 
-- `mise run run`, then Tab, F1, F12 and R as above. `user://` is Godot's
+- `mise run run`, then Tab, H, P and R as above. `user://` is Godot's
   per-user data folder, on Linux `~/.local/share/godot/app_userdata/megastructure/`.
 - `mise run ui-params` prints what the registry discovers (headless).
 - `mise run preset-check` saves, reloads and compares a preset bit for bit

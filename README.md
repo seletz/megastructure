@@ -27,6 +27,26 @@ mise run templates
 mise run export linux build/linux/megastructure.x86_64
 ```
 
+## Controls
+
+| Key              | Action                                               |
+| ---------------- | ---------------------------------------------------- |
+| Tab              | Open or close the tweak panel (frees the mouse)      |
+| H (or F1)        | Show or hide the HUD; a small hint stays when hidden |
+| P (or F12)       | Save a screenshot without HUD and panel              |
+| R                | Pick a random seed                                   |
+| Esc              | Capture or release the mouse for looking around      |
+| Right mouse drag | Look around                                          |
+| W / A / S / D    | Fly forward / left / back / right                    |
+| Q / E            | Fly down / up                                        |
+| Shift            | Fly fast                                             |
+| Mouse wheel      | Scale the flying speed                               |
+
+The single-key shortcuts and the movement keys are ignored while a text field
+in the panel has focus. Screenshots land in
+`user://screenshots/<seed>_<yyyymmdd-hhmmss>.png`; the absolute path is printed
+to the console.
+
 ## Tasks
 
 | Task                 | What it does                                             |
