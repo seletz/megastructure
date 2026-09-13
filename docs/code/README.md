@@ -27,7 +27,7 @@ Last verified against commit `3cd3cad`.
 | Hash | [[hash]] | The shared integer hash in the shader and in GDScript, and its reference vectors. |
 | Tweak UI | [[tweak-ui]] | World seed, parameter registry, tweak panel, seed control, presets, HUD and their keys. |
 | Tools and tasks | [[tools-and-tasks]] | Every mise task and every check script in `scripts/tools/`. |
-| CI and export | [[ci-and-export]] | The GitHub check workflow, branch protection, the export preset and templates. |
+| CI and export | [[ci-and-export]] | The GitHub check and release workflows, branch protection, the Linux and macOS export presets and templates. |
 
 ## Keeping the map current
 
