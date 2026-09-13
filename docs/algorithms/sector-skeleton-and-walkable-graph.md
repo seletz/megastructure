@@ -206,10 +206,12 @@ What the numbers showed along the way:
   also passed but left strata taller than wide or needed walls closed
   everywhere, which reads as a regular lattice.
 
-Before and after, seed 0, the 7³ sectors around the origin (`radius` 3,
-`fill` on) from the outside view preset in [[skeleton]] (position
-`(-300, 260, -300)`, yaw 0.79, pitch -0.48); first with stratum hidden, then
-shown:
+Before and after, seed 0, the 7³ sectors around the origin (`radius` 3)
+from the outside view preset in [[skeleton]] (position `(-300, 260, -300)`,
+yaw 0.79, pitch -0.48); first with stratum hidden, then shown. The before
+images use the old fill mode (opaque solid, stratum as faint boxes); the
+after images use the viewer's default style (translucent boxes for solid and
+voids, stratum as faint wireframe cubes):
 
 ![Skeleton before tuning, stratum hidden](../images/skeleton-before.png)
 ![Skeleton after tuning, stratum hidden](../images/skeleton-after.png)

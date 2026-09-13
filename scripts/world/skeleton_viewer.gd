@@ -3,16 +3,18 @@ extends Node3D
 ## Debug view of the skeleton: every sector within `radius` sectors of the
 ## camera drawn as a colour-coded cube, one MultiMeshInstance3D per type.
 ##
-## By default each sector is a wireframe cube (12 edges, PRIMITIVE_LINES),
-## unshaded and without depth write, so the lattice reads through itself while
-## flying inside it. `fill` switches to translucent filled boxes for looking at
-## the region from outside: shaft, cavity, chasm and stratum translucent
-## without depth write, solid opaque grey. Stratum is the majority, so it is
-## much fainter than the other types and drawn after them, which lets voids
-## and solid read through it; `show_stratum` hides it. Cubes are inset (44 m of
-## a 48 m sector) so neighbours stay apart. The sector the camera is in is
-## never drawn, and cubes farther than half the radius from the centre fade
-## towards FADE_MIN so the near structure dominates.
+## The style is per type. With `fill` (the default) shaft, cavity, chasm and
+## solid are translucent filled boxes, solid a little more opaque than the
+## voids; off, they are wireframe cubes (12 edges, PRIMITIVE_LINES). Stratum is
+## the majority, so with `stratum_wireframe` (the default) it is a faint
+## wireframe cube that does not hide the rest; off, a faint filled box.
+## `show_stratum` hides it. Every material is unshaded, translucent and
+## without depth write, so the region reads through itself from inside and
+## outside; render priorities fix the blending order between types: solid,
+## then the voids over it, then stratum on top. Cubes are inset (44 m of a
+## 48 m sector) so neighbours stay apart. The sector the camera is in is never
+## drawn, and cubes farther than half the radius from the centre fade towards
+## FADE_MIN so the near structure dominates.
 ##
 ## The instance buffers are rebuilt only when the camera enters another
 ## sector or the radius, a toggle, the seed or a grammar parameter changes, as
@@ -28,12 +30,12 @@ extends Node3D
 const MAX_RADIUS := 6
 ## Box edge is the sector edge minus this, in metres (44 m of 48 m).
 const BOX_MARGIN := 4.0
-## Filled box colours per type; solid is opaque.
+## Filled box colours per type; solid is more opaque than the voids.
 const TYPE_COLORS: Array[Color] = [
 	Color(0.55, 0.62, 0.75, 0.12),
 	Color(0.2, 0.75, 1.0, 0.35),
 	Color(1.0, 0.6, 0.15, 0.35),
-	Color(0.42, 0.42, 0.45, 1.0),
+	Color(0.42, 0.42, 0.45, 0.45),
 	Color(0.95, 0.2, 0.35, 0.35),
 ]
 ## Wireframe edge colours per type.
@@ -47,6 +49,9 @@ const WIRE_COLORS: Array[Color] = [
 ## Brightness of cubes at the radius and beyond; cubes within half the radius
 ## stay at 1.
 const FADE_MIN := 0.2
+## Translucent passes draw in ascending render priority: solid first, the
+## voids blended over it, stratum last so its faint edges stay visible.
+const RENDER_PRIORITIES: Array[int] = [2, 1, 1, 0, 1]
 
 ## FreeFlyCamera whose sector the region is centred on.
 @export var camera: NodePath
@@ -61,12 +66,17 @@ const FADE_MIN := 0.2
 	set(value):
 		show_stratum = value
 		_dirty = true
-## Translucent filled boxes instead of wireframe cubes (for the outside view).
-@export var fill := false:
+## Shaft, cavity, solid and chasm as translucent filled boxes instead of
+## wireframe cubes.
+@export var fill := true:
 	set(value):
 		fill = value
 		_apply_style()
-		_dirty = true
+## Stratum as a faint wireframe cube instead of a faint filled box.
+@export var stratum_wireframe := true:
+	set(value):
+		stratum_wireframe = value
+		_apply_style()
 ## When false, the region stays at `center` while the camera moves.
 @export var follow_camera := true:
 	set(value):
@@ -187,8 +197,6 @@ func refresh() -> void:
 	for type in Skeleton.SectorType.size():
 		var multimesh := _instances[type].multimesh
 		var drawn := type != Skeleton.SectorType.STRATUM or show_stratum
-		# Opaque filled solid dims its colour; everything else fades its alpha.
-		var dim_rgb := fill and TYPE_COLORS[type].a >= 1.0
 		# MultiMesh.buffer holds 16 floats per instance: the basis rows with the
 		# origin as the fourth column, then the instance colour.
 		var buffer := PackedFloat32Array()
@@ -208,10 +216,10 @@ func refresh() -> void:
 							buffer[offset + 7] = origin.y + y * size
 							buffer[offset + 10] = box_size
 							buffer[offset + 11] = origin.z + z * size
-							buffer[offset + 12] = brightness if dim_rgb else 1.0
-							buffer[offset + 13] = brightness if dim_rgb else 1.0
-							buffer[offset + 14] = brightness if dim_rgb else 1.0
-							buffer[offset + 15] = 1.0 if dim_rgb else brightness
+							buffer[offset + 12] = 1.0
+							buffer[offset + 13] = 1.0
+							buffer[offset + 14] = 1.0
+							buffer[offset + 15] = brightness
 							offset += 16
 						index += 1
 		buffer.resize(offset)
@@ -230,7 +238,8 @@ func register_params(registry: ParamRegistry) -> void:
 	registry.add_script_params("viewer", {
 		"radius": {"value": radius, "default": 4, "min": 0, "max": MAX_RADIUS, "step": 1},
 		"show_stratum": {"value": show_stratum, "default": true},
-		"fill": {"value": fill, "default": false},
+		"fill": {"value": fill, "default": true},
+		"stratum_wireframe": {"value": stratum_wireframe, "default": true},
 		"follow_camera": {"value": follow_camera, "default": true},
 	}, func(param_name: String, value: Variant) -> void: set(param_name, value))
 	registry.add_object_exports(grammar, func(param_name: String, value: Variant) -> void:
@@ -242,27 +251,28 @@ func register_params(registry: ParamRegistry) -> void:
 	, "grammar")
 
 
-## Mesh and material of every type for the current `fill` mode.
+## Mesh and material of every type for the current `fill` and
+## `stratum_wireframe` settings. The instance buffers do not depend on them.
 func _apply_style() -> void:
 	for type in _instances.size():
+		var filled := not stratum_wireframe if type == Skeleton.SectorType.STRATUM else fill
 		var instance := _instances[type]
-		instance.multimesh.mesh = _box_mesh if fill else _wire_mesh
-		var material := _material(TYPE_COLORS[type] if fill else WIRE_COLORS[type])
-		if type == Skeleton.SectorType.STRATUM:
-			# Translucent passes draw in ascending priority: stratum goes last.
-			material.render_priority = 1
+		instance.multimesh.mesh = _box_mesh if filled else _wire_mesh
+		var material := _material(TYPE_COLORS[type] if filled else WIRE_COLORS[type])
+		material.render_priority = RENDER_PRIORITIES[type]
 		instance.material_override = material
 
 
+## Unshaded translucent material without depth write; the instance colour's
+## alpha multiplies `color.a` (the distance fade).
 static func _material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.albedo_color = color
 	material.vertex_color_use_as_albedo = true
-	if color.a < 1.0:
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
 
 

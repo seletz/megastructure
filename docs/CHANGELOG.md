@@ -24,6 +24,7 @@ status: current
 
 ### Changed
 
+- The skeleton viewer draws shaft, cavity, solid and chasm as translucent filled boxes and stratum as faint wireframe cubes by default, with `fill` and `stratum_wireframe` toggles in the tweak panel. (#118)
 - The sector grammar is tuned so solid walls and floors split space into separate blocks with shafts running floor to floor, guarded by `mise run skeleton-stats`, and the skeleton viewer draws wireframe cubes for flying through it, with stratum shown by default, a fill toggle for the outside view and tweak panel checkboxes that toggle reliably. (#116)
 
 ## 0.1.0 - 2026-09-13
