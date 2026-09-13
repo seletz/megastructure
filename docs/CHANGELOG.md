@@ -28,6 +28,7 @@ status: current
 
 ### Docs
 
+- The README opens with a screenshot of the chasm at seed 1. (#106)
 - The Obsidian vault settings and theme are committed, so the wiki opens the same way on every machine. (#70)
 - A code map describes each area of the source tree, its files and how to run or check it. (#68)
 - The wiki home page links the glossary, papers, algorithm notes and decision log. (#67)
