@@ -1,7 +1,8 @@
-[gd_scene load_steps=8 format=3 uid="uid://c3fr4k8xm2n1q"]
+[gd_scene load_steps=9 format=3 uid="uid://c3fr4k8xm2n1q"]
 
 [ext_resource type="Script" path="res://scripts/free_fly_camera.gd" id="1_camera"]
 [ext_resource type="Shader" path="res://shaders/raymarch_world.gdshader" id="2_raymarch"]
+[ext_resource type="PackedScene" uid="uid://epjp3hm7equ7" path="res://scenes/ui/tweak_panel.tscn" id="3_tweak_panel"]
 
 [sub_resource type="Environment" id="Environment_dark"]
 background_mode = 1
@@ -44,3 +45,7 @@ environment = SubResource("Environment_dark")
 [node name="DepthTestCube" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 31, -4, -21)
 mesh = SubResource("BoxMesh_test")
+
+[node name="TweakPanel" parent="." instance=ExtResource("3_tweak_panel")]
+material_source = NodePath("../Camera/RaymarchQuad")
+camera = NodePath("../Camera")
