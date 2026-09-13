@@ -4,7 +4,7 @@ extends HBoxContainer
 ##
 ## The field accepts an unsigned 32-bit integer; out-of-range numbers are
 ## clamped and anything else reverts to the current seed. R picks a random
-## seed unless a text field has focus.
+## seed unless a text field has focus (see UiKeys).
 
 var _field: LineEdit
 
@@ -43,13 +43,7 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if key == null or not key.pressed or key.echo or key.keycode != KEY_R:
-		return
-	if key.ctrl_pressed or key.alt_pressed or key.meta_pressed:
-		return
-	var focused := get_viewport().gui_get_focus_owner()
-	if focused is LineEdit or focused is TextEdit:
+	if not UiKeys.is_shortcut(event, [KEY_R]) or UiKeys.text_field_focused(get_viewport()):
 		return
 	WorldState.randomize_seed()
 	get_viewport().set_input_as_handled()

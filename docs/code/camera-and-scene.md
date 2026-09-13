@@ -77,6 +77,9 @@ FreeFlyCamera`) mirrors the controls of the HTML prototypes:
 | Shift | Fast speed (`fast_speed` instead of `speed`). |
 | Mouse wheel | Scale the base speed, between 0.05x and 50x. |
 
+The movement keys do nothing while a UI text field has focus (`UiKeys`, see
+[[tweak-ui]]).
+
 The camera stores its orientation as `yaw` and `pitch` in the prototype's
 convention, where yaw 0 looks along +Z. A Godot camera looks along -Z, so the
 node's rotation adds half a turn. Because of this, the yaw and pitch shown in
