@@ -24,7 +24,7 @@ uniform float fog_density = 0.004;
 // World distance; mat receives the material id of the closest surface
 // (CHASM_MAT_CONCRETE, CHASM_MAT_METAL or CHASM_MAT_LIT).
 float map(vec3 p, out int mat) {
-	return chasm_facades(p, mat);
+	return chasm_map(p, mat);
 }
 
 float map_distance(vec3 p) {
