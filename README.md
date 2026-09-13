@@ -44,6 +44,14 @@ mise run export linux build/linux/megastructure.x86_64
 
 `mise tasks` lists everything with descriptions.
 
+## Design wiki
+
+`docs/` is a design wiki and opens as an [Obsidian](https://obsidian.md/)
+vault: open the `docs/` folder with "Open folder as vault". Start at
+[`docs/Home.md`](docs/Home.md), the map of content; how notes are written is in
+[`docs/CONVENTIONS.md`](docs/CONVENTIONS.md). The files are plain Markdown and
+also read fine on GitHub.
+
 ## Documentation
 
 - [`docs/MEGASTRUCTURE_CONCEPT.md`](docs/MEGASTRUCTURE_CONCEPT.md): design

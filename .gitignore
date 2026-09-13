@@ -4,3 +4,8 @@
 
 # Build output
 /build/
+
+# Obsidian vault state in docs/ (settings in docs/.obsidian/ are committed)
+docs/.obsidian/workspace*.json
+docs/.obsidian/cache
+docs/.obsidian/plugins

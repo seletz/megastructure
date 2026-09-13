@@ -1,4 +1,20 @@
+---
+tags:
+  - plan
+  - milestone/0.0.1
+status: current
+---
+
 # Plan for milestone 0.0.1: exterior prototype in Godot
+
+> [!summary]
+> The plan for the first milestone: bring the ray-marched chasm prototype
+> into Godot as a single fullscreen shader, fly through it with a free camera,
+> and adjust every structural and lighting constant from a live panel until it
+> matches the HTML page for the same seed and camera position. The renderer is
+> a throwaway used to settle the look; the real world will be built from Godot
+> meshes from milestone 0.0.2 on. The note also records the switch to a shared
+> integer hash and lists the epics of the milestone.
 
 Milestone 0.0.1 brings the exterior (chasm) HTML prototype into Godot 4 as a
 fullscreen ray-marched scene with a free-fly camera and a live tweak panel.

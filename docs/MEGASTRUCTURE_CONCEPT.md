@@ -1,4 +1,22 @@
+---
+tags:
+  - concept
+  - architecture
+status: current
+---
+
 # Megastructure — concept and implementation plan
+
+> [!summary]
+> What megastructure is meant to become and how it will be built. The world is
+> solid mass with space carved out of it, generated in three layers of
+> decreasing scale: a coarse lattice of sectors with types such as stratum,
+> shaft and chasm; a walkable graph that guarantees every open sector can be
+> reached on foot; and a fill layer that places hand-made tile meshes inside
+> each sector with Wave Function Collapse. Every decision is a pure function of
+> the seed and the cell coordinates, so nothing but the seed is stored. The
+> note also fixes the tile proportions taken from the HTML prototypes, the
+> lighting and fog, and the long-term milestones.
 
 A generative, walkable rendering of a Blame!-style megastructure in Godot 4. Endless interior strata, vertical shafts, vast cavities, and open chasms between stratified facades. No gameplay for now: the deliverable is a world that generates itself, streams as you move, and can be explored on foot.
 

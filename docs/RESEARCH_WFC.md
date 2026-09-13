@@ -1,4 +1,22 @@
+---
+tags:
+  - research
+  - wfc
+  - milestone/0.0.2
+status: current
+---
+
 # Research: WFC / model synthesis for the sector fill layer
+
+> [!summary]
+> Research for the fill layer of milestone 0.0.2: how to fill each 48 m
+> sector with tiles using Wave Function Collapse in Godot. The recommendation
+> is the simple-tiled variant with socket-based adjacency, each sector solved
+> as one block whose faces are fixed first so neighbouring sectors always fit,
+> every random choice drawn from the project hash, and a solver interface that
+> a native extension can replace if GDScript is too slow. The note compares the
+> alternatives, looks at existing Godot addons, proposes an issue breakdown and
+> lists the decisions still open.
 
 Scope: the fill layer of `MEGASTRUCTURE_CONCEPT.md` §2.3 (2 m voxels, 24³ = 13 824
 cells per 48 m sector, hand-authored tiles with a socket per face, walkable-graph
