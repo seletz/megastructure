@@ -131,6 +131,16 @@ up to ~128 tiles.
 
 See also: [[RESEARCH_WFC]].
 
+### Boundary edge
+
+A walkable graph edge across the face between two neighbouring regions,
+decided from the lower region so both sides agree. Every region face gets at
+least one, which stitches the regions' spanning trees together.
+
+In this project: `WalkableGraph.boundary_edges`.
+
+See also: [[walkable-graph-connectivity]], Region, Tunnel edge.
+
 ### Branch workflow
 
 The rule that every issue is worked on in its own branch named
@@ -544,9 +554,11 @@ In this project: a directional light with soft shadows in the chasm shader
 A method for building a spanning tree: sort candidate edges by weight and add
 each one unless it would close a loop.
 
-In this project: planned for the walkable graph, with hashed edge weights.
+In this project: builds the walkable graph's tree inside each region, with
+hashed integer weights that rank corridors before stairs before tunnels.
 
-See also: [[RESEARCH_WFC]], Spanning tree, Union-find.
+See also: [[walkable-graph-connectivity]], [[RESEARCH_WFC]], Spanning tree,
+Union-find.
 
 ## L
 
@@ -732,7 +744,11 @@ See also: [[PLAN_0.1.0]].
 A point on the shared face between two adjacent non-solid sectors where the
 walkable graph crosses from one to the other.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]].
+In this project: `WalkableGraph.portal`; tunnel edges carry a point from the
+same salts on the face into solid.
+
+See also: [[sector-skeleton-and-walkable-graph]], [[MEGASTRUCTURE_CONCEPT]],
+[[RESEARCH_WFC]].
 
 ### Pre-collapsed cell
 
@@ -776,6 +792,16 @@ In this project: the throwaway 0.1.0 renderer
 ([raymarch_world.gdshader](../shaders/raymarch_world.gdshader)).
 
 See also: [[PLAN_0.1.0]], Sphere tracing.
+
+### Region
+
+A cube of 3 × 3 × 3 sectors. The walkable graph decides its edges one region
+at a time, so a sector's edges never depend on sectors farther away than its
+region and the sector layers across the region's faces.
+
+In this project: `WalkableGraph.region_of` and `edges_in_region`.
+
+See also: [[walkable-graph-connectivity]], Boundary edge.
 
 ### Render scale
 
@@ -924,9 +950,11 @@ See also: [[RESEARCH_WFC]], Universal tile.
 A set of edges that connects every node of a graph with no loops.
 
 In this project: guarantees all non-solid sectors in a region are connected;
-extra hashed edges then add loops.
+extra hashed edges then add loops. The tree is pruned to the sectors it must
+join, so it is a tree over those sectors, not over all 27.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], Kruskal's algorithm.
+See also: [[walkable-graph-connectivity]], [[MEGASTRUCTURE_CONCEPT]],
+Kruskal's algorithm.
 
 ### Sphere tracing
 
@@ -1009,6 +1037,18 @@ In this project: an exposure tone map with highlights allowed to clip
 
 See also: [[MEGASTRUCTURE_CONCEPT]].
 
+### Tunnel edge
+
+A walkable graph edge where at least one of the two sectors is solid. The
+fill layer carves a corridor through the mass there. Tunnels are the most
+expensive edges, so they are only built where no open path joins the
+sectors inside their region.
+
+In this project: `WalkableGraph.EdgeKind.TUNNEL`.
+
+See also: [[walkable-graph-connectivity]],
+[[0017-region-spanning-trees-with-tunnels]].
+
 ### Tweak panel
 
 The in-app panel for adjusting every shader constant live, with seed control,
@@ -1036,10 +1076,12 @@ See also: [[PLAN_0.1.0]].
 A data structure that tracks which items belong to the same group and merges
 groups quickly. It answers "are these two connected?".
 
-In this project: planned to verify that the walkable graph connects every
-non-solid sector.
+In this project: Kruskal's algorithm uses it to reject edges that would
+close a loop, and `mise run graph-connectivity` uses it to count the
+components of open sectors in a window.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], Spanning tree.
+See also: [[walkable-graph-connectivity]], [[MEGASTRUCTURE_CONCEPT]],
+Spanning tree.
 
 ### Universal tile
 
@@ -1080,7 +1122,11 @@ The second generation layer: a network of nodes and edges (corridors, stairs,
 ladders, bridges, catwalks) that guarantees the world can be crossed on foot.
 Also called the path graph.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], Portal.
+In this project: `WalkableGraph`, with portals and interior nodes as points
+and corridor, stair, ladder, bridge, catwalk and tunnel edges.
+
+See also: [[sector-skeleton-and-walkable-graph]],
+[[walkable-graph-connectivity]], [[MEGASTRUCTURE_CONCEPT]], Portal.
 
 ### Wave
 
