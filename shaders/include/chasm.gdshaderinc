@@ -68,6 +68,16 @@ uniform float bridge_broken_fraction : hint_range(0.0, 1.0, 0.01) = 0.4;
 // Full length (z) of the gap in a broken span.
 uniform float bridge_gap_min : hint_range(0.0, 200.0, 0.5) = 16.0;
 uniform float bridge_gap_max : hint_range(0.0, 200.0, 0.5) = 44.0;
+
+group_uniforms chasm.cables;
+// At most one vertical cable per cell of cable_cell in x and z.
+uniform float cable_cell : hint_range(4.0, 200.0, 0.5) = 25.0;
+uniform float cable_probability : hint_range(0.0, 1.0, 0.01) = 0.22;
+// Radii above 1.5 m may poke out of their cell, which chasm_cables does not cover.
+uniform float cable_radius_min : hint_range(0.01, 1.5, 0.01) = 0.12;
+uniform float cable_radius_max : hint_range(0.01, 1.5, 0.01) = 0.37;
+// Cables are cut off this far in front of the unrecessed wall planes.
+uniform float cable_facade_clearance : hint_range(0.0, 50.0, 0.1) = 4.0;
 group_uniforms;
 
 // Profile of a feature running along x: centred at v across its height,
@@ -317,6 +327,37 @@ float chasm_bridges(vec3 p, out int mat) {
 	d = min(d, chasm_bridge(p, id + ivec2(0, s.y)));
 	d = min(d, chasm_bridge(p, id + s));
 	return d;
+}
+
+// The cable of one cable cell, 1e5 where the cell has none. The hashed offset
+// keeps the cable axis 1.5 m inside its cell, so it stays inside for radii up
+// to 1.5 m, which chasm_cables relies on.
+float chasm_cable(vec3 p, ivec2 id) {
+	ivec3 cc = ivec3(id, 0);
+	if (hash3(cc, 41u) >= cable_probability) {
+		return 1e5;
+	}
+	vec2 offset = (vec2(hash3(cc, 42u), hash3(cc, 43u)) - 0.5) * (cable_cell - 3.0);
+	vec2 q = p.xz - (vec2(id) + 0.5) * cable_cell - offset;
+	return length(q) - mix(cable_radius_min, cable_radius_max, hash3(cc, 44u));
+}
+
+// Hanging cables. The prototype only looks at the point's own cell; the cells
+// towards the nearer border in x, in z and diagonally are checked too, as for
+// the bridges. Cables end cable_facade_clearance in front of either facade.
+float chasm_cables(vec3 p, out int mat) {
+	mat = CHASM_MAT_METAL;
+	vec2 cid = floor(p.xz / cable_cell);
+	vec2 cl = p.xz - (cid + 0.5) * cable_cell;
+	ivec2 id = ivec2(cid);
+	ivec2 s = ivec2(cl.x < 0.0 ? -1 : 1, cl.y < 0.0 ? -1 : 1);
+	vec2 far = cable_cell * 0.5 + abs(cl);
+	float d = min(far.x, far.y);
+	d = min(d, chasm_cable(p, id));
+	d = min(d, chasm_cable(p, id + ivec2(s.x, 0)));
+	d = min(d, chasm_cable(p, id + ivec2(0, s.y)));
+	d = min(d, chasm_cable(p, id + s));
+	return max(d, abs(p.z) - (chasm_half_width - cable_facade_clearance));
 }
 
 // Both facades, mirrored in z as the prototype does.
