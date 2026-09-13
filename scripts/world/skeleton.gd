@@ -8,9 +8,12 @@ extends RefCounted
 ## `sector_type()` is a pure function of (seed, cell) and the grammar: it never
 ## looks at neighbouring sectors. It still reads structured because every rule
 ## is decided on a cell coarser than one sector, so a single hash covers a
-## shaft run, a cavity box, a solid wall or a chasm. Rules are tested in order
-## of precedence and the first that claims the sector wins:
-##     chasm > cavity > shaft > solid > stratum
+## solid wall or floor panel, a cavity box, a shaft through several floor
+## layers or a chasm. Rules are tested in order of precedence and the first
+## that claims the sector wins:
+##     chasm > solid > cavity > shaft > stratum
+## Solid ranks above the voids so its walls and floors close and split space
+## into separate blocks; shafts run from floor to floor in between.
 ## Each decision uses its own salt (SALT_* below; the table is in
 ## docs/algorithms/sector-skeleton-and-walkable-graph.md).
 
@@ -18,9 +21,8 @@ enum SectorType { STRATUM, SHAFT, CAVITY, SOLID, CHASM }
 
 const TYPE_NAMES: Array[String] = ["stratum", "shaft", "cavity", "solid", "chasm"]
 
+## Salts 101 and 102 (shaft run length and start) are retired, never reuse them.
 const SALT_SHAFT_CHANCE := 100
-const SALT_SHAFT_LENGTH := 101
-const SALT_SHAFT_START := 102
 const SALT_CAVITY_CHANCE := 110
 const SALT_CAVITY_SIZE_X := 111
 const SALT_CAVITY_SIZE_Y := 112
@@ -49,12 +51,12 @@ func _init(sector_grammar: SectorGrammar = null) -> void:
 func sector_type(seed: int, cell: Vector3i) -> SectorType:
 	if _is_chasm(seed, cell):
 		return SectorType.CHASM
+	if _is_wall(seed, cell) or _is_floor(seed, cell):
+		return SectorType.SOLID
 	if _is_cavity(seed, cell):
 		return SectorType.CAVITY
 	if _is_shaft(seed, cell):
 		return SectorType.SHAFT
-	if _is_solid(seed, cell):
-		return SectorType.SOLID
 	return SectorType.STRATUM
 
 
@@ -99,40 +101,57 @@ func _in_box_axis(seed: int, key: Vector3i, local: int, size: int, size_salt: in
 	return _within(local, _pick(seed, key, offset_salt, 0, size - extent), extent)
 
 
-## Shaft: the column (ix, iz) is cut into vertical segments of
-## `shaft_segment` sectors; each holds, with shaft_probability, one run of
-## hashed length and start, so a shaft continues through several sectors.
+## Shaft: space is cut vertically into floor layers, each running from one
+## floor plane (see `_is_floor`) up to just below the next. A column (ix, iz)
+## holds a shaft, with shaft_probability, through `shaft_layers` consecutive
+## layers at once. A closed floor panel cuts the shaft at its plane; an open
+## one lets it continue into the next layer.
 func _is_shaft(seed: int, cell: Vector3i) -> bool:
-	var segment := maxi(grammar.shaft_segment, 1)
-	var key := Vector3i(cell.x, _floor_div(cell.y, segment), cell.z)
-	if Hash.hash3(seed, key, SALT_SHAFT_CHANCE) >= grammar.shaft_probability:
-		return false
-	var max_len := clampi(grammar.shaft_max_len, 1, segment)
-	var length := _pick(seed, key, SALT_SHAFT_LENGTH, clampi(grammar.shaft_min_len, 1, max_len), max_len)
-	return _within(posmod(cell.y, segment), _pick(seed, key, SALT_SHAFT_START, 0, segment - length), length)
+	var grid := maxi(grammar.solid_floor_grid, 1)
+	var band := _floor_div(cell.y, grid)
+	var layer := band if cell.y >= _floor_plane(seed, band) else band - 1
+	var key := Vector3i(cell.x, _floor_div(layer, maxi(grammar.shaft_layers, 1)), cell.z)
+	return Hash.hash3(seed, key, SALT_SHAFT_CHANCE) < grammar.shaft_probability
 
 
-## Solid: space is cut into cubic blocks of `solid_grid` sectors. Each band of
-## blocks along x has one wall plane at a hashed x offset shared by the whole
-## band (so walls of neighbouring blocks line up), likewise along z, and one
-## floor plane along y. Each block closes its x wall and z wall with
-## solid_wall_probability and its floor with solid_floor_probability.
-func _is_solid(seed: int, cell: Vector3i) -> bool:
-	var grid := maxi(grammar.solid_grid, 1)
-	var block := Vector3i(_floor_div(cell.x, grid), _floor_div(cell.y, grid), _floor_div(cell.z, grid))
+## Height of the floor plane of a y band of `solid_floor_grid` sectors: one
+## hashed offset per band, shared by every x and z.
+func _floor_plane(seed: int, band: int) -> int:
+	var grid := maxi(grammar.solid_floor_grid, 1)
+	return band * grid + _pick(seed, Vector3i(band, 0, 0), SALT_SOLID_FLOOR_PLANE, 0, grid - 1)
+
+
+## Solid wall: space is cut into x bands of `solid_wall_grid` sectors, each
+## with one wall plane at a hashed x offset shared by the whole band, likewise
+## along z. A plane is split into square panels of `solid_wall_panel` sectors
+## (in y and the other horizontal axis); each panel closes with
+## solid_wall_probability. Panels much larger than the grid make walls that
+## close across a whole region instead of leaving holes in every block.
+func _is_wall(seed: int, cell: Vector3i) -> bool:
+	var grid := maxi(grammar.solid_wall_grid, 1)
+	var panel := maxi(grammar.solid_wall_panel, 1)
+	var bx := _floor_div(cell.x, grid)
+	var bz := _floor_div(cell.z, grid)
 	if (
-		posmod(cell.x, grid) == _pick(seed, Vector3i(block.x, 0, 0), SALT_SOLID_WALL_X_PLANE, 0, grid - 1)
-		and Hash.hash3(seed, block, SALT_SOLID_WALL_X) < grammar.solid_wall_probability
-	):
-		return true
-	if (
-		posmod(cell.z, grid) == _pick(seed, Vector3i(block.z, 0, 0), SALT_SOLID_WALL_Z_PLANE, 0, grid - 1)
-		and Hash.hash3(seed, block, SALT_SOLID_WALL_Z) < grammar.solid_wall_probability
+		posmod(cell.x, grid) == _pick(seed, Vector3i(bx, 0, 0), SALT_SOLID_WALL_X_PLANE, 0, grid - 1)
+		and Hash.hash3(seed, Vector3i(bx, _floor_div(cell.y, panel), _floor_div(cell.z, panel)), SALT_SOLID_WALL_X) < grammar.solid_wall_probability
 	):
 		return true
 	return (
-		posmod(cell.y, grid) == _pick(seed, Vector3i(block.y, 0, 0), SALT_SOLID_FLOOR_PLANE, 0, grid - 1)
-		and Hash.hash3(seed, block, SALT_SOLID_FLOOR) < grammar.solid_floor_probability
+		posmod(cell.z, grid) == _pick(seed, Vector3i(bz, 0, 0), SALT_SOLID_WALL_Z_PLANE, 0, grid - 1)
+		and Hash.hash3(seed, Vector3i(_floor_div(cell.x, panel), _floor_div(cell.y, panel), bz), SALT_SOLID_WALL_Z) < grammar.solid_wall_probability
+	)
+
+
+## Solid floor: the floor plane of each y band of `solid_floor_grid` sectors is
+## split into square panels of `solid_floor_panel` sectors in x and z; each
+## panel closes with solid_floor_probability.
+func _is_floor(seed: int, cell: Vector3i) -> bool:
+	var panel := maxi(grammar.solid_floor_panel, 1)
+	var by := _floor_div(cell.y, maxi(grammar.solid_floor_grid, 1))
+	return (
+		cell.y == _floor_plane(seed, by)
+		and Hash.hash3(seed, Vector3i(_floor_div(cell.x, panel), by, _floor_div(cell.z, panel)), SALT_SOLID_FLOOR) < grammar.solid_floor_probability
 	)
 
 

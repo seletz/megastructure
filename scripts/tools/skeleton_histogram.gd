@@ -71,13 +71,14 @@ static func _row(label: String, counts: PackedInt32Array) -> String:
 ## with a grammar whose parameters are out of range.
 func _check_total(skeleton: Skeleton) -> void:
 	var broken := SectorGrammar.new()
-	broken.shaft_min_len = 20
-	broken.shaft_max_len = 2
-	broken.shaft_segment = 0
+	broken.shaft_layers = 0
 	broken.cavity_cell = 0
 	broken.cavity_min_size = 9
 	broken.cavity_max_size = 0
-	broken.solid_grid = 0
+	broken.solid_wall_grid = 0
+	broken.solid_wall_panel = 0
+	broken.solid_floor_grid = 0
+	broken.solid_floor_panel = 0
 	broken.chasm_band = 0
 	broken.chasm_band_height = 0
 	broken.chasm_probability = 1.0

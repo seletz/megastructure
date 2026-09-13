@@ -84,8 +84,8 @@ description = "Measure the sector grammar over 20 random 5^3 regions per seed 0.
 run = "godot --headless --path . --script res://scripts/tools/skeleton_stats.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main and skeleton viewer scenes, run the skeleton histogram regression and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "skeleton-histogram"]
+description = "Import assets, parse scripts, run the main and skeleton viewer scenes, run the skeleton histogram regression and structure statistics and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "skeleton-histogram", "skeleton-stats"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]
