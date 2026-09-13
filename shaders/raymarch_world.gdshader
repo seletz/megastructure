@@ -5,6 +5,7 @@ render_mode unshaded, cull_disabled, depth_draw_always, fog_disabled;
 #include "res://shaders/include/raymarch.gdshaderinc"
 #include "res://shaders/include/hash.gdshaderinc"
 #include "res://shaders/include/chasm.gdshaderinc"
+#include "res://shaders/include/post.gdshaderinc"
 
 uniform int max_steps = 180;
 uniform float max_distance = 1400.0;
@@ -13,9 +14,6 @@ uniform float hit_epsilon = 0.002;
 // Absolute offset for the normal gradient; scaling it with distance smears
 // normals across ledges and terrace borders.
 uniform float normal_epsilon = 0.004;
-
-uniform vec3 fog_color : source_color = vec3(0.02, 0.02, 0.03);
-uniform float fog_density = 0.004;
 
 // World distance; mat receives the material id of the closest surface
 // (CHASM_MAT_CONCRETE, CHASM_MAT_METAL or CHASM_MAT_LIT).
@@ -78,16 +76,20 @@ void fragment() {
 			break;
 		}
 	}
-	if (!hit) {
-		discard;
+
+	vec3 col;
+	if (hit) {
+		vec3 p = ro + rd * t;
+		vec3 n = calc_normal(p, t, rd);
+		float occ = surface_ao(p, n);
+		col = lighting_shade(p, n, ro, surface_albedo(p, mat), occ, mat);
+		col = post_apply_fog(col, rd, t);
+		DEPTH = depth_from_world(p, PROJECTION_MATRIX, VIEW_MATRIX);
+	} else {
+		// Misses show the fog itself and sit on the far plane (reversed-Z).
+		col = post_fog_color(rd);
+		DEPTH = 0.0;
 	}
 
-	vec3 p = ro + rd * t;
-	vec3 n = calc_normal(p, t, rd);
-	float occ = surface_ao(p, n);
-	vec3 col = lighting_shade(p, n, ro, surface_albedo(p, mat), occ, mat);
-	col = mix(col, fog_color, 1.0 - exp(-t * fog_density));
-
-	ALBEDO = col;
-	DEPTH = depth_from_world(p, PROJECTION_MATRIX, VIEW_MATRIX);
+	ALBEDO = post_process(col, FRAGCOORD.xy, VIEWPORT_SIZE, TIME);
 }
