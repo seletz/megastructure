@@ -124,4 +124,5 @@ and, if the PDF is stored, under which licence.
 - Newest items come first everywhere: the new line goes at the top of its
   list, and the newest version section sits directly under `Unreleased`.
 - A release moves the `Unreleased` entries under a new `<version> - <date>`
-  heading and gets a git tag.
+  heading and gets a git tag; `mise run release:release` does both
+  ([[releasing]]).

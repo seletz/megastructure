@@ -61,6 +61,12 @@ status: current
 - [[decisions/README|Decision log]]: one dated note per decision with its
   context, the decision and its consequences. Open questions are marked.
 
+## Process
+
+- [[process/README|Process]]: how work becomes a published version:
+  [[releasing]] explains versioning, the release task and workflow, and how
+  to verify a release. `develop` always carries the next version.
+
 ## Code map
 
 - [[code/README|Code map]]: one note per area of the source tree (camera and

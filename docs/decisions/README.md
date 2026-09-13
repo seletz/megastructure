@@ -31,6 +31,7 @@ status: current
 | 0011 | 2026-09-13 | [[0011-typed-gdscript-solver-first\|Typed GDScript solver first, native extension past a threshold]] | proposed |
 | 0012 | 2026-09-13 | [[0012-docs-is-an-obsidian-design-wiki\|docs/ is an Obsidian design wiki]] | accepted |
 | 0013 | 2026-09-13 | [[0013-film-grain-off-by-default\|Film grain off by default]] | accepted |
+| 0014 | 2026-09-13 | [[0014-develop-is-always-the-next-version\|Develop is always the next version]] | accepted |
 
 The remaining questions in [[RESEARCH_WFC#Decisions to make]] (cell-choice
 heuristic, GridMap lifetime, path-cell semantics, pipes and cables) get a
