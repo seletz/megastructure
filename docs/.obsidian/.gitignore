@@ -1,0 +1,8 @@
+# Per-machine Obsidian state. Settings, core plugin list and themes are committed
+# so the vault looks the same everywhere.
+workspace.json
+workspace-mobile.json
+workspace*.json
+cache
+# Installed community plugins are per machine; community-plugins.json (the list) is committed.
+plugins/
