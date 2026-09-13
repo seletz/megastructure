@@ -115,7 +115,7 @@ defaults.
 - [[integer-hash]]: the hash every layout decision uses.
 - [[0003-ray-marcher-is-a-throwaway-prototype]],
   [[0006-tightened-distance-field-bounds]],
-  [[0007-keep-overlaid-facade-layouts]] and
+  [[0007-facade-layout-overlay-knob]] and
   [[0013-film-grain-off-by-default]]: decisions about this shader.
 - [[camera-and-scene]]: the quad the shader is drawn on.
 - Papers: [[quilez-2008-raymarching-distance-fields]],

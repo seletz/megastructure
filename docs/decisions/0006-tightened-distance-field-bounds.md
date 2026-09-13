@@ -55,4 +55,4 @@ Deviate from the prototype's formulas wherever they are not safe bounds, in
 
 - PR #33 (buttress and terrace), PR #39 (openings), PRs #41 and #43.
 - Related: [[0003-ray-marcher-is-a-throwaway-prototype]],
-  [[0007-keep-overlaid-facade-layouts]].
+  [[0007-facade-layout-overlay-knob]].

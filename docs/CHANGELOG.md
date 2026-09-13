@@ -16,6 +16,10 @@ status: current
 
 ## Unreleased
 
+### Added
+
+- The `facade_overlay` knob turns off the prototype's overlaid facade layouts, so each chasm wall gets one layout and the recess, buttress removal and opening rates apply as set. (#105)
+
 ### Fixed
 
 - `mise run run` imports first, so pulling new scripts no longer causes parse errors on the next run. (#101)

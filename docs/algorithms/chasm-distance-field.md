@@ -28,7 +28,15 @@ status: current
   void, until a pillar, bridge or cable fills it.
 - The second facade is the first one mirrored in `z`. Each facade passes
   `side = +1` or `-1` into the spare coordinate of its hash cells, so the two
-  walls make independent decisions.
+  layouts make independent decisions.
+- By default (`facade_overlay` on, as in the prototype) each facade is
+  evaluated at `|z|`, so both layouts sit on both walls, overlaid. A recess,
+  a removed buttress or an opening only shows where both layouts agree: about
+  10 % recessed terraces instead of 32 %, 6 % removed buttresses instead of
+  25 %, 25 % openings instead of 50 %. With `facade_overlay` off each facade
+  uses the signed `z`, so side +1 owns the +z wall and side -1 the -z wall and
+  the rates in the table below apply. See
+  [[0007-facade-layout-overlay-knob]].
 
 ```mermaid
 flowchart TD

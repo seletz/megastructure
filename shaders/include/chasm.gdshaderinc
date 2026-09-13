@@ -11,6 +11,9 @@ const int CHASM_MAT_LIT = 2;
 group_uniforms chasm;
 uniform float chasm_half_width : hint_range(20.0, 400.0, 1.0) = 140.0;
 uniform float stratum_height : hint_range(1.0, 30.0, 0.1) = 6.0;
+// Prototype behaviour: each facade is evaluated at |z|, so both walls show both
+// hashed layouts on top of each other. When false each wall gets exactly one layout.
+uniform bool facade_overlay = true;
 
 group_uniforms chasm.ledges;
 uniform float ledge_depth : hint_range(0.0, 10.0, 0.01) = 1.2;
@@ -193,9 +196,13 @@ float chasm_buttress_neighbours(ivec2 cell, vec2 bl, int side) {
 
 // One facade in local coordinates; zz is the distance in front of the wall
 // plane (positive = void). side (+1 / -1) keeps the two facades' hashes apart.
+// With facade_overlay the facade sits at |z| and so appears on both walls;
+// without it only at +z. The geometry is a function of (x, y, zz) either way
+// and zz changes by at most the change in z, so both are valid lower bounds;
+// from the other half z is negative and zz only grows.
 float chasm_facade(vec3 p, int side, out int mat) {
 	mat = CHASM_MAT_CONCRETE;
-	float z = abs(p.z);
+	float z = facade_overlay ? abs(p.z) : p.z;
 
 	// Terrace recess per coarse cell.
 	vec2 tid = floor(p.xy / terrace_cell);
@@ -360,7 +367,8 @@ float chasm_cables(vec3 p, out int mat) {
 	return max(d, abs(p.z) - (chasm_half_width - cable_facade_clearance));
 }
 
-// Both facades, mirrored in z as the prototype does.
+// Both facades, mirrored in z as the prototype does. Without facade_overlay
+// side +1 owns the +z wall and side -1 the -z wall.
 float chasm_facades(vec3 p, out int mat) {
 	int mat_a;
 	int mat_b;
