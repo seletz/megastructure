@@ -31,6 +31,7 @@ status: current
 
 ### Docs
 
+- The README describes the skeleton viewer with a screenshot. (#125)
 - The wiki has a plan for milestone 0.2.0 with its epics and done-when list. (#119)
 
 ## 0.1.0 - 2026-09-13

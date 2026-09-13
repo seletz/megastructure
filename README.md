@@ -35,6 +35,26 @@ Linux (x86_64) and a macOS (universal) build attached. The macOS build is not
 signed or notarized: on first launch, right-click the app and choose Open to
 get past Gatekeeper.
 
+## Skeleton viewer
+
+![The sector skeleton at seed 0: translucent solid mass and voids, wireframe strata](docs/images/skeleton-after.png)
+
+The generative world starts with a skeleton: a lattice of 48 m sectors, each
+given a type by a hashed grammar so the same seed always produces the same
+layout. The viewer draws that lattice around a free-fly camera:
+
+```sh
+mise run run-skeleton
+```
+
+Grey is solid mass, cyan a shaft, orange a cavity, red a chasm, and the faint
+wireframes are strata, the habitable layers that make up most of the world.
+The sector you are in is never drawn. Tab opens the panel with the viewer
+settings (radius, fill, stratum) and every grammar parameter, so the structure
+can be tuned live; `mise run skeleton-stats` checks a tuning against the
+acceptance rules. How the grammar works is described in
+[`docs/algorithms/sector-skeleton-and-walkable-graph.md`](docs/algorithms/sector-skeleton-and-walkable-graph.md).
+
 ## Controls
 
 | Key              | Action                                               |
