@@ -2,13 +2,20 @@ class_name Hud
 extends CanvasLayer
 ## Top-left overlay with frame timing, camera pose and seed, plus screenshots.
 ##
-## F1 toggles the overlay. F12 saves the current frame, without the overlay and
-## the other layers in `hidden_during_capture`, to
+## The overlay is shown on start. H (or F1) hides it and leaves a small dimmed
+## hint in the corner saying how to bring it back. P (or F12) saves the current
+## frame, without the HUD and the other layers in `hidden_during_capture`, to
 ## user://screenshots/<seed>_<yyyymmdd-hhmmss>.png at the window resolution.
+## Both keys follow the UiKeys rule, so they are ignored while typing.
 ## Yaw and pitch are shown in the HTML prototype's convention (see
 ## FreeFlyCamera), so they can be pasted into `state.yaw` / `state.pitch`.
 
+signal screenshot_saved(path: String)
+
 const SCREENSHOT_DIR := "user://screenshots"
+const TOGGLE_KEYS: Array[Key] = [KEY_H, KEY_F1]
+const SCREENSHOT_KEYS: Array[Key] = [KEY_P, KEY_F12]
+const CONTROLS_HINT := "Tab panel  H HUD  P screenshot  R new seed  Esc mouse  WASD QE move  Shift fast  wheel speed"
 
 ## FreeFlyCamera whose pose is displayed.
 @export var camera: NodePath
@@ -16,6 +23,7 @@ const SCREENSHOT_DIR := "user://screenshots"
 @export var hidden_during_capture: Array[NodePath] = []
 
 @onready var _label: Label = $Label
+@onready var _hint: Label = $Hint
 
 var _camera: FreeFlyCamera
 var _capturing := false
@@ -25,22 +33,34 @@ func _ready() -> void:
 	_camera = get_node_or_null(camera) as FreeFlyCamera
 	if _camera == null:
 		push_warning("Hud: no FreeFlyCamera found at %s" % camera)
+	set_overlay_shown(true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if key == null or not key.pressed or key.echo:
-		return
-	if key.keycode == KEY_F1:
-		visible = not visible
+	if UiKeys.is_shortcut(event, TOGGLE_KEYS):
+		if UiKeys.text_field_focused(get_viewport()):
+			return
+		set_overlay_shown(not is_overlay_shown())
 		get_viewport().set_input_as_handled()
-	elif key.keycode == KEY_F12:
+	elif UiKeys.is_shortcut(event, SCREENSHOT_KEYS):
+		if UiKeys.text_field_focused(get_viewport()):
+			return
 		get_viewport().set_input_as_handled()
 		capture_screenshot()
 
 
+## Shows the full overlay, or only the dimmed corner hint when `shown` is false.
+func set_overlay_shown(shown: bool) -> void:
+	_label.visible = shown
+	_hint.visible = not shown
+
+
+func is_overlay_shown() -> bool:
+	return _label.visible
+
+
 func _process(delta: float) -> void:
-	if not visible:
+	if not _label.visible:
 		return
 	var lines := PackedStringArray([
 		"FPS    %d" % Engine.get_frames_per_second(),
@@ -51,6 +71,7 @@ func _process(delta: float) -> void:
 		lines.append("pos    %.1f, %.1f, %.1f" % [pos.x, pos.y, pos.z])
 		lines.append("yaw    %.2f  pitch %.2f" % [_camera.yaw, _camera.pitch])
 	lines.append("seed   %d" % WorldState.seed)
+	lines.append(CONTROLS_HINT)
 	_label.text = "\n".join(lines)
 
 
@@ -86,6 +107,7 @@ func capture_screenshot() -> String:
 		push_error("Hud: could not save screenshot to %s: %s" % [path, error_string(error)])
 		return ""
 	print("Screenshot saved: %s" % path)
+	screenshot_saved.emit(path)
 	return path
 
 
