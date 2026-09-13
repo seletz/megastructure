@@ -1,5 +1,12 @@
 [tools]
 godot = "4.7.2-stable"
+node = "26"
+"npm:@coding-solo/godot-mcp" = "0.1.1"
+
+[env]
+# Godot MCP server only honours GODOT_PATH (it never searches PATH), so resolve
+# the mise-managed binary after tools are on PATH.
+GODOT_PATH = { value = "{{ exec(command='command -v godot') }}", tools = true }
 
 [tasks.editor]
 description = "Open the project in the Godot editor"
@@ -35,6 +42,10 @@ usage = '''
 arg "<preset>" help="Export preset name from export_presets.cfg"
 arg "<output>" help="Output file path"
 '''
+
+[tasks.mcp]
+description = "Run the Godot MCP server over stdio (used by .mcp.json)"
+run = "godot-mcp"
 
 [tasks.clean]
 description = "Remove generated import cache and build output"

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "godot": {
+      "command": "mise",
+      "args": ["exec", "--", "godot-mcp"]
+    }
+  }
+}
