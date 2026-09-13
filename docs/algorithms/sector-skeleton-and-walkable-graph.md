@@ -31,8 +31,8 @@ status: draft
 > walkable graph, the portals and interior nodes (#80) and the edges (#81,
 > [[walkable-graph-connectivity]],
 > [[0017-region-spanning-trees-with-tunnels]]) are implemented, see
-> [[walkable-graph]]; the debug lines and the rasteriser are not
-> implemented yet. The note collects the design from
+> [[walkable-graph]], and so are the debug lines (#82) and the edge
+> rasteriser (#83, [[edge-rasteriser]]). The note collects the design from
 > [[MEGASTRUCTURE_CONCEPT]] and [[RESEARCH_WFC]] into one place, with a
 > sketch of how it could work, so the graph issues start from a shared
 > picture. Expect it to change.
@@ -331,7 +331,9 @@ corridor cells may only be floor-like tiles, stair cells a specific oriented
 stair. These restrictions are the only hard constraint the fill layer takes
 from the graph ([[wave-function-collapse]]). Restricting a cell to a family
 instead of a single tile leaves the solver room to place walls and columns
-around the path.
+around the path. [[edge-rasteriser]] describes the implemented rasteriser:
+walks from the hub to each portal with explicit stairs and ladders at every
+level change, and the merge rule that keeps records from conflicting.
 
 ## How it is checked
 
@@ -356,11 +358,11 @@ around the path.
   with a solid sector and non-adjacent pairs have no portal, and that the
   interior nodes lie inside their sectors on the grid.
 
-Planned for the graph:
-
-- The rasterised records of one sector never conflict (the same cell with two
-  disjoint restrictions).
-- A debug view draws the graph as coloured lines around the free-fly camera.
+- `mise run raster-check` (part of `mise run check`) rasterises 1 000
+  random sectors for seeds 0 to 4 and fails on a conflict between records,
+  a cell outside the sector, a missing portal opening, a rejected edge or a
+  walk that changes level anywhere but on a stair or ladder
+  ([[edge-rasteriser]]).
 
 ## Open questions
 

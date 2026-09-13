@@ -19,7 +19,10 @@ status: current
 > corridors, stairs, ladders, bridges, catwalks, and tunnels through solid
 > where nothing else connects. They are chosen per 3³ region so that every
 > open sector is reachable. The skeleton viewer draws the edges as coloured
-> **debug lines**, node to portal to node. The rasteriser (#83) comes next.
+> **debug lines**, node to portal to node. The **edge rasteriser** turns a
+> sector's edges into records on its 24³ cell grid (floor, stair, ladder,
+> bridge, catwalk, tunnel and portal opening cells), the only input the fill
+> solver will take from the graph.
 
 ## Files
 
@@ -30,10 +33,15 @@ status: current
 - [graph_lines.gd](../../scripts/world/graph_lines.gd) (`class_name
   GraphLines`, a `Node3D`): draws the edges of a box of regions as lines,
   one mesh per edge kind; used by the skeleton viewer.
+- [edge_rasteriser.gd](../../scripts/world/edge_rasteriser.gd) (`class_name
+  EdgeRasteriser`, a `RefCounted`): the `TileFamily` enum, the inner classes
+  `Record` and `SectorRaster`, and the rasteriser functions below.
 - `scripts/tools/graph_check.gd`: the check behind `mise run graph-check`,
   listed in [[tools-and-tasks]].
 - `scripts/tools/graph_connectivity_check.gd`: the check behind `mise run graph-connectivity`, listed in
   [[tools-and-tasks]].
+- `scripts/tools/raster_check.gd`: the check behind `mise run raster-check`,
+  listed in [[tools-and-tasks]].
 
 ## Using it
 
@@ -108,6 +116,42 @@ streams sectors should keep `edges_in_region` per region. The algorithm,
 weights, salts 153 to 158 and the connectivity argument are in
 [[walkable-graph-connectivity]].
 
+## Edge rasteriser
+
+```gdscript
+var rasteriser := EdgeRasteriser.new(WalkableGraph.new(WorldState.seed))
+for record in rasteriser.records_for_sector(Vector3i(0, 0, 0)):
+	print(record.cell, EdgeRasteriser.family_name(record.family), record.orientation, record.edge_ref)
+var raster := rasteriser.rasterise(Vector3i(0, 0, 0))  # records plus per-edge walks
+```
+
+| Function | Returns |
+| --- | --- |
+| `records_for_sector(sector)` | The merged `Record`s of the sector, one per cell, ordered by cell x, then y, then z. |
+| `rasterise(sector)` | A `SectorRaster`: `records`, `edge_records` (each edge's own walk in walking order, by `edge_ref`), `rejected` (edge refs whose every routing conflicted) and `fallbacks` (edges that did not take their first routing). |
+| `hub_cell(sector)` | The cell all walks of the sector meet at: the interior node, or the centre of a solid sector. |
+| `merge(p, q)` (static) | The record two records at one cell merge into, or `null` for a conflict. Commutative. |
+| `portal_cell(sector, edge, n)` (static) | The edge's portal cell inside the sector. |
+| `surface_family(type)` (static) | The flat family of a sector type: floor, catwalk (shaft), bridge (cavity, chasm) or tunnel (solid). |
+| `edge_ref(edge)` (static) | `Vector4i(a.x, a.y, a.z, axis)`, the key both sectors of an edge use. |
+| `family_name(family)`, `yaw_of(dir)` (static) | `"floor"` ... `"portal_opening"`; the yaw 0..3 of a horizontal unit vector. |
+
+| `Record` field | Meaning |
+| --- | --- |
+| `cell` | Local cell, 0 to `cells_per_sector() - 1` on each axis. |
+| `family` | `TileFamily`: `FLOOR`, `STAIR`, `BRIDGE`, `CATWALK`, `LADDER`, `TUNNEL` or `PORTAL_OPENING`. |
+| `orientation` | Yaw quarter turns 0..3 (0 +x, 1 −z, 2 −x, 3 +z), `ORIENTATION_UP` (4) or `ORIENTATION_DOWN` (5); 0 for floor, bridge, catwalk and tunnel. |
+| `edge_ref` | The edge the record came from; after a merge, the smaller of the two. |
+
+Every edge becomes a walk from the hub to its portal cell: flat at the hub's
+level, an oriented stair run (3 cells of run per stratum, turning only at
+landings) or, in shafts and chasms, a ladder to the portal's level, flat
+into the portal. Portal cells go in first, vertical edges before horizontal
+ones, and each edge takes the first routing whose records merge with what is
+already placed; stair runs search their turns around occupied cells. Nothing
+is cached: `rasterise` calls `edges_for_sector` once. The rules, the merge
+table and a worked example are in [[edge-rasteriser]].
+
 ## Debug lines
 
 `GraphLines` is a child of the `SkeletonViewer` in
@@ -158,10 +202,18 @@ viewer calls it on a seed or grammar change. Rebuild times are in
   sample for seeds 0 to 9, and fails unless every region-aligned 3³ and 6³
   window has one component of open sectors. It prints the strict 5³ window
   counts, the tunnel fraction, the edge kinds and the mean vertical run.
+- `mise run raster-check` (part of `mise run check`, about 15 s) rasterises
+  1 000 random sectors for seeds 0 to 4 and fails on a difference from a
+  fresh graph, a record outside 0..23, a conflict, an edge without its
+  portal opening in both endpoint sectors, a rejected edge, a sector whose
+  records are split, or a walk that changes level anywhere but on a stair or
+  ladder. It prints the family counts, the mean records per sector and the
+  stair, ladder and landing cells level changes produce.
 
 ## References
 
 - [[sector-skeleton-and-walkable-graph]]: portals, nodes and their salts.
+- [[edge-rasteriser]]: how edges become cell records.
 - [[walkable-graph-connectivity]]: how the edges are chosen;
   [[0017-region-spanning-trees-with-tunnels]]: why.
 - [[skeleton]]: `sector_type`, which decides which sectors are open.

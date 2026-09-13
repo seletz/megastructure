@@ -306,7 +306,8 @@ Narrowing a cell's domain to a family of tiles before solving, rather than
 fixing it to one tile. The solver can still choose within the family.
 
 In this project: how walkable-graph cells will be pre-collapsed, for example
-`{floor, floor+column, doorway}` for corridor cells.
+`{floor, floor+column, doorway}` for corridor cells. The edge rasteriser
+names the restriction as a tile family per cell.
 
 See also: [[RESEARCH_WFC]], Pre-collapsed cell.
 
@@ -314,10 +315,17 @@ See also: [[RESEARCH_WFC]], Pre-collapsed cell.
 
 ### Edge rasteriser
 
-The planned step that turns walkable-graph edges into per-cell domain
-restrictions, the only input the fill solver takes from the graph.
+The step that turns a sector's walkable-graph edges into per-cell records (a
+tile family and an orientation per cell), the only input the fill solver
+takes from the graph: paths of floor, stair, ladder, bridge, catwalk and
+tunnel cells from the sector's hub to each portal.
 
-See also: [[RESEARCH_WFC]] (Epic B, B4).
+In this project: `EdgeRasteriser` in
+[edge_rasteriser.gd](../scripts/world/edge_rasteriser.gd), checked by
+`mise run raster-check`.
+
+See also: [[edge-rasteriser]], [[RESEARCH_WFC]] (Epic B, B4), Tile family,
+Merge rule.
 
 ### Emissive
 
@@ -511,6 +519,15 @@ In this project: a warm point light with inverse-square falloff
 
 See also: [[MEGASTRUCTURE_CONCEPT]].
 
+### Hub
+
+The cell of a sector where all its walkable-graph paths meet.
+
+In this project: the interior node of an open sector, or the centre cell of a
+solid sector (at a floor level), used by `EdgeRasteriser`.
+
+See also: [[edge-rasteriser]], Portal.
+
 ### HUD
 
 Heads-up display: an on-screen overlay of status information.
@@ -584,6 +601,18 @@ In this project: the reason cut-outs such as openings are built carefully in
 See also: Signed distance field.
 
 ## M
+
+### Merge rule
+
+What happens when two records of the edge rasteriser land on the same cell:
+identical records merge, a stair, ladder or portal opening wins over a floor,
+bridge, catwalk or tunnel cell, two horizontal portal openings form a corner
+opening, and every other pair is a conflict.
+
+In this project: `EdgeRasteriser.merge`; a conflicting path takes its next
+routing.
+
+See also: [[edge-rasteriser]], Tile family.
 
 ### MeshLibrary
 
@@ -1002,6 +1031,17 @@ One hand-authored building module (floor slab, wall, stair) that fills one
 voxel cell.
 
 See also: [[MEGASTRUCTURE_CONCEPT]], Tileset.
+
+### Tile family
+
+A named group of tiles that can stand in for each other on a path cell, such
+as all floor tiles or all stair tiles of one orientation. A cell restricted to
+a family is a domain restriction.
+
+In this project: `EdgeRasteriser.TileFamily`: floor, stair, bridge, catwalk,
+ladder, tunnel and portal opening.
+
+See also: [[edge-rasteriser]], Domain restriction.
 
 ### Tile vocabulary
 
