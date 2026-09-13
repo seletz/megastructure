@@ -1,4 +1,20 @@
+---
+tags:
+  - algorithm
+  - hash
+  - reference
+status: current
+---
+
 # Shared integer hash: reference vectors
+
+> [!summary]
+> Where a column is missing or a bridge spans the chasm is decided by one
+> integer hash of the seed, a cell position and a salt number. The hash exists
+> in three places (the Godot shader, GDScript and the HTML prototypes) and all
+> three must give exactly the same result, otherwise the CPU and the GPU would
+> disagree about the world. This note defines the function and lists reference
+> values that every implementation is checked against.
 
 Layout decisions (which column is removed, where a bridge spans the chasm,
 how much grime a surface gets) are driven by one integer hash of
