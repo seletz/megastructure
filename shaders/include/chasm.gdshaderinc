@@ -370,10 +370,11 @@ float chasm_facades(vec3 p, out int mat) {
 	return min(d, d_b);
 }
 
-// The whole chasm: facades, pillars and bridges.
+// The whole chasm: facades, pillars, bridges and cables.
 float chasm_map(vec3 p, out int mat) {
 	int mat_p;
 	int mat_b;
+	int mat_c;
 	float d = chasm_facades(p, mat);
 	float d_p = chasm_pillars(p, mat_p);
 	if (d_p < d) {
@@ -384,6 +385,11 @@ float chasm_map(vec3 p, out int mat) {
 	if (d_b < d) {
 		d = d_b;
 		mat = mat_b;
+	}
+	float d_c = chasm_cables(p, mat_c);
+	if (d_c < d) {
+		d = d_c;
+		mat = mat_c;
 	}
 	return d;
 }
