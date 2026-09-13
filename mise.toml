@@ -20,9 +20,22 @@ run = "godot --path ."
 description = "Import all assets headlessly (regenerates .godot/)"
 run = "godot --headless --path . --import"
 
-[tasks.check]
-description = "Import assets and verify the project loads headlessly"
+[tasks.check-scripts]
+description = "Parse every GDScript file and fail on errors"
 depends = ["import"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+status=0
+while IFS= read -r -d '' file; do
+	godot --headless --path . --check-only --script "res://${file#./}" || status=1
+done < <(find . -path ./.godot -prune -o -name '*.gd' -print0)
+exit "$status"
+'''
+
+[tasks.check]
+description = "Import assets, parse scripts and verify the project loads headlessly"
+depends = ["import", "check-scripts"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.export]
