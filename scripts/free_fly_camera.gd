@@ -24,6 +24,8 @@ const MAX_SPEED_SCALE := 50.0
 @export var pitch := -0.28
 
 var speed_scale := 1.0
+## When false, mouse look is ignored (e.g. while a UI panel owns the mouse).
+var look_enabled := true
 
 
 func _ready() -> void:
@@ -35,7 +37,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var motion := event as InputEventMouseMotion
 		var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 		var dragging := motion.button_mask & MOUSE_BUTTON_MASK_RIGHT != 0
-		if captured or dragging:
+		if look_enabled and (captured or dragging):
 			yaw -= motion.relative.x * mouse_sensitivity
 			pitch = clampf(pitch - motion.relative.y * mouse_sensitivity, -PITCH_LIMIT, PITCH_LIMIT)
 			_apply_rotation()
