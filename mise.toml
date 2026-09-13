@@ -88,14 +88,19 @@ depends = ["import"]
 description = "Check walkable graph portals and interior nodes over 100 random adjacent open sector pairs per seed 0..4: symmetric, on the shared face inside the margin, on the 2 m grid, null for solid or non-adjacent pairs (headless)"
 run = "godot --headless --path . --script res://scripts/tools/graph_check.gd"
 
+[tasks.graph-connectivity]
+depends = ["import"]
+description = "Check the walkable graph edges for seeds 0..9 over a 15^3 sample: kinds, portals, determinism, edges_for_sector; fail unless every region-aligned 3^3 and 6^3 window has one non-solid component; report strict 5^3 windows, tunnel fraction and mean vertical run (headless)"
+run = "godot --headless --path . --script res://scripts/tools/graph_connectivity_check.gd"
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals and nodes and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check"]
+description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes and edge connectivity and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]
