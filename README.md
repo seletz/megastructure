@@ -1,5 +1,7 @@
 # megastructure
 
+![The chasm at seed 1, milestone 0.0.1](docs/images/chasm-0.0.1-seed1.png)
+
 A generative, explorable rendering of a Blame!-style megastructure in Godot 4:
 endless strata, vertical shafts, and open chasms between stratified facades.
 No gameplay, just a world that generates itself from a seed.
