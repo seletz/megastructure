@@ -31,9 +31,9 @@ The steps:
    fallback for the older ALSA package name).
 3. Install mise and the tools from `mise.toml` with `jdx/mise-action`, cached
    between runs.
-4. Run `mise run check`: import, parse every script, run the main scene
-   headlessly for 60 frames and fail on any script or scene error (`smoke`),
-   load the project ([[tools-and-tasks]]). The runner has no GPU, but the
+4. Run `mise run check`: import, parse every script, run the main scene and
+   the skeleton viewer headlessly for 60 frames each and fail on any script
+   or scene error (`smoke`), load the project ([[tools-and-tasks]]). The runner has no GPU, but the
    headless dummy renderer does not compile shaders, so `smoke` needs no
    allow-list for shader messages.
 

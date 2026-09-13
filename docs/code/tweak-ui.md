@@ -61,13 +61,26 @@ vec2 and colour uniforms; other types (such as `vec3`) are skipped, and the
 `seed` uniform is left to the seed control. It also reads, writes and resets
 values on the material.
 
+Nodes can also register **script parameters**, values they own instead of a
+material. `add_script_params(group, params, setter)` takes a Dictionary of
+name to `{value, min, max, step, default}` (float, int or bool, the kind
+follows the default) and a `Callable(name, value)` called on every change;
+`add_object_exports(object, setter, prefix)` builds those Dictionaries from an
+object's `@export` fields, one group per `@export_group`, with ranges from
+`@export_range`. The skeleton viewer uses it to put every `SectorGrammar`
+parameter in the panel ([[skeleton]]). `get_value` and `set_value` read the
+Dictionary and call the setter for these, the material for shader uniforms.
+
 ### Panel
 
 [tweak_panel.tscn](../../scenes/ui/tweak_panel.tscn) is just a `CanvasLayer`
 with [tweak_panel.gd](../../scripts/ui/tweak_panel.gd) (`class_name
 TweakPanel`), which builds everything in code: a scrollable 480 px panel on
 the right with, from top to bottom, the presets section, the seed control and
-one collapsible section per registry group with a Reset button. Floats and
+one collapsible section per registry group with a Reset button. Nodes listed
+in its `param_sources` get their `register_params(registry)` called before
+the panel is built; `material_source` may be empty in scenes without a
+shader, and `show_presets = false` drops the presets section. Floats and
 ints get a slider sharing its value with a spin box, bools a check box, vec2s
 two spin boxes, colours a colour picker. Every change goes straight to the
 material. On start it restores the last used preset.

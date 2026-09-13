@@ -1,6 +1,7 @@
 class_name ParamRegistry
 extends RefCounted
-## Shader parameters of a ShaderMaterial, discovered at runtime.
+## Tweakable parameters: shader uniforms discovered at runtime, plus script
+## parameters registered by nodes.
 ##
 ## Walks Shader.get_shader_uniform_list(), so every uniform a shader or its
 ## includes declares shows up without a hand-maintained list. Uniforms are
@@ -10,6 +11,17 @@ extends RefCounted
 ## Defaults come from the material override, then the rendering server, then
 ## the uniform's initializer in the shader source (the headless dummy renderer
 ## reports no defaults).
+##
+## Script parameters are values a node owns instead of a material. A source
+## registers a group of them as a Dictionary with a setter, or lets the
+## registry read a Resource's @export fields:
+##     registry.add_script_params("viewer", {
+##         "radius": {"value": 3, "min": 1, "max": 6, "step": 1, "default": 3},
+##     }, func(name: String, value: Variant) -> void: set(name, value))
+##     registry.add_object_exports(grammar, func(name: String, value: Variant) -> void:
+##         grammar.set(name, value))
+## The kind follows the type of "default"; get_value and set_value go through
+## the Dictionary and the setter, never the material.
 
 enum Kind { FLOAT, INT, BOOL, VEC2, COLOR }
 
@@ -41,6 +53,11 @@ class Group:
 var material: ShaderMaterial
 var groups: Array[Group] = []
 
+## Script param name -> {value, min, max, step, default}.
+var _script_params := {}
+## Script param name -> Callable(name: String, value: Variant).
+var _script_setters := {}
+
 
 static func from_material(target: ShaderMaterial) -> ParamRegistry:
 	var registry := ParamRegistry.new()
@@ -58,12 +75,97 @@ func param_count() -> int:
 
 
 func get_value(param: Param) -> Variant:
+	if _script_params.has(param.name):
+		return (_script_params[param.name] as Dictionary)["value"]
 	var value: Variant = material.get_shader_parameter(param.name)
 	return param.default_value if value == null else value
 
 
 func set_value(param: Param, value: Variant) -> void:
+	if _script_params.has(param.name):
+		(_script_params[param.name] as Dictionary)["value"] = value
+		(_script_setters[param.name] as Callable).call(param.name, value)
+		return
 	material.set_shader_parameter(param.name, value)
+
+
+func is_script_param(param: Param) -> bool:
+	return _script_params.has(param.name)
+
+
+## Adds a group of script parameters. `params` maps each name to a Dictionary
+## with "value" and "default" (float, int or bool) and optionally "min",
+## "max" and "step"; `setter` is called with (name, value) on every change.
+## The Dictionaries are kept, so "value" always holds the current value.
+func add_script_params(group_name: String, params: Dictionary, setter: Callable) -> void:
+	var group := Group.new()
+	group.name = group_name
+	for param_name: String in params:
+		var entry: Dictionary = params[param_name]
+		var param := Param.new()
+		param.name = param_name
+		param.label = param_name.replace("_", " ")
+		param.default_value = entry["default"]
+		match typeof(param.default_value):
+			TYPE_FLOAT:
+				param.kind = Kind.FLOAT
+			TYPE_INT:
+				param.kind = Kind.INT
+			TYPE_BOOL:
+				param.kind = Kind.BOOL
+			_:
+				push_warning("ParamRegistry: script param %s has an unsupported type" % param_name)
+				continue
+		if entry.has("min") and entry.has("max"):
+			param.min_value = float(entry["min"])
+			param.max_value = float(entry["max"])
+			param.step = float(entry.get("step", 0.0))
+		else:
+			_fallback_range(param)
+		_normalize_step(param)
+		if not entry.has("value"):
+			entry["value"] = param.default_value
+		_script_params[param_name] = entry
+		_script_setters[param_name] = setter
+		group.params.append(param)
+	if not group.params.is_empty():
+		groups.append(group)
+
+
+## Adds one script param group per @export_group of `target` holding its
+## float, int and bool @export fields, with ranges from @export_range. The
+## current values become the defaults; `setter` is called with (name, value).
+## Group names are prefixed with `prefix` when it is not empty.
+func add_object_exports(target: Object, setter: Callable, prefix := "") -> void:
+	var current := UNGROUPED
+	var by_group := {}
+	var order: Array[String] = []
+	for property: Dictionary in target.get_property_list():
+		var usage: int = property["usage"]
+		var property_name: String = property["name"]
+		if usage & PROPERTY_USAGE_GROUP:
+			current = property_name if not property_name.is_empty() else UNGROUPED
+			continue
+		if usage & PROPERTY_USAGE_SCRIPT_VARIABLE == 0 or usage & PROPERTY_USAGE_EDITOR == 0:
+			continue
+		var type: int = property["type"]
+		if type not in [TYPE_FLOAT, TYPE_INT, TYPE_BOOL]:
+			continue
+		var value: Variant = target.get(property_name)
+		var entry := {"value": value, "default": value}
+		var hint_parts: PackedStringArray = (property["hint_string"] as String).split(",")
+		if property["hint"] == PROPERTY_HINT_RANGE and hint_parts.size() >= 2:
+			entry["min"] = hint_parts[0].to_float()
+			entry["max"] = hint_parts[1].to_float()
+			if hint_parts.size() >= 3 and hint_parts[2].is_valid_float():
+				entry["step"] = hint_parts[2].to_float()
+		var group_name := current.to_lower() if prefix.is_empty() else "%s %s" % [prefix, current.to_lower()]
+		if not by_group.has(group_name):
+			by_group[group_name] = {}
+			order.append(group_name)
+		(by_group[group_name] as Dictionary)[property_name] = entry
+	for group_name in order:
+		add_script_params(group_name, by_group[group_name], setter)
 
 
 func reset_group(group: Group) -> void:
@@ -134,11 +236,16 @@ func _make_param(shader: Shader, entry: Dictionary, source_defaults: Dictionary)
 		param.step = hint_parts[2].to_float() if hint_parts.size() >= 3 else 0.0
 	else:
 		_fallback_range(param)
+	_normalize_step(param)
+	return param
+
+
+## Whole steps for ints, a step from the span where a param has none.
+static func _normalize_step(param: Param) -> void:
 	if param.kind == Kind.INT:
 		param.step = maxf(roundf(param.step), 1.0)
 	elif param.step <= 0.0:
 		param.step = _nice_step(param.max_value - param.min_value)
-	return param
 
 
 ## Span for uniforms without hint_range: zero to four times the default,

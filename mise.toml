@@ -17,6 +17,11 @@ description = "Run the project (main scene); imports first so new scripts and cl
 depends = ["import"]
 run = "godot --path ."
 
+[tasks.run-skeleton]
+description = "Run the skeleton viewer scene (sector boxes around the camera); imports first"
+depends = ["import"]
+run = "godot --path . scenes/skeleton_viewer.tscn"
+
 [tasks.import]
 description = "Import all assets headlessly (regenerates .godot/)"
 run = "godot --headless --path . --import"
@@ -35,7 +40,7 @@ exit "$status"
 '''
 
 [tasks.smoke]
-description = "Run the main scene headlessly for 60 frames and fail on any script or scene error"
+description = "Run the main scene and the skeleton viewer headlessly for 60 frames each and fail on any script or scene error"
 depends = ["import"]
 run = '''
 #!/usr/bin/env bash
@@ -49,12 +54,17 @@ patterns=(-e 'SCRIPT ERROR' -e 'ERROR:' -e 'Parse Error' -e 'invalid UID')
 # Known benign lines (grep -E patterns) to ignore. Empty: the run log is clean.
 allow=()
 
-status=0
-timeout 120 godot --headless --path . --quit-after 60 2>&1 | tee "$log" || status=$?
-if [[ "$status" -ne 0 ]]; then
-	echo "smoke: godot exited with status $status" >&2
-	exit 1
-fi
+# The main scene (no scene argument), then every other runnable scene.
+scenes=("" scenes/skeleton_viewer.tscn)
+for scene in "${scenes[@]}"; do
+	echo "smoke: ${scene:-main scene}"
+	status=0
+	timeout 120 godot --headless --path . ${scene:+"$scene"} --quit-after 60 2>&1 | tee -a "$log" || status=$?
+	if [[ "$status" -ne 0 ]]; then
+		echo "smoke: godot exited with status $status running ${scene:-the main scene}" >&2
+		exit 1
+	fi
+done
 
 offending="$(grep -F "${patterns[@]}" "$log" || true)"
 for allowed in "${allow[@]}"; do
@@ -69,7 +79,7 @@ echo "smoke: ok"
 '''
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main scene, run the skeleton histogram regression and verify the project loads headlessly"
+description = "Import assets, parse scripts, run the main and skeleton viewer scenes, run the skeleton histogram regression and verify the project loads headlessly"
 depends = ["import", "check-scripts", "smoke", "skeleton-histogram"]
 run = "godot --headless --editor --path . --quit"
 
