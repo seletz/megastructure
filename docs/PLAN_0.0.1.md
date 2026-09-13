@@ -129,6 +129,25 @@ Keep the build automated with mise and enforce the branch workflow on GitHub.
 - [#24 Export preset and export-template task](https://github.com/seletz/megastructure/issues/24)
 - [#25 Repository merge settings and branch protection](https://github.com/seletz/megastructure/issues/25)
 
+## Comparing with the HTML prototype
+
+Press F1 in the Godot build to show the HUD (FPS, frame time, camera position,
+yaw/pitch, seed) and F12 to save a screenshot, without HUD and tweak panel, to
+`user://screenshots/<seed>_<yyyymmdd-hhmmss>.png`; the absolute path is printed
+to the console. To render the same view in `docs/megastructure-chasm.html` (or
+`docs/megastructure.html`):
+
+- **Same seed.** The prototypes take an integer seed in `state.seed`. Open the
+  browser's developer console and run `state.seed = N` with the seed from the
+  HUD, or edit the initial value in the `state` object in the file.
+- **Same pose.** Set `state.pos = [x, y, z]`, `state.yaw` and `state.pitch` to
+  the HUD values. Since #34 the Godot camera uses the prototype's yaw/pitch
+  convention (yaw 0 looks toward +Z), so the numbers carry over unchanged.
+- **Resolution.** The Godot render runs at half resolution by default
+  (`rendering/scaling_3d/scale = 0.5`) and is upscaled to the window, so match
+  the browser window size and expect softer detail unless the render scale is
+  raised to 1.0.
+
 ## Done when
 
 - `mise run run` starts into the chasm with the prototype's default camera
