@@ -24,8 +24,13 @@ extends Node3D
 ## `follow_camera` off the region stays where it is, so it can be looked at
 ## from outside.
 ##
-## The legend (type colours, counts in view, refresh time) is added under the
-## label of the Hud at `hud`, so H hides it together with the HUD.
+## The GraphLines node at `graph_lines` (optional) draws the walkable graph
+## edges of the regions overlapping the drawn box; it is rebuilt at the end of
+## every refresh and never on its own.
+##
+## The legend (type colours, counts in view, edge kind colours and counts,
+## refresh and graph rebuild times) is added under the label of the Hud at
+## `hud`, so H hides it together with the HUD.
 
 const MAX_RADIUS := 6
 ## Box edge is the sector edge minus this, in metres (44 m of 48 m).
@@ -57,6 +62,8 @@ const RENDER_PRIORITIES: Array[int] = [2, 1, 1, 0, 1]
 @export var camera: NodePath
 ## Hud whose label the legend is attached to (optional).
 @export var hud: NodePath
+## GraphLines drawing the walkable graph of the region (optional).
+@export var graph_lines: NodePath
 ## Region radius in sectors: (2 radius + 1)^3 sectors are drawn.
 @export_range(0, MAX_RADIUS) var radius := 4:
 	set(value):
@@ -100,12 +107,14 @@ var _instances: Array[MultiMeshInstance3D] = []
 var _box_mesh: BoxMesh
 var _wire_mesh: ArrayMesh
 var _camera: FreeFlyCamera
+var _graph_lines: GraphLines
 ## Sector the camera was in at the last refresh; it is left out of the drawing.
 var _camera_cell := Vector3i.ZERO
 var _dirty := true
 ## Sector index -> SectorType of the cells drawn by the last refresh.
 var _type_cache := {}
 var _legend_counts: Array[Label] = []
+var _legend_kinds: Array[Label] = []
 var _legend_status: Label
 
 
@@ -114,6 +123,9 @@ func _ready() -> void:
 		grammar = SectorGrammar.new()
 	skeleton = Skeleton.new(grammar)
 	_camera = get_node_or_null(camera) as FreeFlyCamera
+	_graph_lines = get_node_or_null(graph_lines) as GraphLines
+	if _graph_lines != null:
+		_graph_lines.changed.connect(func() -> void: _dirty = true)
 	_box_mesh = BoxMesh.new()
 	_box_mesh.size = Vector3.ONE
 	_wire_mesh = _cube_edges()
@@ -146,6 +158,8 @@ func _process(_delta: float) -> void:
 ## Forgets every cached sector type and redraws (after a seed or grammar change).
 func invalidate_types() -> void:
 	_type_cache.clear()
+	if _graph_lines != null:
+		_graph_lines.invalidate()
 	_dirty = true
 
 
@@ -227,6 +241,8 @@ func refresh() -> void:
 		if offset > 0:
 			multimesh.buffer = buffer
 	last_refresh_usec = Time.get_ticks_usec() - start
+	if _graph_lines != null:
+		_graph_lines.rebuild(skeleton, world_seed, center - Vector3i.ONE * radius, center + Vector3i.ONE * radius)
 	refresh_count += 1
 	_update_legend()
 
@@ -242,9 +258,26 @@ func register_params(registry: ParamRegistry) -> void:
 		"stratum_wireframe": {"value": stratum_wireframe, "default": true},
 		"follow_camera": {"value": follow_camera, "default": true},
 	}, func(param_name: String, value: Variant) -> void: set(param_name, value))
+	var graph_node := get_node_or_null(graph_lines) as GraphLines
+	if graph_node != null:
+		var graph_params := {
+			"show_graph": {"value": graph_node.show_graph, "default": true},
+		}
+		for kind in WalkableGraph.EdgeKind.size():
+			graph_params[GraphLines.kind_param_name(kind)] = {"value": graph_node.is_kind_visible(kind), "default": true}
+		graph_params["marker_size"] = {"value": graph_node.marker_size, "default": 3.0, "min": 0.0, "max": 12.0, "step": 0.5}
+		registry.add_script_params("graph", graph_params, func(param_name: String, value: Variant) -> void:
+			if param_name.begins_with("show_") and param_name != "show_graph":
+				graph_node.set_kind_visible(WalkableGraph.EDGE_KIND_NAMES.find(param_name.trim_prefix("show_")), value)
+				_update_legend()
+			else:
+				graph_node.set(param_name, value)
+		)
 	registry.add_object_exports(grammar, func(param_name: String, value: Variant) -> void:
 		grammar.set(param_name, value)
 		if param_name == "sector_size":
+			if _graph_lines != null:
+				_graph_lines.invalidate()
 			_dirty = true
 		else:
 			invalidate_types()
@@ -315,22 +348,30 @@ func _build_legend() -> void:
 	label.add_child(legend)
 	var font := label.get_theme_font("font")
 	for type in Skeleton.SectorType.size():
-		var row := HBoxContainer.new()
-		legend.add_child(row)
-		var swatch := ColorRect.new()
-		swatch.color = Color(TYPE_COLORS[type], 1.0)
-		swatch.custom_minimum_size = Vector2(14, 14)
-		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(swatch)
-		var text := Label.new()
-		text.add_theme_font_override("font", font)
-		text.add_theme_font_size_override("font_size", 14)
-		row.add_child(text)
-		_legend_counts.append(text)
+		_legend_counts.append(_legend_row(legend, TYPE_COLORS[type], font))
+	if get_node_or_null(graph_lines) is GraphLines:
+		for kind in WalkableGraph.EdgeKind.size():
+			_legend_kinds.append(_legend_row(legend, GraphLines.KIND_COLORS[kind], font))
 	_legend_status = Label.new()
 	_legend_status.add_theme_font_override("font", font)
 	_legend_status.add_theme_font_size_override("font_size", 14)
 	legend.add_child(_legend_status)
+
+
+## One legend row: an opaque colour swatch and an empty label, returned.
+static func _legend_row(legend: VBoxContainer, color: Color, font: Font) -> Label:
+	var row := HBoxContainer.new()
+	legend.add_child(row)
+	var swatch := ColorRect.new()
+	swatch.color = Color(color, 1.0)
+	swatch.custom_minimum_size = Vector2(14, 14)
+	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(swatch)
+	var text := Label.new()
+	text.add_theme_font_override("font", font)
+	text.add_theme_font_size_override("font_size", 14)
+	row.add_child(text)
+	return text
 
 
 func _update_legend() -> void:
@@ -339,7 +380,15 @@ func _update_legend() -> void:
 	for type in Skeleton.SectorType.size():
 		var is_hidden := type == Skeleton.SectorType.STRATUM and not show_stratum
 		_legend_counts[type].text = "%-8s %4d%s" % [Skeleton.type_name(type), counts[type], " (hidden)" if is_hidden else ""]
+	if _graph_lines != null:
+		for kind in _legend_kinds.size():
+			var is_hidden := not _graph_lines.show_graph or not _graph_lines.is_kind_visible(kind)
+			_legend_kinds[kind].text = "%-8s %4d%s" % [
+				WalkableGraph.edge_kind_name(kind), _graph_lines.counts[kind], " (hidden)" if is_hidden else "",
+			]
 	var side := 2 * radius + 1
 	_legend_status.text = "sector %s  radius %d (%d sectors)  refresh %.2f ms" % [
 		center, radius, side * side * side, last_refresh_usec / 1000.0,
 	]
+	if _graph_lines != null:
+		_legend_status.text += "  graph %.2f ms" % [_graph_lines.last_rebuild_usec / 1000.0]

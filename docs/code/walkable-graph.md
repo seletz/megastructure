@@ -18,8 +18,8 @@ status: current
 > heights sit on the 6 m floor pitch. **Edges** join adjacent sectors:
 > corridors, stairs, ladders, bridges, catwalks, and tunnels through solid
 > where nothing else connects. They are chosen per 3³ region so that every
-> open sector is reachable. The debug lines (#82) and the rasteriser (#83)
-> come next.
+> open sector is reachable. The skeleton viewer draws the edges as coloured
+> **debug lines**, node to portal to node. The rasteriser (#83) comes next.
 
 ## Files
 
@@ -27,6 +27,9 @@ status: current
   WalkableGraph`, a `RefCounted`): the grid and edge constants, the salts,
   the `EdgeKind` enum, the inner classes `Portal`, `InteriorNode` and `Edge`
   and the functions below.
+- [graph_lines.gd](../../scripts/world/graph_lines.gd) (`class_name
+  GraphLines`, a `Node3D`): draws the edges of a box of regions as lines,
+  one mesh per edge kind; used by the skeleton viewer.
 - `scripts/tools/graph_check.gd`: the check behind `mise run graph-check`,
   listed in [[tools-and-tasks]].
 - `scripts/tools/graph_connectivity_check.gd`: the check behind `mise run graph-connectivity`, listed in
@@ -105,7 +108,47 @@ streams sectors should keep `edges_in_region` per region. The algorithm,
 weights, salts 153 to 158 and the connectivity argument are in
 [[walkable-graph-connectivity]].
 
+## Debug lines
+
+`GraphLines` is a child of the `SkeletonViewer` in
+the viewer scene ([[skeleton#Viewer]]).
+`rebuild(skeleton, seed, min_cell, max_cell)` draws every edge of the regions
+overlapping the box: `edges_in_region` of each, and `boundary_edges` of every
+face with an overlapped region on either side. Each edge is two segments,
+from the node of `a` to its portal and from the portal to the node of `b`, so
+a path reads node → portal → node. Solid sectors have no interior node, so a
+tunnel bends at the sector centre instead.
+
+| Kind | Colour |
+| --- | --- |
+| corridor | white |
+| stair, ladder | yellow |
+| bridge | cyan |
+| catwalk | green |
+| tunnel | magenta |
+
+Each kind is one `MeshInstance3D` with an `ArrayMesh` holding one
+`PRIMITIVE_LINES` surface built from a `PackedVector3Array`, which is cheaper
+to rebuild than an `ImmediateMesh` fed vertex by vertex. A kind's mesh also
+holds a cross of three axis-aligned segments (`marker_size` metres) at each
+of its portals; the tunnel mesh holds the crosses at solid sector centres. A
+further `Nodes` mesh holds grey crosses at the interior nodes. The
+materials are unshaded, alpha-blended at full alpha, write no depth and have
+render priority 10, above the viewer's boxes. Hiding a kind hides its mesh.
+
+Nothing in `WalkableGraph` is cached, and `edges_in_region` reads the
+boundary layers of all six neighbours, so `GraphLines` keeps three caches:
+edges per region, boundary edges per face, and node points per sector, each
+trimmed to what the last rebuild used; and it builds its graph on a
+`CachedSkeleton`, an inner `Skeleton` subclass that remembers `sector_type`
+per cell (dropped past 200 000 cells). `invalidate()` clears all of them; the
+viewer calls it on a seed or grammar change. Rebuild times are in
+[[skeleton#Viewer]].
+
 ## How to run or check it
+
+- `mise run run-skeleton` shows the debug lines; the panel's `graph` section
+  toggles them.
 
 - `mise run graph-check` (part of `mise run check`) tests portal symmetry,
   faces, margin, grid and floor levels, null results for solid and

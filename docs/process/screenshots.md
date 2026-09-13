@@ -152,6 +152,9 @@ something a check can pass or fail on by itself.
   this usually happens with `--window`, where a tiling window manager
   (Hyprland) resizes the window. Use the default Xvfb mode, or a floating
   window rule.
+- **`mise ERROR unexpected word: -300,...`**: mise reads a value starting
+  with `-` as a flag. Join it to its flag with `=`:
+  `--pose=-300,260,-300,0.79,-0.48`.
 - **`shot: --params: no registry param named ...`**: the name is the uniform
   or script parameter name, not the label; `mise run ui-params` lists the
   main scene's names.
