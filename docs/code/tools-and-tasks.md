@@ -30,10 +30,11 @@ up to date.
 | Task | Depends on | What it does |
 | --- | --- | --- |
 | `editor` | | Opens the project in the Godot editor. |
-| `run` | | Runs the main scene. |
+| `run` | import | Runs the main scene. |
+| `run-skeleton` | import | Runs the skeleton viewer scene, sector boxes around the camera ([[skeleton]]). |
 | `import` | | Imports all assets headlessly and regenerates `.godot/`. |
 | `check-scripts` | import | Parses every `.gd` file with `--check-only` and fails if any has errors. |
-| `smoke` | import | Runs the main scene headlessly for 60 frames (120 s timeout) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
+| `smoke` | import | Runs the main scene, then the skeleton viewer scene, headlessly for 60 frames each (120 s timeout per run) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
 | `check` | import, check-scripts, smoke, skeleton-histogram | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
