@@ -139,3 +139,8 @@ run = "godot --path . --script res://scripts/tools/screenshot_check.gd"
 depends = ["import"]
 description = "Verify presets save, reload and restore every value bitwise (headless)"
 run = "godot --headless --path . --script res://scripts/tools/preset_check.gd"
+
+[tasks.code-map-check]
+depends = ["import"]
+description = "Verify every file under scripts/, shaders/ and scenes/ is linked from exactly one docs/code note (headless)"
+run = "godot --headless --path . --script res://scripts/tools/code_map_check.gd"
