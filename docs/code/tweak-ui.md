@@ -71,6 +71,11 @@ SeedControl`) is the seed row: a text field, a Random button and a Copy
 button. Text that is not a non-negative integer reverts to the current seed;
 numbers above the 32-bit range clamp.
 
+[ui_keys.gd](../../scripts/ui/ui_keys.gd) (`class_name UiKeys`) holds the
+rule every single-key shortcut follows: a fresh press without Ctrl, Alt or
+Meta, ignored while a text field (a `LineEdit`, including a spin box's, or a
+`TextEdit`) has focus.
+
 ### Presets
 
 [preset_store.gd](../../scripts/ui/preset_store.gd) (`class_name
