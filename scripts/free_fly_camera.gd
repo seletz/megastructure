@@ -5,6 +5,7 @@ extends Camera3D
 ## Right mouse drag (or a captured mouse, toggled with Esc) looks around.
 ## WASD moves in the camera's forward/right plane, Q/E moves down/up along
 ## world Y, Shift is a fast multiplier and the mouse wheel scales the base speed.
+## Movement keys are ignored while a UI text field has focus (see UiKeys).
 ##
 ## Yaw and pitch use the prototype's convention, so exported values and
 ## screenshots line up with the HTML prototypes:
@@ -64,6 +65,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	# Keys typed into a seed or preset field must not fly the camera.
+	if UiKeys.text_field_focused(get_viewport()):
+		return
 	var direction := Vector3.ZERO
 	var basis := global_transform.basis
 	if Input.is_physical_key_pressed(KEY_W):
