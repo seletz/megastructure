@@ -69,3 +69,7 @@ Branching, commit and pull request rules are in
 
 GDScript files use tabs. A Zed configuration for the Godot language server is
 included under `.zed/`.
+
+- [`docs/RESEARCH_WFC.md`](docs/RESEARCH_WFC.md): research for milestone 0.0.2,
+  the WFC / model synthesis sector fill in Godot, with a proposed issue
+  breakdown.
