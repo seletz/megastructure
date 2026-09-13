@@ -30,10 +30,11 @@ in vec2 a; void main(){ gl_Position = vec4(a,0.,1.); }
 
 <script id="fs" type="x-shader">#version 300 es
 precision highp float;
+precision highp int;
 out vec4 fragColor;
 uniform vec2  uRes;
 uniform float uTime;
-uniform float uSeed;
+uniform uint  uSeed;
 uniform vec3  uCam;
 uniform vec2  uRot; // yaw, pitch
 
@@ -44,11 +45,18 @@ const float W = 32.0;   // wall grid
 const float S = 48.0;   // shaft cell
 const float V = 112.0;  // cavity cell
 
-float h3(vec3 p){
-  p += uSeed*13.7;
-  p = fract(p*vec3(.1031,.1030,.0973));
-  p += dot(p, p.yxz+33.33);
-  return fract((p.x+p.y)*p.z);
+// shared integer hash, bit-identical with shaders/include/hash.gdshaderinc,
+// scripts/hash.gd and hash3() below (reference values: hash_vectors.md)
+uint pcg(uint v){
+  uint s = v*747796405u + 2891336453u;
+  uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+  return (w >> 22u) ^ w;
+}
+float hash3(ivec3 cell, uint salt){
+  uvec3 c = uvec3(cell);
+  uint h = pcg(uSeed ^ pcg(salt));
+  h = pcg(h ^ c.x); h = pcg(h ^ c.y); h = pcg(h ^ c.z);
+  return float(h >> 8u) / 16777216.0;
 }
 float sdBox(vec3 p, vec3 b){ vec3 q=abs(p)-b; return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.); }
 float sdBox2(vec2 p, vec2 b){ vec2 q=abs(p)-b; return length(max(q,0.))+min(max(q.x,q.y),0.); }
@@ -68,7 +76,7 @@ float map(vec3 p, out float mat){
   vec2 cq  = p.xz - (cid+0.5)*C;
   float col = max(abs(cq.x),abs(cq.y)) - 0.55;
   // removed: nearest other column is at least (border + inset) away — never 0, so no phantom faces
-  if (h3(vec3(cid, yc)) < 0.10) col = (C*0.5 - max(abs(cq.x),abs(cq.y))) + (C*0.5 - 0.55);
+  if (hash3(ivec3(ivec2(cid), int(yc)), 1u) < 0.10) col = (C*0.5 - max(abs(cq.x),abs(cq.y))) + (C*0.5 - 0.55);
   d = min(d, col);
 
   // walls along x (planes at z = n*W) with doorways
@@ -78,9 +86,9 @@ float map(vec3 p, out float mat){
   float dx = mod(p.x, 8.0) - 4.0;
   wallA = max(wallA, -sdBox(vec3(dx, ry-1.6, wz), vec3(1.1, 1.6, 1.0)));
   float xc = floor(p.x/16.0);
-  if (h3(vec3(wid, yc, xc)) < 0.45) {
+  if (hash3(ivec3(int(wid), int(yc), int(xc)), 2u) < 0.45) {
     float lx = p.x - (xc+0.5)*16.0;                   // -8..8
-    bool L = h3(vec3(wid, yc, xc-1.0)) >= 0.45, R = h3(vec3(wid, yc, xc+1.0)) >= 0.45;
+    bool L = hash3(ivec3(int(wid), int(yc), int(xc)-1), 2u) >= 0.45, R = hash3(ivec3(int(wid), int(yc), int(xc)+1), 2u) >= 0.45;
     float seg = min(L ? lx+8.0 : lx+24.0, R ? 8.0-lx : 24.0-lx);
     wallA = max(abs(wz) - 0.35, seg);
   }
@@ -92,9 +100,9 @@ float map(vec3 p, out float mat){
   float dz = mod(p.z, 8.0) - 4.0;
   wallB = max(wallB, -sdBox(vec3(wx, ry-1.6, dz), vec3(1.0, 1.6, 1.1)));
   float zc = floor(p.z/16.0);
-  if (h3(vec3(wid2+50.0, yc, zc)) < 0.45) {
+  if (hash3(ivec3(int(wid2), int(yc), int(zc)), 3u) < 0.45) {
     float lz = p.z - (zc+0.5)*16.0;
-    bool L = h3(vec3(wid2+50.0, yc, zc-1.0)) >= 0.45, R = h3(vec3(wid2+50.0, yc, zc+1.0)) >= 0.45;
+    bool L = hash3(ivec3(int(wid2), int(yc), int(zc)-1), 3u) >= 0.45, R = hash3(ivec3(int(wid2), int(yc), int(zc)+1), 3u) >= 0.45;
     float seg = min(L ? lz+8.0 : lz+24.0, R ? 8.0-lz : 24.0-lz);
     wallB = max(abs(wx) - 0.35, seg);
   }
@@ -117,22 +125,24 @@ float map(vec3 p, out float mat){
 
   // shafts: carve vertical voids on a coarse grid
   vec2 sid = floor(p.xz/S);
-  float hs = h3(vec3(sid, 7.0));
+  ivec3 sc = ivec3(ivec2(sid), 0);
+  float hs = hash3(sc, 10u);
   float shaft = 1e5;
   if (hs < 0.42) {
-    float size = 4.0 + 12.0*h3(vec3(sid, 3.0));
-    vec2 off = (vec2(h3(vec3(sid,1.0)), h3(vec3(sid,2.0))) - 0.5) * (S - 2.0*size - 8.0);
+    float size = 4.0 + 12.0*hash3(sc, 11u);
+    vec2 off = (vec2(hash3(sc, 12u), hash3(sc, 13u)) - 0.5) * (S - 2.0*size - 8.0);
     vec2 q = p.xz - (sid+0.5)*S - off;
     shaft = max(abs(q.x), abs(q.y)) - size;
   }
 
   // cavities: rare enormous voids
   vec3 vid = floor(p/V);
-  float hv = h3(vid + 11.0);
+  ivec3 vc = ivec3(vid);
+  float hv = hash3(vc, 20u);
   float cav = 1e5;
   if (hv < 0.14) {
-    vec3 sz = vec3(18.0 + 28.0*h3(vid+1.0), 14.0 + 30.0*h3(vid+2.0), 18.0 + 28.0*h3(vid+3.0));
-    vec3 off = (vec3(h3(vid+4.0), h3(vid+5.0), h3(vid+6.0)) - 0.5) * (V - 2.0*sz - 6.0);
+    vec3 sz = vec3(18.0 + 28.0*hash3(vc, 21u), 14.0 + 30.0*hash3(vc, 22u), 18.0 + 28.0*hash3(vc, 23u));
+    vec3 off = (vec3(hash3(vc, 24u), hash3(vc, 25u), hash3(vc, 26u)) - 0.5) * (V - 2.0*sz - 6.0);
     cav = sdBox(p - (vid+0.5)*V - off, sz);
   }
 
@@ -190,7 +200,7 @@ void main(){
     float occ = ao(p, n);
 
     // surface
-    float grime = h3(floor(p*2.0)+0.5)*0.35 + h3(floor(p*0.5)+0.5)*0.25;
+    float grime = hash3(ivec3(floor(p*2.0)), 50u)*0.35 + hash3(ivec3(floor(p*0.5)), 51u)*0.25;
     vec3 alb = (m > 0.5) ? vec3(0.32,0.33,0.36)*(0.7+0.3*grime) : vec3(0.52,0.52,0.50)*(0.55+0.45*grime);
 
     // headlight from the camera
@@ -211,7 +221,7 @@ void main(){
 
   // tone, grain, vignette
   col = 1.0 - exp(-col*1.6);
-  float g = h3(vec3(gl_FragCoord.xy, floor(uTime*24.0))) - 0.5;
+  float g = hash3(ivec3(ivec2(gl_FragCoord.xy), int(uTime*24.0)), 60u) - 0.5;
   col += g*0.045;
   col *= 1.0 - 0.35*dot(uv*0.6, uv*0.6);
   col = pow(max(col,0.0), vec3(1.0/2.2));
@@ -220,6 +230,19 @@ void main(){
 </script>
 
 <script>
+// JS mirror of the shader hash, for checking vectors from the console:
+// hash3(state.seed, x, y, z, salt)
+function pcg(v){
+  const s = (Math.imul(v, 747796405) + 2891336453) >>> 0;
+  const w = Math.imul((s >>> ((s >>> 28) + 4)) ^ s, 277803737);
+  return ((w >>> 22) ^ w) >>> 0;
+}
+function hash3(seed, x, y, z, salt){
+  let h = pcg((seed ^ pcg(salt)) >>> 0);
+  h = pcg((h ^ x) >>> 0); h = pcg((h ^ y) >>> 0); h = pcg((h ^ z) >>> 0);
+  return (h >>> 8) / 16777216;
+}
+
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', {antialias:false, alpha:false});
 if (!gl) { document.getElementById('hint').textContent = 'WebGL2 is not available in this browser.'; }
@@ -243,7 +266,7 @@ const uRes=U('uRes'), uTime=U('uTime'), uSeed=U('uSeed'), uCam=U('uCam'), uRot=U
 const state = {
   pos: [3.0, 6*40 + 1.7, 3.0],
   yaw: 0.6, pitch: -0.05,
-  seed: Math.random()*100,
+  seed: Math.random()*2**32>>>0,
   keys: new Set(),
 };
 const scale = Math.min(window.devicePixelRatio, 2) * 0.5; // half-res marching
@@ -295,7 +318,7 @@ function moveRel(strafe, forward, upv=0){
   for (let i=0;i<3;i++) state.pos[i] += b.fwd[i]*forward + b.right[i]*strafe;
   state.pos[1] += upv;
 }
-function reseed(){ state.seed = Math.random()*100; }
+function reseed(){ state.seed = Math.random()*2**32>>>0; }
 document.getElementById('seed').addEventListener('click', reseed);
 
 // ---------- loop ----------
@@ -315,7 +338,7 @@ function frame(now){
 
   gl.uniform2f(uRes, canvas.width, canvas.height);
   gl.uniform1f(uTime, now/1000);
-  gl.uniform1f(uSeed, state.seed);
+  gl.uniform1ui(uSeed, state.seed);
   gl.uniform3fv(uCam, state.pos);
   gl.uniform2f(uRot, state.yaw, state.pitch);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
