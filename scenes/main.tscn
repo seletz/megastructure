@@ -42,5 +42,5 @@ mesh = SubResource("QuadMesh_fullscreen")
 environment = SubResource("Environment_dark")
 
 [node name="DepthTestCube" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, -3, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 31, -4, -21)
 mesh = SubResource("BoxMesh_test")
