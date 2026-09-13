@@ -191,7 +191,7 @@ void main(){
   vec2 uv = (gl_FragCoord.xy*2.0 - uRes) / uRes.y;
   float cy = cos(uRot.x), sy = sin(uRot.x), cp = cos(uRot.y), sp = sin(uRot.y);
   vec3 fwd   = vec3(cp*sy, sp, cp*cy);
-  vec3 right = vec3(cy, 0.0, -sy);
+  vec3 right = vec3(-cy, 0.0, sy);   // right-handed: looking down +Z, screen-right is -X
   vec3 up    = cross(right, fwd);
   vec3 rd = normalize(fwd*1.15 + right*uv.x + up*uv.y);
   vec3 ro = uCam;
@@ -333,7 +333,7 @@ canvas.addEventListener('touchmove', e => {
 
 function basis(){
   const cy=Math.cos(state.yaw), sy=Math.sin(state.yaw), cp=Math.cos(state.pitch), sp=Math.sin(state.pitch);
-  return { fwd:[cp*sy, sp, cp*cy], right:[cy, 0, -sy] };
+  return { fwd:[cp*sy, sp, cp*cy], right:[-cy, 0, sy] };
 }
 function moveRel(strafe, forward, upv=0){
   const b = basis();
