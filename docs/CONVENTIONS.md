@@ -114,3 +114,14 @@ and, if the PDF is stored, under which licence.
 - When a file linked from a note is moved or renamed, fix the relative links.
   A search for the old path under `docs/` finds them.
 - New notes are linked from [[Home]] or from a note that is.
+
+## Changelog
+
+- A pull request that changes behaviour, controls, defaults, tooling or
+  documentation structure adds one line under `Unreleased` in [[CHANGELOG]],
+  in the matching Added, Changed, Fixed or Docs list: one short plain sentence
+  ending with the pull request number, for example `(#33)`.
+- Newest items come first everywhere: the new line goes at the top of its
+  list, and the newest version section sits directly under `Unreleased`.
+- A release moves the `Unreleased` entries under a new `<version> - <date>`
+  heading and gets a git tag.

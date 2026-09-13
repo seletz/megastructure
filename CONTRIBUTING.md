@@ -41,6 +41,17 @@ Common types are `feat`, `fix`, `refactor`, `docs`, `test`, `build`, `ci` and
 `chore`. The scope names the affected area (`shader`, `camera`, `tools`,
 `readme`, ...). Keep commits small and logical.
 
+## Changelog
+
+Every pull request that changes behaviour, controls, defaults, tooling or
+documentation structure adds one line under `Unreleased` in
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md), in the matching Added, Changed,
+Fixed or Docs list. Each entry is one short plain sentence ending with the pull
+request number, for example `(#33)`. Newest items come first everywhere: the
+new line goes at the top of its list, and the newest version section sits
+directly under `Unreleased`. A release moves the `Unreleased` entries under a
+new `<version> - <date>` heading and gets a git tag.
+
 ## Checks
 
 All build, run and export automation goes through [mise](https://mise.jdx.dev/)

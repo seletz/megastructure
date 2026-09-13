@@ -14,6 +14,8 @@ status: current
 > and where each idea lives in the source code. Start with the concept, then
 > follow the links. How notes are written is described in [[CONVENTIONS]].
 
+- [[CHANGELOG]]: what changed in each version, newest first.
+
 ## Glossary
 
 - [[GLOSSARY]]: plain definitions of the jargon used across the wiki and the

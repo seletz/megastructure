@@ -1,0 +1,76 @@
+---
+tags:
+  - changelog
+status: current
+---
+
+# Changelog
+
+> [!summary]
+> All notable changes to this project are documented in this file. The format
+> is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Newest
+> items come first everywhere: Unreleased is on top, then versions from newest
+> to oldest, and within every Added, Changed, Fixed and Docs list the most
+> recent pull request comes first. Each entry is one short sentence ending with
+> its pull request number.
+
+## Unreleased
+
+### Fixed
+
+- Film grain is off by default, so the image no longer flickers like snow at half render resolution. (#73)
+
+### Docs
+
+- The Obsidian vault settings and theme are committed, so the wiki opens the same way on every machine. (#70)
+- A code map describes each area of the source tree, its files and how to run or check it. (#68)
+- The wiki home page links the glossary, papers, algorithm notes and decision log. (#67)
+- A papers and references library gives each source a note with its citation and why it matters. (#66)
+- Algorithm notes explain the hash, ray marching, the chasm distance field and the planned generator. (#65)
+- A decision log records each design decision with its context and consequences. (#64)
+- A glossary defines the jargon used across the wiki and the code. (#63)
+- `docs/` opens as an Obsidian vault with a home page and writing conventions. (#62)
+- A research note plans the Wave Function Collapse sector fill for milestone 0.0.2. (#42)
+
+## 0.0.1 - 2026-09-13
+
+### Added
+
+- Presets save and load every tweak value, the seed and the camera pose, with built-in prototype defaults. (#52)
+- A HUD shows frame time, camera pose and seed, and F12 saves a screenshot. (#51)
+- Marching quality can be tuned, and debug views show steps, depth, normals and materials. (#50)
+- The world seed can be typed in, randomised with R or copied from the top of the tweak panel. (#49)
+- Fog, tone mapping, film grain, vignette and a render scale setting finish the image. (#48)
+- A tweak panel is generated automatically from the shader uniforms. (#47)
+- A key light with soft shadows, sky ambient, a camera headlight and glowing openings light the scene. (#46)
+- Concrete and metal surfaces get grime and ambient occlusion. (#45)
+- Cables hang across the chasm. (#44)
+- Bridges span the chasm, and some of them are broken. (#43)
+- Free-standing pillars rise through the chasm with rings at every deck level. (#41)
+- Openings are punched into the facades, and a few of them are lit. (#39)
+- The chasm facades are built from wall mass, ledges, decks, buttresses and terraces. (#33)
+- A fullscreen ray-march quad composites with regular scene geometry. (#29)
+- A Linux export preset and a task that installs the matching export templates make builds possible. (#32)
+- A shared integer hash gives the same values in the shader, GDScript and the HTML prototypes. (#30)
+- CI runs `mise run check` on every pull request, and the check now fails on script errors. (#28)
+- A main scene has a free-fly camera that uses the prototype controls. (#26)
+
+### Changed
+
+- Pull requests to `develop` need a passing check on an up-to-date branch, and squash merging is disabled. (#31)
+
+### Fixed
+
+- The seed check ignores film grain and the HUD, and the headless tool tasks import the project first. (#54)
+- The HTML prototypes render upright instead of rotated 180 degrees. (#35)
+
+### Docs
+
+- The plan states that the ray-marched renderer is a throwaway prototype. (#37)
+- The contributing guide describes branches, commits, checks and pull requests. (#31)
+- The milestone 0.0.1 plan and the README describe the goal, setup and tasks. (#27)
+
+## References
+
+- [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+- [[CONVENTIONS#Changelog]]: how and when to add an entry.
