@@ -18,7 +18,8 @@ status: draft
 > that make solid walls and floors split space into separate blocks, shafts
 > run from floor to floor and voids cluster. The **walkable graph**
 > then connects the open sectors: a portal on each shared face, a spanning
-> tree so everything is reachable, and a few extra edges so there are loops.
+> tree per region so everything is reachable (tunnelling through solid where
+> it must), and a few extra edges so there are loops.
 > The graph is the only thing the tile solver must obey; it guarantees the
 > world can be walked by construction instead of by luck.
 
@@ -27,9 +28,11 @@ status: draft
 > [[0015-hashed-multi-scale-sector-grammar]]), drawn by the skeleton viewer
 > (#77, `mise run run-skeleton`, see [[skeleton]]) and tuned against measured
 > structure (#78, [[0016-tuned-sector-grammar-solid-before-voids]]). Of the
-> walkable graph, the portals and interior nodes are implemented (#80, see
-> [[walkable-graph]]); the edges, their rendering and the rasteriser are not
-> implemented or decided yet. The note collects the design from
+> walkable graph, the portals and interior nodes (#80) and the edges (#81,
+> [[walkable-graph-connectivity]],
+> [[0017-region-spanning-trees-with-tunnels]]) are implemented, see
+> [[walkable-graph]]; the debug lines and the rasteriser are not
+> implemented yet. The note collects the design from
 > [[MEGASTRUCTURE_CONCEPT]] and [[RESEARCH_WFC]] into one place, with a
 > sketch of how it could work, so the graph issues start from a shared
 > picture. Expect it to change.
@@ -278,48 +281,47 @@ Salts 140 to 159 belong to the walkable graph.
 | 150 | sector | interior node x |
 | 151 | same | interior node floor level |
 | 152 | same | interior node z |
+| 153 | lower sector of an x pair | x edge weight |
+| 154 | `(x, floor(y / 9), z)` of the lower sector | y edge weight, shared by the column run |
+| 155 | lower sector of a z pair | z edge weight |
+| 156, 157, 158 | lower sector of an x, y, z pair | loop edge on that axis |
 
-Salt 902 is used only by the graph check to pick random pairs.
+Salt 159 is free. Salt 902 is used only by the graph check to pick random
+pairs, salt 903 only by the connectivity check to place its samples.
 
-### Spanning tree plus loops
+### Edges: spanning tree, tunnels and loops
 
-Every pair of adjacent open sectors is a candidate edge with a hashed weight.
-Kruskal's algorithm takes the edges from lightest to heaviest and keeps an
-edge only if it joins two groups that are not yet connected (tracked with
-union-find). The result is a **spanning tree**: every open sector reachable from
-every other one it touches through open sectors, and no cycles. A second hash then adds a few of the rejected edges back, which
-gives **loops**, so the player is not always walking a dead-end tree.
+The edges are implemented (#81); the full algorithm, with a worked example,
+the connectivity argument, complexity and measurements, is
+[[walkable-graph-connectivity]], and the reasons are in
+[[0017-region-spanning-trees-with-tunnels]]. In short:
 
-**Worked example.** A 3 × 3 slice of sectors with a solid one in the middle:
+- **Regions.** Edges are decided per region of 3³ sectors. Every pair of
+  face-adjacent sectors in it, solid ones included, is a candidate.
+- **Weights.** A 64-bit integer: a class in the top bits, a hash below.
+  Classes, lightest first: horizontal open-open; vertical between two
+  shafts or chasms; other vertical open-open; horizontal with one solid, two
+  solid; vertical with one solid, two solid. Vertical weights are keyed on
+  the column and a run of 9 sectors (salt 154), so stacked vertical pairs
+  weigh the same and one column carries the climb.
+- **Kruskal** with [[GLOSSARY#Union-find|union-find]] takes candidates from
+  lightest to heaviest and keeps those that join two groups. Because every
+  open pair comes before every solid one, a **tunnel** through solid is
+  only kept where no open path inside the region joins the groups. The tree
+  is then pruned to its **terminals**: the open sectors and the sectors
+  boundary edges land on.
+- **Boundary edges.** Each face between two regions, keyed on the lower
+  region, gets its lightest pair (open-open if the face has one, else a
+  tunnel) plus hashed loops, so the trees join up.
+- **Loops.** Open-open pairs outside the tree get an edge with probability
+  0.08 horizontally, 0.02 vertically (salts 156 to 158).
+- **Kinds.** Tunnel if either sector is solid; along y a ladder between two
+  shafts or chasms, else a stair; horizontally a bridge next to a cavity or
+  chasm, a catwalk next to a shaft, else a corridor.
 
-```
- A  B  C
- D  #  E
- F  G  H
-```
-
-The candidate edges form a ring: A–B, B–C, C–E, E–H, H–G, G–F, F–D, D–A.
-Say the hashed weights put C–E last. Kruskal accepts the first seven edges,
-each joining new sectors, and rejects C–E because C and E are already
-connected the long way round. The loop hash then decides whether C–E comes
-back as an extra edge.
-
-```mermaid
-graph LR
-    A --- B
-    B --- C
-    E --- H
-    H --- G
-    G --- F
-    F --- D
-    D --- A
-    C -.-|loop if hashed in| E
-```
-
-Vertical edges (stairs, ladders) should be rare and long: give them heavier
-weights so the tree prefers horizontal edges, and a low loop probability. The
-edge type (corridor, stair, ramp, ladder, bridge across a shaft or cavity,
-catwalk along a shaft wall) follows from the two sector types and the axis.
+Every window of whole regions has one component of open sectors. Measured
+over seeds 0 to 9: 13 % of edges are tunnels and vertical runs are 2.04
+sectors long on average.
 
 ### Output: the fill contract
 
@@ -341,6 +343,12 @@ around the path.
 - `mise run skeleton-stats` (part of `mise run check`) measures the structure
   of the default grammar and fails below the thresholds in
   [Tuning](#tuning).
+- `mise run graph-connectivity` (part of `mise run check`) computes the edges
+  of a 15³ sample for seeds 0 to 9, checks kinds, portals, determinism and
+  `edges_for_sector`, and fails unless every region-aligned 3³ and 6³ window
+  has one component of open sectors; it reports strict 5³ windows, the
+  tunnel fraction and the mean vertical run
+  ([[walkable-graph-connectivity#Connectivity guarantee]]).
 - `mise run graph-check` (part of `mise run check`) takes 100 random adjacent
   pairs of open sectors per seed 0 to 4 and checks that `portal(a, b)` equals
   `portal(b, a)` exactly, that the portal lies on the shared face inside the
@@ -350,27 +358,14 @@ around the path.
 
 Planned for the graph:
 
-- A union-find pass over every 5³ window for seeds 0 to 9 reports the number
-  of connected components of open sectors.
 - The rasterised records of one sector never conflict (the same cell with two
   disjoint restrictions).
 - A debug view draws the graph as coloured lines around the free-fly camera.
 
 ## Open questions
 
-- **Region boundaries.** The concept builds the tree per region of 3³
-  sectors. Inside a region that guarantees connectivity; between regions,
-  some edges across the region border must be kept too, and which ones must
-  be decided from both sides identically. A single global minimum spanning
-  tree is unique for distinct hashed weights but cannot be computed locally.
-- **Solid that separates.** The grammar now splits every 5³ window into 2.4
-  non-solid components on average, by design, while the connectivity check
-  wants one component per window. Either corridors may tunnel through solid
-  sectors, or the check counts components per window only where they touch
-  the window's open boundary.
-- **Per sector or per region.** The concept leaves open whether the graph is
-  built per sector (fast, local) or per region (better long paths), and
-  suggests starting with 3³ regions.
+- **Region boundaries and separating solid** are settled by boundary edges
+  and tunnels ([[0017-region-spanning-trees-with-tunnels]]).
 - **Vertical travel.** Stairs, ramps or ladders: what reads best and what the
   capsule controller handles.
 - **Hashed or cellular grammar.** The tuning pass (#78) met its structure
@@ -391,6 +386,8 @@ Related notes: [[MEGASTRUCTURE_CONCEPT]] (skeleton and walkable graph),
 [[wave-function-collapse]], [[integer-hash]].
 
 Code: [[skeleton]] describes `SectorGrammar` and `Skeleton`;
-[[walkable-graph]] describes `WalkableGraph`, its portals and interior nodes. The interior prototype
+[[walkable-graph]] describes `WalkableGraph`, its portals, interior nodes
+and edges; [[walkable-graph-connectivity]] describes how the edges are
+chosen. The interior prototype
 [megastructure.html](../megastructure.html) shows the multi-scale hashed
 shafts and cavities the grammar starts from.
