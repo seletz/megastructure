@@ -78,6 +78,11 @@ fi
 echo "smoke: ok"
 '''
 
+[tasks.skeleton-stats]
+depends = ["import"]
+description = "Measure the sector grammar over 20 random 5^3 regions per seed 0..4 (shaft runs, non-solid components, type fractions, cavity clusters) and fail below the structure thresholds (headless)"
+run = "godot --headless --path . --script res://scripts/tools/skeleton_stats.gd"
+
 [tasks.check]
 description = "Import assets, parse scripts, run the main and skeleton viewer scenes, run the skeleton histogram regression and verify the project loads headlessly"
 depends = ["import", "check-scripts", "smoke", "skeleton-histogram"]
