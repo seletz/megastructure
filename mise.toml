@@ -164,7 +164,7 @@ inside { while (blank > 0) { print ""; blank-- }; started = 1; print }
 '''
 
 [tasks."release:changelog-roll"]
-description = "Rename Unreleased in docs/CHANGELOG.md to '<version> - <date>' and open a fresh Unreleased section. Usage: mise run release:changelog-roll <version>"
+description = "Rename Unreleased in docs/CHANGELOG.md to '<version> - <date>', open a fresh Unreleased section and commit. Usage: mise run release:changelog-roll <version>"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
@@ -184,18 +184,19 @@ if grep -q "^## $version " "$changelog"; then
 	exit 1
 fi
 
-cmd=(perl -0pi -e "s/^## Unreleased[ \\t]*\\n/## Unreleased\\n\\n## $version - $date\\n/m" "$changelog")
-printf '+' >&2; printf ' %q' "${cmd[@]}" >&2; printf '\n' >&2
-$dry_run || "${cmd[@]}"
+run() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; $dry_run || "$@"; }
+run perl -0pi -e "s/^## Unreleased[ \\t]*\\n/## Unreleased\\n\\n## $version - $date\\n/m" "$changelog"
+run git add "$changelog"
+run git commit --quiet -m "chore(release): $version"
 '''
 usage = '''
 arg "<version>" help="Version the Unreleased entries are released as, e.g. 0.1.0"
 flag "--date <date>" help="Release date, YYYY-MM-DD (default: today)"
-flag "-n --dry-run" help="Print the command instead of editing the changelog"
+flag "-n --dry-run" help="Print the commands instead of editing and committing"
 '''
 
 [tasks."release:bump"]
-description = "Bump config/version in project.godot and print the new version. Usage: mise run release:bump <patch|minor|major>"
+description = "Bump config/version in project.godot, commit it and print the new version. Usage: mise run release:bump <patch|minor|major>"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
@@ -220,15 +221,16 @@ case "${usage_part}" in
 	*) echo "release:bump: part must be patch, minor or major, not '${usage_part}'" >&2; exit 1 ;;
 esac
 
-cmd=(perl -pi -e "s/^config\\/version=\"\\Q$old\\E\"\$/config\\/version=\"$new\"/" project.godot)
-printf '+' >&2; printf ' %q' "${cmd[@]}" >&2; printf '\n' >&2
-$dry_run || "${cmd[@]}"
+run() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; $dry_run || "$@"; }
+run perl -pi -e "s/^config\\/version=\"\\Q$old\\E\"\$/config\\/version=\"$new\"/" project.godot
+run git add project.godot
+run git commit --quiet -m "chore(release): start $new"
 echo "release:bump: $old -> $new" >&2
 echo "$new"
 '''
 usage = '''
 arg "<part>" help="Which part to bump: patch, minor or major"
-flag "-n --dry-run" help="Print the command instead of editing project.godot"
+flag "-n --dry-run" help="Print the commands instead of editing and committing"
 '''
 
 [tasks."release:package"]
@@ -284,10 +286,10 @@ set -euo pipefail
 # tagging; right after the release it bumps develop to the next patch. So the
 # version in project.godot on develop is always unreleased.
 #
-# Steps (each file edit is its own task): check preconditions, release:notes,
-# release:changelog-roll and commit, tag vVERSION and push, create the GitHub
+# Steps (each change is its own task): check preconditions, release:notes,
+# release:changelog-roll (commits), tag vVERSION and push, create the GitHub
 # release (the release workflow builds and attaches the Linux and macOS
-# archives), release:bump patch, commit and push. With --dry-run every command
+# archives), release:bump patch (commits) and push. With --dry-run every command
 # is printed instead of executed; the sub-tasks run in their own dry-run mode.
 
 dry_run=false
@@ -341,10 +343,8 @@ if $dry_run; then
 	sed 's/^/  | /' "$notes"
 fi
 
-# 3. Date the changelog section and open a fresh Unreleased one above it.
+# 3. Date the changelog section, open a fresh Unreleased one above it, commit.
 task release:changelog-roll "$version" "${dry_flag[@]}"
-run git add docs/CHANGELOG.md
-run git commit -m "chore(release): $version"
 
 # 4. Tag and push develop and the tag together.
 run git tag -a "$tag" -m "$tag"
@@ -353,10 +353,8 @@ run git push --atomic origin develop "refs/tags/$tag"
 # 5. The GitHub release triggers .github/workflows/release.yml.
 run gh release create "$tag" --verify-tag --title "$tag" --notes-file "$notes"
 
-# 6. develop moves on to the next, unreleased version.
-next="$(task release:bump patch "${dry_flag[@]}")"
-run git add project.godot
-run git commit -m "chore(release): start $next"
+# 6. develop moves on to the next, unreleased version (commits).
+task release:bump patch "${dry_flag[@]}" >/dev/null
 run git push origin develop
 
 # 7. Where to find it.
