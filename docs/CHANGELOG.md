@@ -22,6 +22,10 @@ status: current
 - Every 48 m sector gets a type (stratum, shaft, cavity, solid or chasm) from a hashed grammar with tunable parameters, and `mise run skeleton-histogram` guards the seed 0 type counts. (#112)
 - `mise run wt:new`, `wt:rm`, `pr:status` and `pr:merge` create and remove issue worktrees and rebase, check and merge pull requests in one command each, and `release:bump --push` pushes the bump. (#111)
 
+### Changed
+
+- The sector grammar is tuned so solid walls and floors split space into separate blocks with shafts running floor to floor, guarded by `mise run skeleton-stats`, and the skeleton viewer draws wireframe cubes for flying through it, with stratum shown by default, a fill toggle for the outside view and tweak panel checkboxes that toggle reliably. (#116)
+
 ## 0.1.0 - 2026-09-13
 
 ### Added
