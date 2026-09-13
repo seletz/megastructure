@@ -87,16 +87,7 @@ func capture_screenshot() -> String:
 		var layer := get_node_or_null(path) as CanvasLayer
 		if layer != null:
 			layers.append(layer)
-	var was_visible: Array[bool] = []
-	for layer in layers:
-		was_visible.append(layer.visible)
-		layer.visible = false
-
-	await RenderingServer.frame_post_draw
-	var image := get_viewport().get_texture().get_image()
-
-	for i in layers.size():
-		layers[i].visible = was_visible[i]
+	var image := await grab_frame(get_viewport(), layers)
 	_capturing = false
 
 	var path := ProjectSettings.globalize_path(screenshot_path(WorldState.seed))
@@ -109,6 +100,22 @@ func capture_screenshot() -> String:
 	print("Screenshot saved: %s" % path)
 	screenshot_saved.emit(path)
 	return path
+
+
+## Returns the next frame `viewport` draws with `layers` hidden, and restores
+## their visibility afterwards. Also used by the shot tool.
+static func grab_frame(viewport: Viewport, layers: Array[CanvasLayer]) -> Image:
+	var was_visible: Array[bool] = []
+	for layer in layers:
+		was_visible.append(layer.visible)
+		layer.visible = false
+
+	await RenderingServer.frame_post_draw
+	var image := viewport.get_texture().get_image()
+
+	for i in layers.size():
+		layers[i].visible = was_visible[i]
+	return image
 
 
 ## user:// path for a screenshot of `world_seed` taken now.
