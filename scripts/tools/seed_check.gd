@@ -28,10 +28,12 @@ func _run() -> void:
 	var material := quad.get_active_material(0) as ShaderMaterial
 	var control := _find_seed_control(panel)
 	_expect(control != null, "tweak panel contains a SeedControl")
-	# Film grain is hashed from TIME, so two frames of the same seed would
-	# never match byte for byte; compare the seed-driven image only.
+	# Film grain is hashed from TIME and the HUD prints frame timings, so two
+	# frames of the same seed would never match byte for byte; compare the
+	# seed-driven image only.
 	material.set_shader_parameter("grain_amount", 0.0)
 	material.set_shader_parameter("debug_view", 0)
+	(main.get_node("Hud") as CanvasLayer).visible = false
 
 	_expect(WorldState.seed == WorldState.DEFAULT_SEED, "starts at the default seed")
 	_expect(_uniform(material) == WorldState.DEFAULT_SEED, "uniform starts at the default seed")

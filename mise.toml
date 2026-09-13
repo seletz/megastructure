@@ -116,21 +116,26 @@ description = "Remove generated import cache and build output"
 run = "rm -rf .godot build"
 
 [tasks.hash-vectors]
+depends = ["import"]
 description = "Print the shared integer hash reference vectors (see docs/hash_vectors.md)"
 run = "godot --headless --path . --script res://scripts/tools/hash_vectors.gd"
 
 [tasks.ui-params]
+depends = ["import"]
 description = "Print the shader parameter groups the tweak panel discovers"
 run = "godot --headless --path . --script res://scripts/tools/registry_dump.gd"
 
 [tasks.seed-check]
+depends = ["import"]
 description = "Verify seed control, shader uniform and seed-reproducible frames (opens a window)"
 run = "godot --path . --script res://scripts/tools/seed_check.gd"
 
 [tasks.screenshot-check]
+depends = ["import"]
 description = "Verify the HUD screenshot is saved with the HUD hidden (opens a window)"
 run = "godot --path . --script res://scripts/tools/screenshot_check.gd"
 
 [tasks.preset-check]
+depends = ["import"]
 description = "Verify presets save, reload and restore every value bitwise (headless)"
 run = "godot --headless --path . --script res://scripts/tools/preset_check.gd"
