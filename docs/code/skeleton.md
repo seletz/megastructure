@@ -16,8 +16,8 @@ status: current
 > how many sectors of each type seed 0 produces and fails if that changes.
 > Another task measures how structured the result is and fails if shafts get
 > too short or solid stops splitting space into blocks. A separate viewer
-> scene draws the sectors around the camera as coloured wireframe cubes and
-> puts every grammar knob in the tweak panel, so the grammar can be judged by
+> scene draws the sectors around the camera as coloured see-through boxes,
+> with the common stratum as faint outlines, and puts every grammar knob in the tweak panel, so the grammar can be judged by
 > eye while flying through it.
 
 ## Files
@@ -77,7 +77,8 @@ The viewer is made for flying through the world, so its defaults are:
 | --- | --- | --- |
 | `follow_camera` | on | The region is centred on the camera's sector and moves with it. |
 | `radius` | 4 | Sectors drawn around the centre: 9³ = 729 (at most 6, 13³ = 2 197). |
-| `fill` | off | Wireframe cubes; on draws translucent filled boxes. |
+| `fill` | on | Shaft, cavity, solid and chasm as translucent filled boxes; off draws them as wireframe cubes. |
+| `stratum_wireframe` | on | Stratum as a faint wireframe cube; off draws it as a faint filled box. |
 | `show_stratum` | on | Stratum is drawn, much fainter than the other types. |
 
 Every sector of the region is drawn as a cube 44 m on a side centred in its
@@ -86,36 +87,42 @@ from inside a cube you would only see that one cube. Cubes up to half the
 radius from the centre are at full strength; beyond that they fade linearly
 to 20 % at the radius, so the near structure dominates.
 
-| Type | Wireframe edges | Filled box (`fill`) |
-| --- | --- | --- |
-| stratum | pale blue-grey, alpha 0.12 | pale blue-grey, alpha 0.12, drawn after the other types |
-| shaft | cyan, alpha 0.95 | cyan, alpha 0.35 |
-| cavity | orange, alpha 0.95 | orange, alpha 0.35 |
-| solid | grey, alpha 0.45 | grey, opaque |
-| chasm | red, alpha 0.95 | red, alpha 0.35 |
+The style is chosen per type: `fill` covers shaft, cavity, solid and chasm,
+`stratum_wireframe` covers stratum. Stratum is the majority, so as filled
+boxes it would hide everything else; as faint edges it only marks the grid.
 
-All materials are unshaded `StandardMaterial3D`s. Translucent ones do not
-write depth and draw both faces; wireframe cubes are all translucent, so the
-lattice reads through itself. Each type has one `MultiMesh` whose mesh is a
-12-edge `PRIMITIVE_LINES` cube or, with `fill`, a unit `BoxMesh`. A refresh
-writes all instances of a type as one `PackedFloat32Array` into
-`MultiMesh.buffer`, 16 floats per cube: a scaled basis, the centre and an
-instance colour. The instance colour fades alpha, or dims the colour of the
-opaque filled solid. Stratum's material has `render_priority` 1, so in fill
-mode it is blended over the voids and solid behind it instead of hiding them.
+| Type | Default style | Wireframe edges | Filled box | Render priority |
+| --- | --- | --- | --- | ---: |
+| stratum | wireframe | pale blue-grey, alpha 0.12 | pale blue-grey, alpha 0.12 | 2 |
+| shaft | filled | cyan, alpha 0.95 | cyan, alpha 0.35 | 1 |
+| cavity | filled | orange, alpha 0.95 | orange, alpha 0.35 | 1 |
+| solid | filled | grey, alpha 0.45 | grey, alpha 0.45 | 0 |
+| chasm | filled | red, alpha 0.95 | red, alpha 0.35 | 1 |
+
+All materials are unshaded, translucent `StandardMaterial3D`s that do not
+write depth and draw both faces, so the region reads through itself from
+inside and from outside. Without depth, the draw order decides how types
+blend: Godot draws translucent materials in ascending `render_priority`, so
+solid goes first, the voids are blended over it and keep their colour, and
+the stratum edges come last so they stay visible over the filled boxes.
+Within one type the order does not matter, because blending one colour over
+itself gives the same result in any order. Each type has one `MultiMesh`
+whose mesh is a 12-edge `PRIMITIVE_LINES` cube or a unit `BoxMesh`; switching
+a style only swaps mesh and material. A refresh writes all instances of a
+type as one `PackedFloat32Array` into `MultiMesh.buffer`, 16 floats per cube:
+a scaled basis, the centre and an instance colour whose alpha is the distance
+fade.
 
 **Outside view preset.** To judge the grammar as a whole, look at a fixed
 region from outside: turn `follow_camera` off (the region stays at `center`,
-default `(0, 0, 0)`), set `radius` 3 and `fill` on, and fly to position
+default `(0, 0, 0)`), set `radius` 3, and fly to position
 `(-300, 260, -300)`, yaw 0.79, pitch -0.48. That is the pose of the
 before/after screenshots in [[sector-skeleton-and-walkable-graph]]; with
 `show_stratum` off only the voids and solid remain.
 
-With `fill` on and stratum hidden, the view from inside often shows large
-black shapes framed by solid boxes. They are not faces rendered black: the
-line of sight passes through hidden stratum sectors out of the drawn region,
-so the background colour shows through. The wireframe default does not have
-this effect.
+From inside, the translucent solid boxes add up to a grey haze a few sectors
+deep, and where the line of sight leaves the drawn region the background
+shows through as black. Turning `fill` off gives the plain wireframe lattice.
 
 A refresh runs only when the camera enters another sector or the radius, a
 toggle, the seed or a grammar parameter changes. Sector types of the drawn
@@ -134,8 +141,8 @@ Almost all of the cold time is `sector_type` in GDScript. With
 `follow_camera` off the region stays where it is, so the camera can fly out
 and look at it from outside.
 
-The panel's `viewer` section holds `radius`, `show_stratum`, `fill` and
-`follow_camera`; below it one `grammar …` section per `@export_group` of
+The panel's `viewer` section holds `radius`, `show_stratum`, `fill`,
+`stratum_wireframe` and `follow_camera`; below it one `grammar …` section per `@export_group` of
 `SectorGrammar`, generated by `ParamRegistry.add_object_exports` ([[tweak-ui]]),
 so a new grammar export shows up without touching the panel. The seed comes
 from `WorldState` and the seed row (R picks a random one). The legend below
