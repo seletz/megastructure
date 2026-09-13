@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- Publishing a GitHub release builds and attaches Linux and macOS archives, and `mise run release:release` tags the version in `project.godot`, then moves `develop` on to the next patch version. (#109)
 - `mise run check` now runs the main scene headlessly for 60 frames and fails on any script or scene error or invalid UID. (#104)
 - The `facade_overlay` knob turns off the prototype's overlaid facade layouts, so each chasm wall gets one layout and the recess, buttress removal and opening rates apply as set. (#105)
 - Presets save and load every tweak value, the seed and the camera pose, with built-in prototype defaults. (#52)
