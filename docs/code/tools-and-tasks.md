@@ -35,7 +35,7 @@ up to date.
 | `import` | | Imports all assets headlessly and regenerates `.godot/`. |
 | `check-scripts` | import | Parses every `.gd` file with `--check-only` and fails if any has errors. |
 | `smoke` | import | Runs the main scene, then the skeleton viewer scene, headlessly for 60 frames each (120 s timeout per run) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
-| `check` | import, check-scripts, smoke, panel-check, skeleton-histogram, skeleton-stats | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
+| `check` | import, check-scripts, smoke, panel-check, skeleton-histogram, skeleton-stats, graph-check | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
 | `export-debug` | import | Same as `export` with a debug build. |
@@ -59,6 +59,7 @@ up to date.
 | `shot` | import | `shot <scene> <out.png> [--seed N] [--pose x,y,z,yaw,pitch] [--frames N] [--params k=v,...] [--resolution WxH] [--ui] [--window]`: renders one frame of a scene to a PNG under `xvfb-run` (X11, OpenGL) so no window opens; without `xvfb-run`, or with `--window`, it opens a normal window. See [[screenshots]]. |
 | `skeleton-histogram` | import | Prints the seed 0 sector type histogram and tests `sector_type` against [[skeleton_histogram_seed0]]; `--update` rewrites the reference ([[skeleton]]). Headless; part of `check`. |
 | `skeleton-stats` | import | Measures the sector grammar over 20 random 5³ regions per seed 0 to 4 and fails unless shafts run at least 3 sectors on average and solid splits a region into at least 2 non-solid components on average ([[sector-skeleton-and-walkable-graph]]). Headless; part of `check`. |
+| `graph-check` | import | Checks the walkable graph's portals and interior nodes over 100 random adjacent open sector pairs per seed 0 to 4 ([[walkable-graph]]). Headless; part of `check`. |
 | `panel-check` | import | Clicks every kind of script-backed widget in the skeleton viewer's tweak panel and checks each setter ran ([[tweak-ui]]). Headless; part of `check`. |
 
 `smoke` matches the patterns case-sensitively. Its allow-list for known
@@ -97,6 +98,7 @@ exit with status 1 on any failure.
 | [shot.gd](../../scripts/tools/shot.gd) | `shot` | Loads a scene with saved presets off, sets the seed, the FreeFlyCamera pose and registry params by name (typed by the registry), waits the frames, grabs a frame with `Hud.grab_frame` (HUD and panel hidden unless `--ui`), checks the resolution and saves the PNG; prints `shot: <problem>` and exits 1 on any error. |
 | [skeleton_histogram.gd](../../scripts/tools/skeleton_histogram.gd) | `skeleton-histogram` | Counts the sector types of the 9 × 9 × 9 sectors around the origin for seed 0, per layer and in total; checks `sector_type` returns a type for 2 000 hashed random cells and the int32 extremes, also under an out-of-range grammar, and that two evaluations (and a fresh `Skeleton`) agree; then compares the table rows with [[skeleton_histogram_seed0]], or rewrites that file with `--update`. |
 | [skeleton_stats.gd](../../scripts/tools/skeleton_stats.gd) | `skeleton-stats` | Samples 20 random 5 × 5 × 5 sector regions for each seed 0 to 4 and prints the type fractions, the mean vertical shaft run (each run followed past the region to its full length), the non-solid components per region (6-connected union-find), the cavity clusters per region and the stratum run lengths along x, z and y; fails below 3 sectors of shaft run or 2 components. `measure()` and `print_stats()` are static, so a scratch script can compare grammars. |
+| [graph_check.gd](../../scripts/tools/graph_check.gd) | `graph-check` | For each seed 0 to 4, draws random adjacent sector pairs (within ±100 000 sectors) until 100 have two open sectors and 20 a solid one; checks `portal(a, b)` equals `portal(b, a)` and the portal of a fresh graph exactly, lies on the shared face at least one cell inside its edges, on the 2 m grid and, on a vertical face, at a floor level; that solid pairs and 8 kinds of non-adjacent pair (same sector, diagonals, two or three apart) return null; that both sectors' interior nodes carry their type and lie inside the margin on the grid at a floor level; and that `nodes_in_region` of a 3³ region returns exactly its open sectors in order. |
 | [panel_check.gd](../../scripts/tools/panel_check.gd) | `panel-check` | Opens the skeleton viewer's tweak panel with Tab and pushes mouse clicks: on the `show_stratum` box and its label, a press without release on `follow_camera`, the up arrows of the `radius`, `shaft_probability` and `solid_wall_grid` spin boxes and the `sector_size` slider; checks the viewer or grammar value changed each time. |
 
 ## How to run or check it
@@ -105,7 +107,7 @@ exit with status 1 on any failure.
 - Run the check matching what you changed: `preset-check` for presets and the
   registry, `seed-check` and `screenshot-check` (with a display) for the seed
   and HUD, `hash-vectors` for the hash, `skeleton-histogram` and `skeleton-stats` for the
-  sector grammar, `panel-check` for the tweak panel widgets, `code-map-check` after adding, moving or removing a source file or
+  sector grammar, `graph-check` for the walkable graph, `panel-check` for the tweak panel widgets, `code-map-check` after adding, moving or removing a source file or
   editing these notes.
 - Need to see a change? `mise run shot scenes/main.tscn build/shots/main.png`
   renders it without a window.
@@ -117,5 +119,5 @@ exit with status 1 on any failure.
 - [[releasing]]: the release tasks in the release process.
 - [[maintaining]]: the worktree and pull request tasks in the maintainer loop.
 - [[screenshots]]: how `shot` renders without a window, and troubleshooting.
-- [[tweak-ui]], [[hash]], [[skeleton]]: what the checks test.
+- [[tweak-ui]], [[hash]], [[skeleton]], [[walkable-graph]]: what the checks test.
 - [[CONVENTIONS]]: keeping these notes in step with the code.

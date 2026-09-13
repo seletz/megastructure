@@ -26,9 +26,10 @@ status: draft
 > The hashed sector grammar is implemented (issue #76,
 > [[0015-hashed-multi-scale-sector-grammar]]), drawn by the skeleton viewer
 > (#77, `mise run run-skeleton`, see [[skeleton]]) and tuned against measured
-> structure (#78, [[0016-tuned-sector-grammar-solid-before-voids]]). The
-> walkable graph is
-> not implemented or decided yet. It collects the design from
+> structure (#78, [[0016-tuned-sector-grammar-solid-before-voids]]). Of the
+> walkable graph, the portals and interior nodes are implemented (#80, see
+> [[walkable-graph]]); the edges, their rendering and the rasteriser are not
+> implemented or decided yet. The note collects the design from
 > [[MEGASTRUCTURE_CONCEPT]] and [[RESEARCH_WFC]] into one place, with a
 > sketch of how it could work, so the graph issues start from a shared
 > picture. Expect it to change.
@@ -232,13 +233,53 @@ a window). The full table, per layer, is [[skeleton_histogram_seed0]].
 
 ### Nodes and portals
 
-- One **portal** on each face shared by two adjacent non-solid sectors. Its
-  position on the face is hashed, snapped to the 2 m cell grid and, on
-  vertical faces, to a floor height so corridors meet floors.
-- One **interior node** per stratum sector.
-- The portal between sector `s` and `s + axis` is keyed by `s` and the axis,
-  so both sectors compute the same point without talking to each other, as
-  the faces in [[model-synthesis-and-sectors]] do.
+`WalkableGraph` (#80) places the points the edges will join. All of them
+live on the fill layer's grid: a sector of `n` = 24 cells of 2 m, sector `i`
+covering cells `i n` to `(i + 1) n` on each axis.
+
+- One **portal** on each face shared by two adjacent non-solid sectors
+  (6-neighbours; diagonal, distant or solid pairs have none). The portal
+  between sector `s` and `s + axis` is keyed by `s`, the **lower** sector of
+  the pair, and gets its own salts per axis, so both sectors compute the same
+  point without talking to each other, as the faces in
+  [[model-synthesis-and-sectors]] do. `portal(a, b)` and `portal(b, a)` return
+  identical values.
+- The point is two coordinates on the face, in cells from the face's lower
+  corner along the other two axes in xyz order. A horizontal coordinate is
+  hashed into `1` to `n - 1`, so the point stays at least one 2 m cell from
+  the face's edges. On vertical faces (x and z) the height is a **floor
+  level**, a hashed multiple of 3 cells (the 6 m stratum pitch) in the same
+  margin, 6 to 42 m above the sector floor, so corridors meet floors.
+- One **interior node** per non-solid sector: hashed `x` and `z` inside the
+  margin and a hashed floor level, like the portals. Stratum sectors are the
+  walking nodes; shaft, cavity and chasm sectors get a node too, marked with
+  their type, so the edge rules (#81) can route vertical travel and bridges
+  differently.
+- Every coordinate is a whole number of cells, so every point is on the 2 m
+  grid and the path cells of the rasteriser (#83) line up with the tiles.
+
+**Example.** Sectors `(0, 0, 0)` and `(1, 0, 0)`: the face is the plane
+`x = 48 m`; the portal draws its height from salt 140 and its `z` from salt
+141, both keyed on `(0, 0, 0)`. Asking from `(1, 0, 0)` finds the same lower
+sector and the same salts, hence the same point.
+
+#### Salts
+
+Salts 140 to 159 belong to the walkable graph.
+
+| Salt | Key | Decides |
+| ---: | --- | --- |
+| 140 | lower sector of an x pair | portal height on the x face (floor level) |
+| 141 | same | portal z on the x face |
+| 142 | lower sector of a y pair | portal x on the y face |
+| 143 | same | portal z on the y face |
+| 144 | lower sector of a z pair | portal x on the z face |
+| 145 | same | portal height on the z face (floor level) |
+| 150 | sector | interior node x |
+| 151 | same | interior node floor level |
+| 152 | same | interior node z |
+
+Salt 902 is used only by the graph check to pick random pairs.
 
 ### Spanning tree plus loops
 
@@ -300,13 +341,17 @@ around the path.
 - `mise run skeleton-stats` (part of `mise run check`) measures the structure
   of the default grammar and fails below the thresholds in
   [Tuning](#tuning).
+- `mise run graph-check` (part of `mise run check`) takes 100 random adjacent
+  pairs of open sectors per seed 0 to 4 and checks that `portal(a, b)` equals
+  `portal(b, a)` exactly, that the portal lies on the shared face inside the
+  margin, on the 2 m grid and on vertical faces at a floor level, that pairs
+  with a solid sector and non-adjacent pairs have no portal, and that the
+  interior nodes lie inside their sectors on the grid.
 
 Planned for the graph:
 
 - A union-find pass over every 5³ window for seeds 0 to 9 reports the number
   of connected components of open sectors.
-- Portal positions are compared from both sectors of a face over many random
-  pairs.
 - The rasterised records of one sector never conflict (the same cell with two
   disjoint restrictions).
 - A debug view draws the graph as coloured lines around the free-fly camera.
@@ -345,7 +390,7 @@ Related notes: [[MEGASTRUCTURE_CONCEPT]] (skeleton and walkable graph),
 [[RESEARCH_WFC]] (epics A and B), [[model-synthesis-and-sectors]],
 [[wave-function-collapse]], [[integer-hash]].
 
-Code: [[skeleton]] describes `SectorGrammar` and `Skeleton`; the graph has
-no code yet. The interior prototype
+Code: [[skeleton]] describes `SectorGrammar` and `Skeleton`;
+[[walkable-graph]] describes `WalkableGraph`, its portals and interior nodes. The interior prototype
 [megastructure.html](../megastructure.html) shows the multi-scale hashed
 shafts and cavities the grammar starts from.

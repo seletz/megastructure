@@ -16,6 +16,10 @@ status: current
 
 ## Unreleased
 
+### Added
+
+- Adjacent open sectors share a hashed portal on their face and every open sector gets an interior node, all on the 2 m cell grid at floor heights, checked for symmetry by `mise run graph-check`. (#124)
+
 ## 0.1.1 - 2026-09-13
 
 ### Added
