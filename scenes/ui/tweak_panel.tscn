@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://epjp3hm7equ7"]
+
+[ext_resource type="Script" path="res://scripts/ui/tweak_panel.gd" id="1_panel"]
+
+[node name="TweakPanel" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1_panel")
