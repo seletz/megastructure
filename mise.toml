@@ -614,11 +614,13 @@ if [[ -n "$worktree" ]]; then
 	behind="$(git -C "$worktree" rev-list --count "HEAD..refs/remotes/origin/$branch")"
 	[[ "$behind" -eq 0 ]] || fail "origin/$branch has $behind commit(s) that $worktree lacks; pull them first"
 fi
+would_rebase=false
 if $rebase; then
 	if git -C "$worktree" merge-base --is-ancestor refs/remotes/origin/develop HEAD; then
 		say "$branch already contains origin/develop, no rebase needed"
 	else
 		show git -C "$worktree" rebase origin/develop
+		would_rebase=$dry_run
 		if ! $dry_run && ! git -C "$worktree" rebase origin/develop; then
 			say "rebase of $branch onto origin/develop stopped (conflict?); aborting it"
 			git -C "$worktree" rebase --abort
@@ -642,7 +644,7 @@ if [[ -n "$worktree" ]]; then
 else
 	sha="$(git -C "$main" rev-parse "refs/remotes/origin/$branch")"
 fi
-$dry_run && $rebase && say "(dry run: after the rebase the polled commit would be the new HEAD, not $sha)"
+$would_rebase && say "dry-run: after the rebase the polled commit would be the new HEAD, not ${sha:0:12}"
 
 # 5. Wait for the check-run of that commit. No run yet counts as pending.
 check_state() {
@@ -654,7 +656,7 @@ check_state() {
 }
 if $dry_run; then
 	say "$check_name on ${sha:0:12}: $(check_state)"
-	show gh api "repos/{owner}/{repo}/commits/$sha/check-runs?check_name=$check_name" "(poll every ${interval}s, up to ${timeout}s)"
+	say "dry-run: would wait for $check_name to succeed (poll every ${interval}s, up to ${timeout}s)"
 else
 	deadline=$((SECONDS + timeout))
 	last=""
