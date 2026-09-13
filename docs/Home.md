@@ -47,8 +47,8 @@ status: current
   the [[integer-hash]], [[sdf-ray-marching]] and the
   [[chasm-distance-field]] behind the current prototype, and
   [[wave-function-collapse]], [[model-synthesis-and-sectors]],
-  [[socket-adjacency]], [[sector-skeleton-and-walkable-graph]] and
-  [[walkable-graph-connectivity]] for the
+  [[socket-adjacency]], [[sector-skeleton-and-walkable-graph]],
+  [[walkable-graph-connectivity]] and [[edge-rasteriser]] for the
   generative world to come.
 - [[hash_vectors]]: reference vectors for the shared integer hash.
 

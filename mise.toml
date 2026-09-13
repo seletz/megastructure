@@ -93,14 +93,19 @@ depends = ["import"]
 description = "Check the walkable graph edges for seeds 0..9 over a 15^3 sample: kinds, portals, determinism, edges_for_sector; fail unless every region-aligned 3^3 and 6^3 window has one non-solid component; report strict 5^3 windows, tunnel fraction and mean vertical run (headless)"
 run = "godot --headless --path . --script res://scripts/tools/graph_connectivity_check.gd"
 
+[tasks.raster-check]
+depends = ["import"]
+description = "Check the edge rasteriser over 1000 random sectors at seeds 0..4: determinism against a fresh graph, no conflicting records, cells inside 0..23, a portal opening in both endpoint sectors of every edge, no rejected edge, one connected group per sector, every routing a walk with explicit stairs or ladders at level changes; print family counts, mean records per sector and the stair, ladder and landing cells level changes produce (headless)"
+run = "godot --headless --path . --script res://scripts/tools/raster_check.gd"
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes and edge connectivity and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity"]
+description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]
