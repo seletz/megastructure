@@ -33,7 +33,8 @@ up to date.
 | `run` | | Runs the main scene. |
 | `import` | | Imports all assets headlessly and regenerates `.godot/`. |
 | `check-scripts` | import | Parses every `.gd` file with `--check-only` and fails if any has errors. |
-| `check` | import, check-scripts | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
+| `smoke` | import | Runs the main scene headlessly for 60 frames (120 s timeout) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
+| `check` | import, check-scripts, smoke | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
 | `export-debug` | import | Same as `export` with a debug build. |
@@ -45,6 +46,12 @@ up to date.
 | `screenshot-check` | import | Tests the HUD screenshot. Opens a window. |
 | `preset-check` | import | Tests that presets round-trip bit for bit. Headless. |
 | `code-map-check` | import | Tests that every source file is linked from exactly one code map note. Headless. |
+
+`smoke` matches the patterns case-sensitively. Its allow-list for known
+benign lines (the `allow` array in the task) is empty, because the run log is
+clean. Headless Godot uses the dummy renderer, which never compiles shaders,
+so the ray-march shader produces no messages there and shader errors are not
+caught by `smoke`.
 
 The window-based checks need a real rendering device because they read back
 rendered frames, so they do not run in CI.
