@@ -257,6 +257,52 @@ flag "--push" help="Push the current branch to origin after committing"
 flag "-n --dry-run" help="Print the commands instead of editing and committing"
 '''
 
+[tasks."release:set"]
+description = "Set config/version in project.godot to an explicit version and commit it (and push with --push). Usage: mise run release:set <version>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# RULE: develop always carries the NEXT, unreleased version. Between milestones
+# that is the next patch; the minor bump happens right before a milestone is
+# released. Use this task to correct the version when it drifted from that
+# rule (e.g. 0.2.0 -> 0.1.1 while milestone 0.2.0 is still open). Only the new
+# version goes to stdout.
+
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+
+new="${usage_version}"
+if [[ ! "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+	echo "release:set: version must be MAJOR.MINOR.PATCH, not '$new'" >&2
+	exit 1
+fi
+old="$(sed -n 's/^config\/version="\(.*\)"$/\1/p' project.godot)"
+if [[ "$old" == "$new" ]]; then
+	echo "release:set: config/version is already $new" >&2
+	echo "$new"
+	exit 0
+fi
+if git tag --list "v$new" | grep -q .; then
+	echo "release:set: v$new is already released (tag exists)" >&2
+	exit 1
+fi
+
+run() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; $dry_run || "$@"; }
+run perl -pi -e "s/^config\\/version=\"\\Q$old\\E\"\$/config\\/version=\"$new\"/" project.godot
+run git add project.godot
+run git commit --quiet -m "chore(release): set version to $new"
+if [[ "${usage_push:-false}" == "true" ]]; then
+	run git push --quiet origin "$(git rev-parse --abbrev-ref HEAD)"
+fi
+echo "release:set: $old -> $new" >&2
+echo "$new"
+'''
+usage = '''
+arg "<version>" help="The version to write, MAJOR.MINOR.PATCH"
+flag "--push" help="Push the current branch to origin after committing"
+flag "-n --dry-run" help="Print the commands instead of editing and committing"
+'''
+
 [tasks."release:package"]
 description = "Package an exported build into build/release/. Usage: mise run release:package <linux|macos>"
 run = '''

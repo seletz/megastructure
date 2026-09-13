@@ -85,6 +85,7 @@ already there and immediately bumps `develop` to the next patch, so at no time
 does `develop` sit on an already released version. A release never edits the
 version before tagging.
 
+- To correct a drifted version: `mise run release:set <version> --push`.
 - Patch release, on a clean and up-to-date `develop`:
 
   ```sh
