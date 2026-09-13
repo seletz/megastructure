@@ -25,7 +25,8 @@ This downloads the pinned Godot build (see `mise.toml`) and the other tools.
 | -------------------- | -------------------------------------------------------- |
 | `mise run editor`    | Open the project in the Godot editor                     |
 | `mise run run`       | Run the project (main scene)                             |
-| `mise run check`     | Import assets and verify the project loads headlessly    |
+| `mise run check`     | Import, parse all scripts, verify the project loads (CI) |
+| `mise run check-scripts` | Parse every `.gd` file and fail on errors            |
 | `mise run import`    | Import all assets headlessly (regenerates `.godot/`)     |
 | `mise run export`    | Export a release build: `mise run export <preset> <out>` |
 | `mise run export-debug` | Export a debug build, same arguments                  |
