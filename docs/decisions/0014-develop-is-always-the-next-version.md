@@ -43,6 +43,10 @@ It would also make the release commit do two jobs at once.
   is never mistaken for a release build.
 - The tagged commit differs from its parent only in the changelog.
 - A skipped patch number (0.1.3 bumped to 0.2.0) is normal and harmless.
+- The minor bump belongs at the end of a milestone, right before its release;
+  bumping earlier puts an unreached milestone number on `develop`. That
+  happened once (0.2.0 while the milestone was open) and was corrected with
+  `mise run release:set`.
 - The release task needs direct push access to `develop`, which the owner has
   as an administrator.
 

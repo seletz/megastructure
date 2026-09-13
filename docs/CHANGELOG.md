@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- `mise run release:set <version>` corrects the version on develop, which is back to 0.1.1 until milestone 0.2.0 ships. (#122)
 - `mise run shot <scene> <out.png>` renders a scene with a chosen seed, camera pose and parameters to a PNG under Xvfb, so no window opens. (#120)
 - `mise run run-skeleton` opens a viewer that draws the sectors around the camera as colour-coded boxes with a legend, and every grammar parameter can be tuned live in its tweak panel. (#113)
 - Every 48 m sector gets a type (stratum, shaft, cavity, solid or chasm) from a hashed grammar with tunable parameters, and `mise run skeleton-histogram` guards the seed 0 type counts. (#112)

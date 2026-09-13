@@ -133,3 +133,15 @@ The skipped patch version was never released, so nothing is lost. Use
 - [[tools-and-tasks]]: every release task in the task table.
 - [[CONVENTIONS#Changelog]]: how changelog entries are written.
 - [mise.toml](../../mise.toml): the `release:*` tasks.
+
+## Correcting the version
+
+If `develop` drifts from the rule (for example a minor bump was run before the
+milestone was finished), set it back with
+
+```sh
+mise run release:set 0.1.1 --push
+```
+
+The task refuses a version that already has a tag and commits
+`chore(release): set version to <version>`.
