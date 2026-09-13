@@ -56,6 +56,7 @@ up to date.
 | `screenshot-check` | import | Tests the HUD screenshot. Opens a window. |
 | `preset-check` | import | Tests that presets round-trip bit for bit. Headless. |
 | `code-map-check` | import | Tests that every source file is linked from exactly one code map note. Headless. |
+| `shot` | import | `shot <scene> <out.png> [--seed N] [--pose x,y,z,yaw,pitch] [--frames N] [--params k=v,...] [--resolution WxH] [--ui] [--window]`: renders one frame of a scene to a PNG under `xvfb-run` (X11, OpenGL) so no window opens; without `xvfb-run`, or with `--window`, it opens a normal window. See [[screenshots]]. |
 | `skeleton-histogram` | import | Prints the seed 0 sector type histogram and tests `sector_type` against [[skeleton_histogram_seed0]]; `--update` rewrites the reference ([[skeleton]]). Headless; part of `check`. |
 | `skeleton-stats` | import | Measures the sector grammar over 20 random 5³ regions per seed 0 to 4 and fails unless shafts run at least 3 sectors on average and solid splits a region into at least 2 non-solid components on average ([[sector-skeleton-and-walkable-graph]]). Headless; part of `check`. |
 | `panel-check` | import | Clicks every kind of script-backed widget in the skeleton viewer's tweak panel and checks each setter ran ([[tweak-ui]]). Headless; part of `check`. |
@@ -67,7 +68,9 @@ so the ray-march shader produces no messages there and shader errors are not
 caught by `smoke`.
 
 The window-based checks need a real rendering device because they read back
-rendered frames, so they do not run in CI.
+rendered frames, so they do not run in CI. To get an image of a scene without
+a window, use `shot`, which renders inside Xvfb ([[screenshots]]). Every
+other tool task runs `--headless`.
 
 The `release:*` tasks follow one rule: `develop` always carries the NEXT
 version. `release:release` tags the version already in `project.godot` and
@@ -91,6 +94,7 @@ exit with status 1 on any failure.
 | [screenshot_check.gd](../../scripts/tools/screenshot_check.gd) | `screenshot-check` | Takes a HUD screenshot and checks the file name, folder and resolution, and that the HUD and panel were hidden for that frame and shown again afterwards; then presses H, F1 and P and checks they toggle the HUD and hint and save a screenshot, and are ignored while the seed field has focus. |
 | [preset_check.gd](../../scripts/tools/preset_check.gd) | `preset-check` | Changes every parameter, the seed and the camera, saves a preset, loads the defaults, reloads the preset from disk and compares everything bitwise, including a restart and delete; also tests name validation and exact float reading. Uses a scratch `user://preset_check` folder. |
 | [code_map_check.gd](../../scripts/tools/code_map_check.gd) | `code-map-check` | Collects every file under `scripts/`, `shaders/` and `scenes/` (except `.uid` and `.import`), scans the links in `docs/code/*.md`, and fails if a file is linked from no note or from more than one, or if a link points at a missing source file. |
+| [shot.gd](../../scripts/tools/shot.gd) | `shot` | Loads a scene with saved presets off, sets the seed, the FreeFlyCamera pose and registry params by name (typed by the registry), waits the frames, grabs a frame with `Hud.grab_frame` (HUD and panel hidden unless `--ui`), checks the resolution and saves the PNG; prints `shot: <problem>` and exits 1 on any error. |
 | [skeleton_histogram.gd](../../scripts/tools/skeleton_histogram.gd) | `skeleton-histogram` | Counts the sector types of the 9 × 9 × 9 sectors around the origin for seed 0, per layer and in total; checks `sector_type` returns a type for 2 000 hashed random cells and the int32 extremes, also under an out-of-range grammar, and that two evaluations (and a fresh `Skeleton`) agree; then compares the table rows with [[skeleton_histogram_seed0]], or rewrites that file with `--update`. |
 | [skeleton_stats.gd](../../scripts/tools/skeleton_stats.gd) | `skeleton-stats` | Samples 20 random 5 × 5 × 5 sector regions for each seed 0 to 4 and prints the type fractions, the mean vertical shaft run (each run followed past the region to its full length), the non-solid components per region (6-connected union-find), the cavity clusters per region and the stratum run lengths along x, z and y; fails below 3 sectors of shaft run or 2 components. `measure()` and `print_stats()` are static, so a scratch script can compare grammars. |
 | [panel_check.gd](../../scripts/tools/panel_check.gd) | `panel-check` | Opens the skeleton viewer's tweak panel with Tab and pushes mouse clicks: on the `show_stratum` box and its label, a press without release on `follow_camera`, the up arrows of the `radius`, `shaft_probability` and `solid_wall_grid` spin boxes and the `sector_size` slider; checks the viewer or grammar value changed each time. |
@@ -103,6 +107,8 @@ exit with status 1 on any failure.
   and HUD, `hash-vectors` for the hash, `skeleton-histogram` and `skeleton-stats` for the
   sector grammar, `panel-check` for the tweak panel widgets, `code-map-check` after adding, moving or removing a source file or
   editing these notes.
+- Need to see a change? `mise run shot scenes/main.tscn build/shots/main.png`
+  renders it without a window.
 
 ## References
 
@@ -110,5 +116,6 @@ exit with status 1 on any failure.
 - [[ci-and-export]]: the CI workflows and export tasks in context.
 - [[releasing]]: the release tasks in the release process.
 - [[maintaining]]: the worktree and pull request tasks in the maintainer loop.
+- [[screenshots]]: how `shot` renders without a window, and troubleshooting.
 - [[tweak-ui]], [[hash]], [[skeleton]]: what the checks test.
 - [[CONVENTIONS]]: keeping these notes in step with the code.
