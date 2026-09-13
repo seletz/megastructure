@@ -17,6 +17,7 @@ status: current
 
 | Process | Note | Covers |
 | --- | --- | --- |
+| Maintaining | [[maintaining]] | Creating and removing issue worktrees, the state of open pull requests, rebasing, waiting for the check and merging with `wt:new`, `wt:rm`, `pr:status` and `pr:merge`. |
 | Releasing | [[releasing]] | Versioning, `mise run release:release`, the release workflow, patch and milestone releases, verifying a release. |
 
 ## References

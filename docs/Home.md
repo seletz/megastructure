@@ -64,8 +64,9 @@ status: current
 ## Process
 
 - [[process/README|Process]]: how work becomes a published version:
-  [[releasing]] explains versioning, the release task and workflow, and how
-  to verify a release. `develop` always carries the next version.
+  [[maintaining]] covers the worktree and pull request tasks, [[releasing]]
+  explains versioning, the release task and workflow, and how to verify a
+  release. `develop` always carries the next version.
 
 ## Code map
 

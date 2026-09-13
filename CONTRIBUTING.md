@@ -25,9 +25,14 @@ Work is tracked in GitHub issues and grouped in three levels:
   progress side by side:
 
   ```sh
-  git fetch origin
-  git worktree add -b 25-branch-protection ../25-branch-protection origin/develop
+  mise run wt:new 25 branch-protection   # prints the worktree path
   ```
+
+  It fetches and creates the branch `25-branch-protection` from
+  `origin/develop` in `~/.herdr/worktrees/megastructure/25-branch-protection`
+  (`--base-dir` or `$WT_BASE_DIR` to change the folder). After the merge,
+  remove it from another checkout with `mise run wt:rm 25-branch-protection`,
+  which refuses while anything in it would be lost.
 
 ## Commits
 
@@ -84,8 +89,8 @@ version before tagging.
   pushes, creates the GitHub release, bumps the patch version
   (`release:bump patch`) and pushes again. The release workflow then attaches
   a Linux and a macOS build to the release.
-- Milestone release: first run `mise run release:bump minor` (e.g. 0.1.3 to
-  0.2.0) on an issue branch and merge it, then run `release:release`.
+- Milestone release: first run `mise run release:bump minor --push` (e.g.
+  0.1.3 to 0.2.0) on an issue branch and merge it, then run `release:release`.
 
 The full process, including how to verify a release, is in
 [`docs/process/releasing.md`](docs/process/releasing.md).
@@ -95,15 +100,13 @@ The full process, including how to verify a release, is in
 1. Push the branch: `git push -u origin <issue>-<slug>`.
 2. Open a pull request against `develop`:
    `gh pr create --base develop`. End the body with `Closes #<issue>`.
-3. Before merging, rebase onto the current `develop` so the branch is up to
-   date and the history stays linear inside the branch:
-
-   ```sh
-   git fetch origin
-   git rebase origin/develop
-   git push --force-with-lease
-   ```
-
-4. Merge with a merge commit once `check` is green:
-   `gh pr merge --merge`. Squash merging is disabled; the branch is deleted
-   automatically after the merge.
+3. `mise run pr:status` lists the open pull requests with their merge state
+   and check results.
+4. Merge with `mise run pr:merge <number>` (try `--dry-run` first). It rebases
+   the branch's worktree onto `origin/develop` so the branch is up to date and
+   the history stays linear inside the branch (it aborts and stops on a
+   conflict), pushes with `--force-with-lease`, waits until the `check` run
+   of the pushed commit is green, merges with a merge commit and fast-forwards
+   `develop` in the main checkout. Squash merging is disabled; the branch is
+   deleted on GitHub automatically after the merge. The steps are described
+   in [`docs/process/maintaining.md`](docs/process/maintaining.md).

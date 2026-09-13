@@ -196,7 +196,7 @@ flag "-n --dry-run" help="Print the commands instead of editing and committing"
 '''
 
 [tasks."release:bump"]
-description = "Bump config/version in project.godot, commit it and print the new version. Usage: mise run release:bump <patch|minor|major>"
+description = "Bump config/version in project.godot, commit it (and push with --push) and print the new version. Usage: mise run release:bump <patch|minor|major>"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
@@ -225,11 +225,15 @@ run() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; $dry_run || "$@"
 run perl -pi -e "s/^config\\/version=\"\\Q$old\\E\"\$/config\\/version=\"$new\"/" project.godot
 run git add project.godot
 run git commit --quiet -m "chore(release): start $new"
+if [[ "${usage_push:-false}" == "true" ]]; then
+	run git push --quiet origin "$(git rev-parse --abbrev-ref HEAD)"
+fi
 echo "release:bump: $old -> $new" >&2
 echo "$new"
 '''
 usage = '''
 arg "<part>" help="Which part to bump: patch, minor or major"
+flag "--push" help="Push the current branch to origin after committing"
 flag "-n --dry-run" help="Print the commands instead of editing and committing"
 '''
 
@@ -366,6 +370,364 @@ fi
 '''
 usage = '''
 flag "-n --dry-run" help="Print every command instead of executing it"
+'''
+
+[tasks."wt:new"]
+description = "Create an issue worktree on a new branch <issue>-<slug> from origin/develop and print its path. Usage: mise run wt:new <issue> <slug>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# The worktree goes to <base-dir>/<issue>-<slug>, next to the other issue
+# worktrees. Only the path goes to stdout, so `cd "$(mise run wt:new ...)"`
+# works.
+
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+
+show() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; }
+run() { show "$@"; $dry_run || "$@"; }
+fail() { echo "wt:new: $*" >&2; exit 1; }
+
+issue="${usage_issue}"
+slug="${usage_slug}"
+[[ "$issue" =~ ^[1-9][0-9]*$ ]] || fail "issue must be a number, not '$issue'"
+[[ "$slug" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || fail "slug must be lowercase words joined by '-', not '$slug'"
+branch="$issue-$slug"
+
+base_dir="${usage_base_dir:-${WT_BASE_DIR:-$HOME/.herdr/worktrees/megastructure}}"
+path="$base_dir/$branch"
+# The main checkout is the first entry of the worktree list.
+main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
+
+git -C "$main" show-ref --quiet --verify "refs/heads/$branch" && fail "branch $branch already exists"
+[[ -e "$path" ]] && fail "$path already exists"
+
+run git -C "$main" fetch --quiet origin develop
+if [[ "${usage_herdr:-false}" == "true" ]]; then
+	[[ "${HERDR_ENV:-}" == "1" ]] || fail "--herdr needs HERDR_ENV=1 (run it inside Herdr)"
+	run herdr worktree create --cwd "$main" --branch "$branch" --base origin/develop \
+		--path "$path" --label "$branch" --no-focus
+else
+	run git -C "$main" worktree add --quiet -b "$branch" "$path" origin/develop
+fi
+# A worktree is a new directory, so mise asks to trust its mise.toml again.
+run mise trust --quiet "$path/mise.toml"
+echo "$path"
+'''
+usage = '''
+arg "<issue>" help="GitHub issue number, e.g. 110"
+arg "<slug>" help="Short kebab-case name, e.g. coordination-tasks"
+flag "--base-dir <dir>" help="Folder the worktree is created in (default: $WT_BASE_DIR or ~/.herdr/worktrees/megastructure)"
+flag "--herdr" help="Create it with 'herdr worktree create' as a Herdr workspace (needs HERDR_ENV=1)"
+flag "-n --dry-run" help="Print the commands instead of creating anything"
+'''
+
+[tasks."wt:rm"]
+description = "Remove an issue worktree and delete its branch, refusing if anything would be lost. Usage: mise run wt:rm <branch>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# Refuses when the worktree has uncommitted changes or an unfinished rebase,
+# merge or cherry-pick, or when the branch has commits that are on no branch
+# of origin (after a fetch --prune). A branch merged into develop is safe to
+# delete because its commits are reachable from origin/develop.
+
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+
+show() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; }
+run() { show "$@"; $dry_run || "$@"; }
+fail() { echo "wt:rm: $*" >&2; exit 1; }
+
+branch="${usage_branch}"
+main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
+case "$branch" in
+	develop | main | master) fail "refusing to remove $branch" ;;
+esac
+git -C "$main" show-ref --quiet --verify "refs/heads/$branch" || fail "no local branch $branch"
+
+# The worktree that has the branch checked out, also while a rebase has
+# detached its HEAD.
+worktree_of() {
+	local wt="" line git_dir
+	while IFS= read -r line; do
+		case "$line" in
+			"worktree "*) wt="${line#worktree }" ;;
+			"branch refs/heads/$1") echo "$wt"; return ;;
+			detached)
+				git_dir="$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null)" || continue
+				if grep -qsx "refs/heads/$1" "$git_dir/rebase-merge/head-name" "$git_dir/rebase-apply/head-name"; then
+					echo "$wt"
+					return
+				fi
+				;;
+		esac
+	done < <(git -C "$main" worktree list --porcelain)
+}
+worktree="$(worktree_of "$branch")"
+
+if [[ -n "$worktree" ]]; then
+	[[ "$worktree" == "$main" ]] && fail "$branch is checked out in the main checkout $main"
+	here="$(git rev-parse --show-toplevel)"
+	[[ "$here" == "$worktree" ]] && fail "run this from another checkout, not from $worktree itself"
+	git_dir="$(git -C "$worktree" rev-parse --absolute-git-dir)"
+	for marker in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+		[[ -e "$git_dir/$marker" ]] && fail "$worktree has an unfinished operation ($marker); finish or abort it first"
+	done
+	if [[ -n "$(git -C "$worktree" status --porcelain)" ]]; then
+		git -C "$worktree" status --short >&2
+		fail "$worktree has uncommitted changes"
+	fi
+fi
+
+# Fetching is read-only, so it also runs in a dry run.
+show git -C "$main" fetch --quiet --prune origin
+git -C "$main" fetch --quiet --prune origin
+unpushed="$(git -C "$main" rev-list --count "refs/heads/$branch" --not --remotes=origin)"
+if [[ "$unpushed" -gt 0 ]]; then
+	git -C "$main" log --oneline "refs/heads/$branch" --not --remotes=origin >&2
+	fail "$branch has $unpushed commit(s) that are on no branch of origin; push or merge them first"
+fi
+
+[[ -n "$worktree" ]] && run git -C "$main" worktree remove "$worktree"
+run git -C "$main" branch -D "$branch"
+run git -C "$main" worktree prune
+'''
+usage = '''
+arg "<branch>" help="Branch of the worktree, e.g. 110-coordination-tasks"
+flag "-n --dry-run" help="Run the checks and print the commands instead of removing anything"
+'''
+
+[tasks."pr:status"]
+description = "List open pull requests with their merge state and check results"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# GitHub computes mergeStateStatus lazily: UNKNOWN right after a push means
+# "not computed yet", not a problem. Run it again a few seconds later.
+{
+	printf 'PR\tBRANCH\tMERGE STATE\tCHECKS\tTITLE\n'
+	gh pr list --state open --limit 100 \
+		--json number,title,headRefName,isDraft,mergeStateStatus,statusCheckRollup \
+		--jq '.[] | [
+			"#\(.number)",
+			.headRefName,
+			(if .isDraft then "DRAFT" else .mergeStateStatus end),
+			([.statusCheckRollup[] |
+				"\(.name // .context)=\(
+					if (.conclusion // "") != "" then .conclusion
+					elif (.state // "") != "" then .state
+					else .status end | ascii_downcase)"
+			] | if length == 0 then "none" else join(",") end),
+			.title
+		] | @tsv'
+} | column -t -s $'\t'
+'''
+
+[tasks."pr:merge"]
+description = "Rebase a pull request onto origin/develop, push, wait for its check, merge it with a merge commit and update develop. Usage: mise run pr:merge <number>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# Steps: resolve the PR's branch and worktree, fetch, rebase the worktree onto
+# origin/develop (aborting on conflict), push --force-with-lease and verify
+# origin has exactly the local HEAD, wait for the "check" check-run of that
+# commit to succeed, merge with a merge commit (only if the PR head is still
+# that commit), fast-forward develop in the main checkout and print the merge
+# commit. With --dry-run the checks run and the current check state is shown,
+# but every changing command is only printed.
+
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+rebase=true
+[[ "${usage_no_rebase:-false}" == "true" ]] && rebase=false
+timeout="${usage_timeout:-900}"
+interval=15
+check_name=check
+
+show() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; }
+run() { show "$@"; $dry_run || "$@"; }
+say() { echo "pr:merge: $*" >&2; }
+fail() {
+	if $dry_run; then
+		echo "dry-run: would refuse: $*" >&2
+	else
+		say "$*"
+		exit 1
+	fi
+}
+
+number="${usage_number}"
+[[ "$number" =~ ^[1-9][0-9]*$ ]] || { say "PR number must be a number, not '$number'"; exit 1; }
+[[ "$timeout" =~ ^[1-9][0-9]*$ ]] || { say "--timeout must be a number of seconds, not '$timeout'"; exit 1; }
+main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
+
+# 1. The pull request, its branch and its worktree.
+info="$(gh pr view "$number" \
+	--json state,baseRefName,headRefName,isCrossRepository,url \
+	--jq '[.state, .baseRefName, .headRefName, .isCrossRepository, .url] | @tsv')"
+IFS=$'\t' read -r state base branch cross url <<< "$info"
+say "#$number $branch -> $base ($url)"
+[[ "$state" == "OPEN" ]] || { say "#$number is $state, not OPEN"; exit 1; }
+[[ "$base" == "develop" ]] || fail "#$number targets $base, not develop"
+[[ "$cross" == "false" ]] || { say "#$number comes from a fork; merge it by hand"; exit 1; }
+
+# The worktree that has the branch checked out, also while a rebase has
+# detached its HEAD.
+worktree_of() {
+	local wt="" line git_dir
+	while IFS= read -r line; do
+		case "$line" in
+			"worktree "*) wt="${line#worktree }" ;;
+			"branch refs/heads/$1") echo "$wt"; return ;;
+			detached)
+				git_dir="$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null)" || continue
+				if grep -qsx "refs/heads/$1" "$git_dir/rebase-merge/head-name" "$git_dir/rebase-apply/head-name"; then
+					echo "$wt"
+					return
+				fi
+				;;
+		esac
+	done < <(git -C "$main" worktree list --porcelain)
+}
+worktree="$(worktree_of "$branch")"
+if [[ -z "$worktree" ]]; then
+	$rebase && { say "no worktree has $branch checked out; create one or pass --no-rebase"; exit 1; }
+else
+	say "worktree $worktree"
+	git_dir="$(git -C "$worktree" rev-parse --absolute-git-dir)"
+	for marker in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+		[[ -e "$git_dir/$marker" ]] && { say "$worktree has an unfinished operation ($marker); finish or abort it first"; exit 1; }
+	done
+	if [[ -n "$(git -C "$worktree" status --porcelain --untracked-files=no)" ]]; then
+		git -C "$worktree" status --short --untracked-files=no >&2
+		fail "$worktree has uncommitted changes"
+	fi
+fi
+
+# 2. Fetch (read-only, so it also runs in a dry run).
+show git -C "$main" fetch --quiet origin develop "$branch"
+git -C "$main" fetch --quiet origin develop "$branch"
+
+# 3. Rebase onto origin/develop.
+if [[ -n "$worktree" ]]; then
+	behind="$(git -C "$worktree" rev-list --count "HEAD..refs/remotes/origin/$branch")"
+	[[ "$behind" -eq 0 ]] || fail "origin/$branch has $behind commit(s) that $worktree lacks; pull them first"
+fi
+would_rebase=false
+if $rebase; then
+	if git -C "$worktree" merge-base --is-ancestor refs/remotes/origin/develop HEAD; then
+		say "$branch already contains origin/develop, no rebase needed"
+	else
+		show git -C "$worktree" rebase origin/develop
+		would_rebase=$dry_run
+		if ! $dry_run && ! git -C "$worktree" rebase origin/develop; then
+			say "rebase of $branch onto origin/develop stopped (conflict?); aborting it"
+			git -C "$worktree" rebase --abort
+			say "rebase aborted, $branch is unchanged; rebase and resolve by hand, then run pr:merge again"
+			exit 1
+		fi
+	fi
+fi
+
+# 4. Push and make sure origin has exactly the commit that is polled.
+if [[ -n "$worktree" ]]; then
+	sha="$(git -C "$worktree" rev-parse HEAD)"
+	remote_sha="$(git -C "$main" rev-parse "refs/remotes/origin/$branch")"
+	if [[ "$sha" != "$remote_sha" ]]; then
+		run git -C "$worktree" push --quiet --force-with-lease origin "$branch"
+	fi
+	if ! $dry_run; then
+		pushed="$(git -C "$main" ls-remote origin "refs/heads/$branch" | cut -f1)"
+		[[ "$pushed" == "$sha" ]] || { say "origin has $branch at ${pushed:-nothing}, expected $sha"; exit 1; }
+	fi
+else
+	sha="$(git -C "$main" rev-parse "refs/remotes/origin/$branch")"
+fi
+$would_rebase && say "dry-run: after the rebase the polled commit would be the new HEAD, not ${sha:0:12}"
+
+# 5. Wait for the check-run of that commit. No run yet counts as pending.
+check_state() {
+	gh api "repos/{owner}/{repo}/commits/$sha/check-runs?check_name=$check_name&per_page=100" \
+		--jq '.check_runs | sort_by(.started_at) | last
+			| if . == null then "pending none"
+			elif .status != "completed" then "pending \(.status)"
+			else "completed \(.conclusion)" end'
+}
+if $dry_run; then
+	say "$check_name on ${sha:0:12}: $(check_state)"
+	say "dry-run: would wait for $check_name to succeed (poll every ${interval}s, up to ${timeout}s)"
+else
+	deadline=$((SECONDS + timeout))
+	last=""
+	while :; do
+		read -r phase detail < <(check_state)
+		if [[ "$phase $detail" != "$last" ]]; then
+			say "$check_name on ${sha:0:12}: $phase $detail"
+			last="$phase $detail"
+		fi
+		if [[ "$phase" == "completed" ]]; then
+			[[ "$detail" == "success" ]] && break
+			say "$check_name on ${sha:0:12} finished with $detail; not merging"
+			exit 1
+		fi
+		if ((SECONDS >= deadline)); then
+			say "timed out after ${timeout}s waiting for $check_name on ${sha:0:12}"
+			exit 1
+		fi
+		sleep "$interval"
+	done
+fi
+
+# 6. Merge, but only if the PR head is still the commit that passed.
+run gh pr merge "$number" --merge --match-head-commit "$sha"
+
+# 7. Fast-forward develop in the main checkout.
+main_branch="$(git -C "$main" rev-parse --abbrev-ref HEAD)"
+if [[ "$main_branch" != "develop" ]]; then
+	# develop is not checked out there: update the branch ref without a checkout.
+	run git -C "$main" fetch --quiet origin develop:develop
+elif [[ -z "$(git -C "$main" status --porcelain)" ]]; then
+	run git -C "$main" pull --quiet --ff-only origin develop
+elif $dry_run; then
+	show git -C "$main" stash push --include-untracked -m "pr:merge-$number"
+	show git -C "$main" pull --quiet --ff-only origin develop
+	show git -C "$main" stash apply "<stash>"
+	show git -C "$main" stash drop "<stash>"
+else
+	# The stash stack is shared by all worktrees: address the entry by its
+	# commit, never by position.
+	tag="pr:merge-$number-$(date +%s)-$$"
+	show git -C "$main" stash push --include-untracked -m "$tag"
+	git -C "$main" stash push --quiet --include-untracked -m "$tag"
+	stash="$(git -C "$main" stash list --format='%H %gs' | awk -v tag="$tag" 'index($0, tag) { print $1; exit }')"
+	[[ -n "$stash" ]] || { say "could not find the stash '$tag' in $main"; exit 1; }
+	pulled=true
+	show git -C "$main" pull --quiet --ff-only origin develop
+	git -C "$main" pull --quiet --ff-only origin develop || pulled=false
+	show git -C "$main" stash apply "$stash"
+	if ! git -C "$main" stash apply --quiet "$stash"; then
+		say "local changes in $main did not apply cleanly; they are kept in stash $stash ($tag)"
+		exit 1
+	fi
+	entry="$(git -C "$main" stash list --format='%gd %H' | awk -v sha="$stash" '$2 == sha { print $1; exit }')"
+	[[ -n "$entry" ]] && run git -C "$main" stash drop --quiet "$entry"
+	$pulled || { say "git pull --ff-only failed in $main; develop was not updated"; exit 1; }
+fi
+
+# 8. The merge commit.
+if $dry_run; then
+	show gh pr view "$number" --json mergeCommit --jq .mergeCommit.oid
+else
+	merge="$(gh pr view "$number" --json mergeCommit --jq .mergeCommit.oid)"
+	git -C "$main" log -1 --oneline "$merge" 2>/dev/null || echo "$merge"
+fi
+'''
+usage = '''
+arg "<number>" help="Pull request number"
+flag "--no-rebase" help="Do not rebase or push; wait for the check of the pushed head and merge it"
+flag "--timeout <seconds>" default="900" help="How long to wait for the check to finish"
+flag "-n --dry-run" help="Run the checks and show the check state, print every changing command instead"
 '''
 
 [tasks.mcp]
