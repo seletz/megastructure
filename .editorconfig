@@ -2,3 +2,12 @@ root = true
 
 [*]
 charset = utf-8
+
+# Godot's GDScript convention is tab indentation.
+[*.gd]
+indent_style = tab
+indent_size = 4
+
+[*.{tscn,tres,godot,cfg}]
+indent_style = space
+indent_size = 2

@@ -1,0 +1,23 @@
+// Project settings for Zed.
+//
+// GDScript support comes from the "gdscript" extension, which proxies to the
+// language server built into the Godot editor (127.0.0.1:6005). The Godot
+// editor must be running for completions, diagnostics and go-to-definition:
+//   mise run editor
+{
+  "auto_install_extensions": {
+    "gdscript": true
+  },
+  "languages": {
+    "GDScript": {
+      "hard_tabs": true,
+      "tab_size": 4,
+      "format_on_save": "off",
+      "remove_trailing_whitespace_on_save": true,
+      "ensure_final_newline_on_save": true
+    }
+  },
+  "file_types": {
+    "GDScript": ["gd"]
+  }
+}
