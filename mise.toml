@@ -801,3 +801,54 @@ godot --headless --path . --script res://scripts/tools/skeleton_histogram.gd -- 
 usage = '''
 flag "--update" help="Rewrite docs/skeleton_histogram_seed0.md from the current grammar instead of comparing"
 '''
+
+[tasks.shot]
+depends = ["import"]
+description = "Render one frame of a scene to a PNG without opening a window (under xvfb-run). Usage: mise run shot <scene> <out.png> [--seed N] [--pose x,y,z,yaw,pitch] [--frames N] [--params k=v,...]"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# Under Xvfb there is no DRI3, so Vulkan finds no device that can present and
+# Godot would fall back to Wayland and open a window. The task therefore uses
+# the X11 display driver with OpenGL (Mesa llvmpipe, the Compatibility
+# renderer) and unsets WAYLAND_DISPLAY so no fallback can reach the desktop.
+# See docs/process/screenshots.md.
+resolution="${usage_resolution:-1280x720}"
+[[ "$resolution" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]] || { echo "shot: --resolution must be WIDTHxHEIGHT, not '$resolution'" >&2; exit 1; }
+out="$(realpath -m -- "${usage_out}")"
+# Keep Godot from importing shots written into a folder inside the project
+# (never the project root itself, which a .gdignore would hide entirely).
+out_dir="$(dirname "$out")"
+if [[ "$out_dir" == "$PWD"/* ]]; then
+	mkdir -p "$out_dir"
+	touch "$out_dir/.gdignore"
+fi
+
+args=(-- "${usage_scene}" "$out" --resolution "$resolution" --frames "${usage_frames:-40}")
+[[ -n "${usage_seed:-}" ]] && args+=(--seed "${usage_seed}")
+[[ -n "${usage_pose:-}" ]] && args+=(--pose "${usage_pose}")
+[[ -n "${usage_params:-}" ]] && args+=(--params "${usage_params}")
+[[ "${usage_ui:-false}" == "true" ]] && args+=(--ui)
+godot_args=(--path . --resolution "$resolution" --script res://scripts/tools/shot.gd)
+
+if [[ "${usage_window:-false}" != "true" ]] && command -v xvfb-run >/dev/null; then
+	env -u WAYLAND_DISPLAY xvfb-run -a -s "-screen 0 ${resolution}x24" \
+		godot --display-driver x11 --rendering-driver opengl3 "${godot_args[@]}" "${args[@]}"
+else
+	if [[ "${usage_window:-false}" != "true" ]]; then
+		echo "shot: xvfb-run not found, opening a window (install it: sudo pacman -S xorg-server-xvfb)" >&2
+	fi
+	godot "${godot_args[@]}" "${args[@]}"
+fi
+'''
+usage = '''
+arg "<scene>" help="Scene to render, e.g. scenes/main.tscn or res://scenes/skeleton_viewer.tscn"
+arg "<out>" help="PNG file to write, relative to the project root, e.g. build/shots/main.png"
+flag "--seed <n>" help="World seed (default: 1)"
+flag "--pose <pose>" help="Camera pose x,y,z,yaw,pitch in the prototype convention (default: the scene's)"
+flag "--frames <n>" default="40" help="Frames to wait before capturing"
+flag "--params <params>" help="Registry params name=value,... (Vector2 x:y, Color #rrggbb or r:g:b[:a])"
+flag "--resolution <size>" default="1280x720" help="Image size WIDTHxHEIGHT"
+flag "--ui" help="Keep the HUD and tweak panel in the image"
+flag "--window" help="Open a normal window instead of using xvfb-run (Vulkan, Forward+)"
+'''
