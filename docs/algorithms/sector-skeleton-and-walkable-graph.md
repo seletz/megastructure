@@ -23,8 +23,9 @@ status: draft
 
 > [!warning] Partly planned
 > The hashed sector grammar is implemented (issue #76,
-> [[0015-hashed-multi-scale-sector-grammar]]); its parameters are defaults
-> still to be tuned in the skeleton viewer (#77, #78). The walkable graph is
+> [[0015-hashed-multi-scale-sector-grammar]]) and drawn by the skeleton
+> viewer (#77, `mise run run-skeleton`, see [[skeleton]]); its parameters are
+> defaults still to be tuned there (#78). The walkable graph is
 > not implemented or decided yet. It collects the design from
 > [[MEGASTRUCTURE_CONCEPT]] and [[RESEARCH_WFC]] into one place, with a
 > sketch of how it could work, so the graph issues start from a shared
@@ -138,8 +139,9 @@ Salt 900 is used only by the histogram test to pick random cells.
 ### Parameters
 
 The parameters live in a `SectorGrammar` resource with `@export` fields, so
-they can be edited in the inspector, saved as `.tres` and later shown in the
-tweak panel. `Skeleton.new()` uses the defaults above; `Skeleton.new(grammar)`
+they can be edited in the inspector, saved as `.tres` and changed live in the
+skeleton viewer's tweak panel, which generates its sliders from those
+exports. `Skeleton.new()` uses the defaults above; `Skeleton.new(grammar)`
 takes a tuned one.
 
 ### Worked example
