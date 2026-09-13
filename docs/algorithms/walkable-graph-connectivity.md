@@ -297,3 +297,13 @@ used only by the connectivity check to place its samples.
   [[GLOSSARY#Region]], [[GLOSSARY#Boundary edge]], [[GLOSSARY#Tunnel edge]].
 - Decision: [[0017-region-spanning-trees-with-tunnels]].
 - Code: [[walkable-graph]].
+
+## What it looks like
+
+![Walkable graph of a 7^3 region at seed 0 seen from outside](../images/walkable-graph-outside.png)
+
+![The graph around the camera inside the world at seed 0](../images/walkable-graph-inside.png)
+
+Corridors are white, stairs and ladders yellow, bridges cyan, catwalks green
+and tunnels magenta. Both renders come from `mise run shot` on
+`scenes/skeleton_viewer.tscn`.
