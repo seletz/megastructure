@@ -7,17 +7,19 @@ extends RefCounted
 ##     for record in rasteriser.records_for_sector(Vector3i(0, 0, 0)):
 ##         print(record.cell, EdgeRasteriser.family_name(record.family), record.orientation)
 ##
-## Every edge of `WalkableGraph.edges_for_sector` becomes a path from the
+## Every edge of `WalkableGraph.edges_for_sector` becomes a walk from the
 ## sector's hub (its interior node, or the centre of a solid sector) to the
-## edge's portal cell on the face, plus the portal cell itself. Horizontal
-## travel is an L of cells at the hub's floor level in the family of the
-## sector type (FLOOR in stratum, CATWALK in shaft, BRIDGE in cavity and
-## chasm, TUNNEL in solid), so the paths of one sector share one family and
-## meet at the hub. Level changes are stairs (one cell up per cell of run, so
-## one stratum in 3 cells) or ladders (one column). All portal cells are
-## placed first; records at the same cell merge by `merge`, and an edge whose
-## path would conflict with the records before it tries its next routing.
-## When none fits it keeps only its portal cell and is listed as rejected. Rules and a worked example are in
+## edge's portal cell on the face, ending in the portal cell itself. Flat
+## cells are in the family of the sector type (FLOOR in stratum, CATWALK in
+## shaft, BRIDGE in cavity and chasm, TUNNEL in solid), so the walks of one
+## sector share one family and meet at the hub. Flat cells never change
+## level: a walk goes flat at the hub's level, climbs to the portal's level by
+## an oriented stair run (3 cells of run per stratum, turning only at flat
+## landings) or, in shaft and chasm sectors, by a ladder, and reaches the
+## portal flat. All portal cells are placed first; records at the same cell
+## merge by `merge`, and an edge whose walk would conflict with the records
+## before it tries its next routing. When none fits it keeps only its portal
+## cell and is listed as rejected. Rules and a worked example are in
 ## docs/algorithms/edge-rasteriser.md.
 
 ## Tile families a record restricts its cell to.
@@ -113,7 +115,7 @@ func rasterise(sector: Vector3i) -> SectorRaster:
 	edges.sort_custom(_edge_before)
 
 	var n := graph.cells_per_sector()
-	var hub := _hub(sector, n)
+	var hub := hub_cell(sector)
 	var surface := surface_family(graph.skeleton.sector_type(graph.world_seed, sector))
 	# Accepted records by cell.
 	var cells := {}
@@ -206,7 +208,8 @@ static func yaw_of(dir: Vector3i) -> int:
 
 ## The point every path of the sector meets at: the interior node, or for a
 ## solid sector the centre cell at the floor level nearest below it.
-func _hub(sector: Vector3i, n: int) -> Vector3i:
+func hub_cell(sector: Vector3i) -> Vector3i:
+	var n := graph.cells_per_sector()
 	var node := graph.interior_node(sector)
 	if node != null:
 		return node.local_cell
@@ -239,153 +242,185 @@ func _portal_record(sector: Vector3i, edge: WalkableGraph.Edge, n: int) -> Recor
 	return Record.make(cell, TileFamily.PORTAL_OPENING, orientation, edge_ref(edge))
 
 
-## The routings of an edge, most preferred first. Each is a record list that
-## is consistent on its own.
+## The routings of an edge, most preferred first. Each lists its records in
+## walking order, from the hub to the portal cell, and is consistent on its
+## own. Every level change is explicit: the path walks flat at the hub's
+## level, climbs a stair run (a ladder in shaft and chasm sectors) and walks
+## flat again at the other level; no flat cell ever changes level.
 func _candidates(sector: Vector3i, edge: WalkableGraph.Edge, hub: Vector3i, surface: TileFamily, n: int) -> Array[Array]:
 	var result: Array[Array] = []
 	var portal := _portal_record(sector, edge, n)
+	var type := graph.skeleton.sector_type(graph.world_seed, sector)
+	var by_ladder := type == Skeleton.SectorType.SHAFT or type == Skeleton.SectorType.CHASM
 	if edge.axis == Vector3i.AXIS_Y:
-		_vertical_candidates(sector, edge, hub, surface, n, portal, result)
+		_vertical_candidates(sector, edge, hub, surface, n, portal, by_ladder, result)
 	else:
-		_horizontal_candidates(edge, hub, surface, n, portal, result)
+		_horizontal_candidates(edge, hub, surface, n, portal, by_ladder, result)
 	return result
 
 
-## Horizontal edges: the last leg of the L runs into the portal either across
-## the face (along the edge axis) or along the face wall; catwalks prefer the
-## wall. A level change sits on the last leg next to the portal: a stair when
-## its run fits, else a ladder in the cell before the portal.
-func _horizontal_candidates(edge: WalkableGraph.Edge, hub: Vector3i, surface: TileFamily, n: int, portal: Record, result: Array[Array]) -> void:
+## Horizontal edges: the path reaches the portal `p` along the edge axis
+## (across the face) or along the face wall; catwalks prefer the wall. A
+## level change sits next to the portal: a stair run leaving `p` in that
+## direction, or in a shaft or chasm a ladder in the cell before `p`.
+func _horizontal_candidates(edge: WalkableGraph.Edge, hub: Vector3i, surface: TileFamily, n: int, portal: Record, by_ladder: bool, result: Array[Array]) -> void:
 	var ref := portal.edge_ref
 	var p := portal.cell
 	var face_axis := Vector3i.AXIS_Z if edge.axis == Vector3i.AXIS_X else Vector3i.AXIS_X
 	var last_axes: Array[int] = [edge.axis, face_axis]
 	if edge.kind == WalkableGraph.EdgeKind.CATWALK:
 		last_axes = [face_axis, edge.axis]
-	var rise := p.y - hub.y
 	for last_axis in last_axes:
-		# Directions along the last leg towards the portal, preferred first.
+		var other_axis := face_axis if last_axis == edge.axis else edge.axis
+		# Directions leaving the portal into the sector, preferred first.
 		var dirs: Array[Vector3i] = []
 		if last_axis == edge.axis:
-			dirs.append(_unit(last_axis, 1 if p[last_axis] == n - 1 else -1))
+			dirs.append(_unit(last_axis, -1 if p[last_axis] == n - 1 else 1))
 		else:
-			var toward := signi(p[last_axis] - hub[last_axis])
-			if toward == 0:
-				toward = 1
-			dirs.append(_unit(last_axis, toward))
-			dirs.append(_unit(last_axis, -toward))
-		var other_axis := face_axis if last_axis == edge.axis else edge.axis
-		if rise == 0:
-			var plain: Array[Record] = [portal]
-			_append_route(plain, hub, p, other_axis, surface, ref)
+			var toward_hub := signi(hub[last_axis] - p[last_axis])
+			if toward_hub == 0:
+				toward_hub = 1
+			dirs.append(_unit(last_axis, toward_hub))
+			dirs.append(_unit(last_axis, -toward_hub))
+		if p.y == hub.y:
+			var plain: Array[Record] = []
+			_append_route(plain, hub, p, other_axis, surface, ref, false)
+			plain.append(portal)
 			result.append(plain)
 			continue
-		for dir in dirs:
-			var steps := absi(rise)
-			var landing := p - dir * (steps + 1)
-			landing.y = hub.y
-			if not _inside(landing, n):
+		if by_ladder:
+			var foot := p + dirs[0]
+			if not _inside(foot, n):
 				continue
-			var stair: Array[Record] = [portal]
-			if rise > 0:
-				_append_stair(stair, landing, dir, steps, ref)
-			else:
-				_append_stair(stair, p, -dir, steps, ref)
-			_append_route(stair, hub, landing, _first_axis(hub, landing, p, last_axis, other_axis), surface, ref)
-			result.append(stair)
-		var before := p - dirs[0]
-		if _inside(before, n):
-			var ladder: Array[Record] = [portal]
-			_append_ladder(ladder, before, mini(p.y, hub.y), maxi(p.y, hub.y), ref)
-			_append_route(ladder, hub, Vector3i(before.x, hub.y, before.z), other_axis, surface, ref)
+			var ladder: Array[Record] = []
+			_append_route(ladder, hub, Vector3i(foot.x, hub.y, foot.z), other_axis, surface, ref, false)
+			_append_ladder(ladder, foot, hub.y, p.y, ref)
+			ladder.append(portal)
 			result.append(ladder)
+			continue
+		for dir in dirs:
+			var stair := _stair_run(p, hub, dir, surface, ref, n)
+			if not stair.is_empty():
+				stair.append(portal)
+				result.append(stair)
 
 
-## Vertical edges: the run climbs from the hub's level to the portal cell at
-## the top of the sector (lower sector) or from the portal cell at the bottom
-## (upper sector) to the hub's level. Stair edges try a straight stair in the
-## four directions, then a ladder; ladder and tunnel edges only a ladder. A
-## ladder stands in the portal column or, failing that, in a column beside
-## it. The route to the stair's landing ends along the stair.
-func _vertical_candidates(sector: Vector3i, edge: WalkableGraph.Edge, hub: Vector3i, surface: TileFamily, n: int, portal: Record, result: Array[Array]) -> void:
+## Vertical edges: the portal cell is at the top of the lower sector
+## (y = n - 1) or the bottom of the upper one (y = 0), and the run joins it to
+## the hub's level. Outside shafts and chasms a stair run leaves the portal
+## column in each of the four directions in turn; in a shaft or chasm a ladder
+## stands in the portal column, or failing that in a column beside it and
+## reaching the portal's height, so the climber steps across into it.
+func _vertical_candidates(sector: Vector3i, edge: WalkableGraph.Edge, hub: Vector3i, surface: TileFamily, n: int, portal: Record, by_ladder: bool, result: Array[Array]) -> void:
 	var ref := portal.edge_ref
 	var column := portal.cell
 	var lower := sector == edge.a
-	if edge.kind == WalkableGraph.EdgeKind.STAIR:
+	if not by_ladder:
 		for dir in _YAW_DIRS:
-			var stair: Array[Record] = [portal]
-			var landing: Vector3i
-			if lower:
-				var steps := n - 1 - hub.y
-				landing = column - dir * (steps + 1)
-				landing.y = hub.y
-				if not _inside(landing, n):
-					continue
-				_append_stair(stair, landing, dir, steps, ref)
-			else:
-				var steps := hub.y
-				landing = column + dir * (steps + 1)
-				landing.y = hub.y
-				if not _inside(landing, n):
-					continue
-				_append_stair(stair, column, dir, steps, ref)
-			var stair_axis := Vector3i.AXIS_X if dir.x != 0 else Vector3i.AXIS_Z
-			var cross_axis := Vector3i.AXIS_Z if stair_axis == Vector3i.AXIS_X else Vector3i.AXIS_X
-			_append_route(stair, hub, landing, cross_axis, surface, ref)
-			result.append(stair)
-	# A ladder in the portal column, then in each column beside it, reaching
-	# the portal cell's height so the climber steps across into it.
+			var stair := _stair_run(column, hub, dir, surface, ref, n)
+			if not stair.is_empty():
+				stair.append(portal)
+				result.append(stair)
+		return
 	var offsets: Array[Vector3i] = [Vector3i.ZERO]
 	offsets.append_array(_YAW_DIRS)
 	for offset in offsets:
 		var foot := column + offset
 		if not _inside(foot, n):
 			continue
+		var top := n - 2 if offset == Vector3i.ZERO else n - 1
+		var bottom := 1 if offset == Vector3i.ZERO else 0
 		for first_axis in [Vector3i.AXIS_X, Vector3i.AXIS_Z]:
-			var ladder: Array[Record] = [portal]
-			if offset == Vector3i.ZERO:
-				_append_ladder(ladder, foot, hub.y if lower else 1, n - 2 if lower else hub.y, ref)
-			else:
-				_append_ladder(ladder, foot, hub.y if lower else 0, n - 1 if lower else hub.y, ref)
-			_append_route(ladder, hub, Vector3i(foot.x, hub.y, foot.z), first_axis, surface, ref)
+			var ladder: Array[Record] = []
+			_append_route(ladder, hub, Vector3i(foot.x, hub.y, foot.z), first_axis, surface, ref, false)
+			_append_ladder(ladder, foot, hub.y, top if lower else bottom, ref)
+			ladder.append(portal)
 			result.append(ladder)
 
 
-## The first leg of the route to a stair landing: across the stair line, so
-## the route meets the landing from outside the stair, unless the hub lies
-## between the landing and the portal, where walking along first keeps the
-## route off the stair line.
-static func _first_axis(hub: Vector3i, landing: Vector3i, p: Vector3i, last_axis: int, other_axis: int) -> int:
-	var h := hub[last_axis]
-	if (h > landing[last_axis] and h <= p[last_axis]) or (h < landing[last_axis] and h >= p[last_axis]):
-		return last_axis
-	return other_axis
+## A stair run from the hub's level to the flat cell `end` (the portal),
+## in walking order from the hub, without `end`; empty when it does not fit.
+##
+## The run is built backwards from `end`: it leaves `end` in `first_dir`, one
+## stair cell per level cell, and keeps its direction while the next flight
+## (the steps up to the next floor level, 3 per stratum) and the cell after it
+## fit in the sector. Otherwise it turns at a flat landing, preferring the
+## side towards the sector centre, then the other side, then back. The last
+## flat cell at the hub's level is the landing the route from the hub
+## reaches, along the stair when the hub lies behind it, else across it.
+func _stair_run(end: Vector3i, hub: Vector3i, first_dir: Vector3i, surface: TileFamily, ref: Vector4i, n: int) -> Array[Record]:
+	var outward: Array[Record] = []
+	var up := 1 if hub.y > end.y else -1
+	var remaining := absi(hub.y - end.y)
+	# The stair cells of a flight step from `cursor`; `h` is the floor height
+	# where the flight starts.
+	var cursor := end
+	var h := end.y
+	var dir := Vector3i.ZERO
+	var pitch := WalkableGraph.STRATUM_PITCH_CELLS
+	while remaining > 0:
+		var to_level := pitch - posmod(h, pitch) if up > 0 else (posmod(h, pitch) if posmod(h, pitch) != 0 else pitch)
+		var flight := mini(to_level, remaining)
+		var options: Array[Vector3i] = [first_dir]
+		if dir != Vector3i.ZERO:
+			var side := _unit(Vector3i.AXIS_Z if dir.x != 0 else Vector3i.AXIS_X, 1)
+			var centre := n / 2
+			var toward := signi(centre - _dot(cursor, side))
+			options = [dir, side * (toward if toward != 0 else 1), side * -(toward if toward != 0 else 1), -dir]
+		var chosen := Vector3i.ZERO
+		var start := cursor
+		for d in options:
+			start = cursor if d == dir or dir == Vector3i.ZERO else cursor + dir
+			if _inside(start, n) and _inside(start + d * (flight + 1), n):
+				chosen = d
+				break
+		if chosen == Vector3i.ZERO:
+			return []
+		if start != cursor:
+			outward.append(Record.make(Vector3i(start.x, h, start.z), surface, 0, ref))
+		for k in range(1, flight + 1):
+			var cell := start + chosen * k
+			cell.y = h + k - 1 if up > 0 else h - k
+			outward.append(Record.make(cell, TileFamily.STAIR, yaw_of(chosen if up > 0 else -chosen), ref))
+		cursor = start + chosen * flight
+		h += up * flight
+		dir = chosen
+		remaining -= flight
+	var landing := cursor + dir
+	landing.y = h
+
+	var result: Array[Record] = []
+	var behind := _dot(hub - landing, dir) < 0
+	var dir_axis := Vector3i.AXIS_X if dir.x != 0 else Vector3i.AXIS_Z
+	var cross_axis := Vector3i.AXIS_X + Vector3i.AXIS_Z - dir_axis
+	_append_route(result, hub, landing, dir_axis if behind else cross_axis, surface, ref, true)
+	outward.reverse()
+	result.append_array(outward)
+	return result
 
 
 ## Surface cells from `from` to `to` (same height), along `first_axis`, then
-## along the other horizontal axis, both ends included.
-static func _append_route(out: Array[Record], from: Vector3i, to: Vector3i, first_axis: int, family: TileFamily, ref: Vector4i) -> void:
+## along the other horizontal axis, in walking order; `to` only when
+## `include_end`.
+static func _append_route(out: Array[Record], from: Vector3i, to: Vector3i, first_axis: int, family: TileFamily, ref: Vector4i, include_end: bool) -> void:
 	var cell := from
-	out.append(Record.make(cell, family, 0, ref))
+	var cells: Array[Vector3i] = [cell]
 	for axis in [first_axis, Vector3i.AXIS_X + Vector3i.AXIS_Z - first_axis]:
 		var step := signi(to[axis] - cell[axis])
 		while cell[axis] != to[axis]:
 			cell[axis] += step
-			out.append(Record.make(cell, family, 0, ref))
+			cells.append(cell)
+	if not include_end:
+		cells.pop_back()
+	for c in cells:
+		out.append(Record.make(c, family, 0, ref))
 
 
-## Stair cells climbing from a landing at `low` in direction `dir`: cell k
-## (1..steps) is `low + dir * k` at height `low.y + k - 1`, ramping to the
-## next level; the upper landing is `low + dir * (steps + 1)` at `low.y + steps`.
-static func _append_stair(out: Array[Record], low: Vector3i, dir: Vector3i, steps: int, ref: Vector4i) -> void:
-	var yaw := yaw_of(dir)
-	for k in range(1, steps + 1):
-		out.append(Record.make(low + dir * k + _UP * (k - 1), TileFamily.STAIR, yaw, ref))
-
-
-## Ladder cells in one column from height `lo` to `hi`, both included.
-static func _append_ladder(out: Array[Record], column: Vector3i, lo: int, hi: int, ref: Vector4i) -> void:
-	for y in range(lo, hi + 1):
+## Ladder cells in one column from height `from_y` to `to_y`, both included,
+## in climbing order.
+static func _append_ladder(out: Array[Record], column: Vector3i, from_y: int, to_y: int, ref: Vector4i) -> void:
+	var step := 1 if to_y >= from_y else -1
+	for y in range(from_y, to_y + step, step):
 		out.append(Record.make(Vector3i(column.x, y, column.z), TileFamily.LADDER, ORIENTATION_UP, ref))
 
 
@@ -406,6 +441,10 @@ static func _merge_all(cells: Dictionary, records: Array[Record]) -> Variant:
 
 static func _inside(cell: Vector3i, n: int) -> bool:
 	return cell.x >= 0 and cell.x < n and cell.y >= 0 and cell.y < n and cell.z >= 0 and cell.z < n
+
+
+static func _dot(p: Vector3i, q: Vector3i) -> int:
+	return p.x * q.x + p.y * q.y + p.z * q.z
 
 
 static func _unit(axis: int, sign_value: int) -> Vector3i:

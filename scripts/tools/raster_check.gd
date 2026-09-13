@@ -9,9 +9,12 @@ extends SceneTree
 ## raw records at one cell conflict; every edge of the sector has a portal
 ## opening at its portal cell in both of its endpoint sectors, so each
 ## endpoint has at least one record; no edge is rejected; the records of a
-## sector form one 26-connected group. `merge` is also checked to be
+## sector form one 26-connected group; every edge's routing is a walk from
+## the hub to its portal cell in which flat cells never change level and
+## every level change is a stair run or a ladder. `merge` is also checked to be
 ## commutative over every pair of families and orientations.
-## Prints the family counts and the mean records per sector.
+## Prints the family counts, the mean records per sector and the stair,
+## ladder and landing cells that level changes produce.
 ## Run headless with `mise run raster-check`.
 
 const SEEDS: Array[int] = [0, 1, 2, 3, 4]
@@ -41,7 +44,7 @@ func _init() -> void:
 	_check_merge()
 	var families := PackedInt32Array()
 	families.resize(EdgeRasteriser.TileFamily.size())
-	var totals := {"sectors": 0, "with_edges": 0, "records": 0, "edges": 0, "rejected": 0, "fallbacks": 0}
+	var totals := {"sectors": 0, "with_edges": 0, "records": 0, "edges": 0, "rejected": 0, "fallbacks": 0, "level_edges": 0, "horizontal_stairs": 0, "vertical_stairs": 0, "ladders": 0, "landings": 0}
 	for seed_value in SEEDS:
 		_check_seed(seed_value, families, totals)
 	var parts := PackedStringArray()
@@ -51,6 +54,7 @@ func _init() -> void:
 	print("all seeds:")
 	print("  %d sectors, %d with edges, %d edges, %d on a fallback routing, %d rejected" % [totals.sectors, totals.with_edges, totals.edges, totals.fallbacks, totals.rejected])
 	print("  families: %s" % ", ".join(parts))
+	print("  level changes: %d horizontal edge ends change level; %d stair cells on horizontal edges, %d on vertical edges, %d ladder cells, %d landing cells" % [totals.level_edges, totals.horizontal_stairs, totals.vertical_stairs, totals.ladders, totals.landings])
 	print("  mean records per sector %.1f (%.1f per sector with edges)" % [float(totals.records) / maxi(totals.sectors, 1), float(totals.records) / maxi(totals.with_edges, 1)])
 	print("raster check: %s" % ("ok" if _failures == 0 else "%d failure(s)" % _failures))
 	quit(0 if _failures == 0 else 1)
@@ -63,7 +67,7 @@ func _check_seed(seed_value: int, families: PackedInt32Array, totals: Dictionary
 	_expect(rasteriser.graph.cells_per_sector() == CELLS, "%s %d cells per sector" % [label, CELLS])
 	# Rasters by sector, so endpoint sectors are computed once.
 	var rasters := {}
-	var bad := {"fresh": 0, "bounds": 0, "duplicate": 0, "conflict": 0, "endpoint": 0, "rejected": 0, "split": 0}
+	var bad := {"fresh": 0, "bounds": 0, "duplicate": 0, "conflict": 0, "endpoint": 0, "rejected": 0, "split": 0, "walk": 0}
 	var with_edges := 0
 	var records := 0
 	var edges := 0
@@ -82,6 +86,7 @@ func _check_seed(seed_value: int, families: PackedInt32Array, totals: Dictionary
 		for record in raster.records:
 			families[record.family] += 1
 		_check_cells(raster, bad)
+		_check_walks(rasteriser, raster, sector_edges, bad, totals)
 		for edge in sector_edges:
 			for end in [edge.a, edge.b]:
 				if not _has_portal(_raster(rasteriser, rasters, end), end, edge):
@@ -94,6 +99,7 @@ func _check_seed(seed_value: int, families: PackedInt32Array, totals: Dictionary
 	_expect(bad.conflict == 0, "%s no conflicting records in %d sectors, %d conflicts" % [label, SECTORS_PER_SEED, bad.conflict])
 	_expect(bad.endpoint == 0, "%s both endpoint sectors of all %d edges have the portal opening, %d miss it" % [label, edges, bad.endpoint])
 	_expect(bad.rejected == 0, "%s no edge rejected, %d are" % [label, bad.rejected])
+	_expect(bad.walk == 0, "%s every routing walks from the hub to its portal with explicit stairs and ladders, %d do not" % [label, bad.walk])
 	_expect(bad.split == 0, "%s the records of every sector are one 26-connected group, %d sectors are split" % [label, bad.split])
 	print("  info  %s %d of %d sectors have edges, %.1f records per sector with edges, %.2f %% of their cells" % [label, with_edges, SECTORS_PER_SEED, float(records) / maxi(with_edges, 1), 100.0 * records / maxi(with_edges * CELLS ** 3, 1)])
 	totals.sectors += SECTORS_PER_SEED
@@ -132,6 +138,69 @@ func _check_cells(raster: EdgeRasteriser.SectorRaster, bad: Dictionary) -> void:
 			if not raw.has(record.cell):
 				raw[record.cell] = []
 			raw[record.cell].append(record)
+
+
+## Each edge's routing, in walking order, starts at the hub, ends at the
+## portal cell and only takes steps a walker can: flat to flat at one level,
+## onto, along and off a stair in its orientation, or on and off a ladder.
+## Also counts what level changes produced.
+func _check_walks(rasteriser: EdgeRasteriser, raster: EdgeRasteriser.SectorRaster, edges: Array[WalkableGraph.Edge], bad: Dictionary, totals: Dictionary) -> void:
+	var hub := rasteriser.hub_cell(raster.sector)
+	for edge in edges:
+		var ref := EdgeRasteriser.edge_ref(edge)
+		var walk: Array = raster.edge_records.get(ref, [])
+		var portal := EdgeRasteriser.portal_cell(raster.sector, edge, CELLS)
+		if edge.axis != Vector3i.AXIS_Y and portal.y != hub.y:
+			totals.level_edges += 1
+		if walk.is_empty() or walk[0].cell != hub or walk[-1].cell != portal:
+			bad.walk += 1
+			continue
+		for i in walk.size():
+			var record: EdgeRasteriser.Record = walk[i]
+			match record.family:
+				EdgeRasteriser.TileFamily.STAIR:
+					if edge.axis == Vector3i.AXIS_Y:
+						totals.vertical_stairs += 1
+					else:
+						totals.horizontal_stairs += 1
+				EdgeRasteriser.TileFamily.LADDER:
+					totals.ladders += 1
+				EdgeRasteriser.TileFamily.PORTAL_OPENING:
+					pass
+				_:
+					if record.cell.y != hub.y:
+						totals.landings += 1
+			if i > 0 and not _step_ok(walk[i - 1], record):
+				bad.walk += 1
+				break
+
+
+static func _step_ok(p: EdgeRasteriser.Record, q: EdgeRasteriser.Record) -> bool:
+	var d := q.cell - p.cell
+	var flat := absi(d.x) + absi(d.z)
+	var stair := EdgeRasteriser.TileFamily.STAIR
+	var ladder := EdgeRasteriser.TileFamily.LADDER
+	if p.family == ladder or q.family == ladder:
+		return (flat == 1 and d.y == 0) or (flat == 0 and absi(d.y) == 1)
+	if flat != 1:
+		return false
+	var dir := Vector3i(d.x, 0, d.z)
+	if p.family != stair and q.family != stair:
+		return d.y == 0
+	if p.family != stair:
+		# Onto the bottom step going up, or onto the top step going down.
+		var forward := _forward(q)
+		return (d.y == 0 and dir == forward) or (d.y == -1 and dir == -forward)
+	if q.family != stair:
+		var forward := _forward(p)
+		return (d.y == 1 and dir == forward) or (d.y == 0 and dir == -forward)
+	if p.orientation != q.orientation:
+		return false
+	return (d.y == 1 and dir == _forward(p)) or (d.y == -1 and dir == -_forward(p))
+
+
+static func _forward(record: EdgeRasteriser.Record) -> Vector3i:
+	return [Vector3i(1, 0, 0), Vector3i(0, 0, -1), Vector3i(-1, 0, 0), Vector3i(0, 0, 1)][record.orientation]
 
 
 func _has_portal(raster: EdgeRasteriser.SectorRaster, sector: Vector3i, edge: WalkableGraph.Edge) -> bool:
