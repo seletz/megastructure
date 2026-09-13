@@ -388,7 +388,9 @@ Subtle random noise added to each frame to mimic photographic film and break
 up smooth gradients.
 
 In this project: `grain_amount` and `grain_fps` in
-[post.gdshaderinc](../shaders/include/post.gdshaderinc).
+[post.gdshaderinc](../shaders/include/post.gdshaderinc), off by default
+because it flickers at half render resolution
+([[0013-film-grain-off-by-default]]).
 
 ### Fog
 

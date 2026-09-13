@@ -14,7 +14,11 @@ uniform float fog_density : hint_range(0.0, 0.05, 0.0001) = 0.0032;
 
 group_uniforms post;
 uniform float exposure : hint_range(0.0, 8.0, 0.01) = 1.7;
-uniform float grain_amount : hint_range(0.0, 0.5, 0.001) = 0.04;
+// Off by default, unlike the prototype's 0.04: the grain is hashed per render
+// pixel, and at rendering/scaling_3d/scale=0.5 each speck covers a 2x2 block
+// of screen pixels that flickers at grain_fps, which reads as snow rather than
+// film grain. The knob stays for full-resolution renders and presets.
+uniform float grain_amount : hint_range(0.0, 0.5, 0.001) = 0.0;
 uniform float grain_fps : hint_range(1.0, 120.0, 1.0) = 24.0;
 uniform float vignette : hint_range(0.0, 2.0, 0.01) = 0.3;
 group_uniforms;
