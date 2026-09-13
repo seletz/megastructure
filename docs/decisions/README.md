@@ -24,7 +24,7 @@ status: current
 | 0004 | 2026-09-13 | [[0004-shared-integer-hash-replaces-float-hash\|Shared integer hash replaces the float hash]] | accepted |
 | 0005 | 2026-09-13 | [[0005-right-handed-prototype-camera-basis\|Right-handed camera basis in the prototypes]] | accepted |
 | 0006 | 2026-09-13 | [[0006-tightened-distance-field-bounds\|Distance-field bounds tightened versus the prototype]] | accepted |
-| 0007 | 2026-09-13 | [[0007-keep-overlaid-facade-layouts\|Keep the overlaid facade layouts for now]] | open |
+| 0007 | 2026-09-13 | [[0007-facade-layout-overlay-knob\|Facade layout overlay as a knob, prototype default]] | accepted |
 | 0008 | 2026-09-13 | [[0008-godot-native-rendering-for-the-generative-world\|Godot-native rendering for the generative world]] | accepted |
 | 0009 | 2026-09-13 | [[0009-face-first-order-independent-sector-boundaries\|Face-first, order-independent sector boundaries]] | proposed |
 | 0010 | 2026-09-13 | [[0010-near-universal-solid-tile-with-seeded-restarts\|Near-universal solid tile with seeded restarts, no backtracking]] | proposed |
