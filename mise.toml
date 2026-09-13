@@ -1,0 +1,41 @@
+[tools]
+godot = "4.7.2-stable"
+
+[tasks.editor]
+description = "Open the project in the Godot editor"
+run = "godot --editor --path ."
+
+[tasks.run]
+description = "Run the project (main scene)"
+run = "godot --path ."
+
+[tasks.import]
+description = "Import all assets headlessly (regenerates .godot/)"
+run = "godot --headless --path . --import"
+
+[tasks.check]
+description = "Import assets and verify the project loads headlessly"
+depends = ["import"]
+run = "godot --headless --editor --path . --quit"
+
+[tasks.export]
+description = "Export a release build. Usage: mise run export <preset> <output-path>"
+depends = ["import"]
+run = "godot --headless --path . --export-release \"${usage_preset}\" \"${usage_output}\""
+usage = '''
+arg "<preset>" help="Export preset name from export_presets.cfg"
+arg "<output>" help="Output file path, e.g. build/linux/megastructure.x86_64"
+'''
+
+[tasks.export-debug]
+description = "Export a debug build. Usage: mise run export-debug <preset> <output-path>"
+depends = ["import"]
+run = "godot --headless --path . --export-debug \"${usage_preset}\" \"${usage_output}\""
+usage = '''
+arg "<preset>" help="Export preset name from export_presets.cfg"
+arg "<output>" help="Output file path"
+'''
+
+[tasks.clean]
+description = "Remove generated import cache and build output"
+run = "rm -rf .godot build"
