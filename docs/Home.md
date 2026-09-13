@@ -14,6 +14,11 @@ status: current
 > and where each idea lives in the source code. Start with the concept, then
 > follow the links. How notes are written is described in [[CONVENTIONS]].
 
+## Glossary
+
+- [[GLOSSARY]]: plain definitions of the jargon used across the wiki and the
+  code. Start here when a term is unfamiliar.
+
 ## Concept
 
 - [[MEGASTRUCTURE_CONCEPT]]: design goals, the three-layer generation
@@ -34,24 +39,25 @@ status: current
 
 ## Algorithms
 
-- [[hash_vectors]]: the shared integer hash that drives every layout
-  decision, implemented identically in the shader, GDScript and the
-  prototypes, with reference vectors.
-- Algorithm notes (planned in #58): one note per algorithm, such as the
-  sector grammar, the walkable graph and the WFC solver.
+- [[algorithms/README|Algorithm notes]]: one readable note per algorithm:
+  the [[integer-hash]], [[sdf-ray-marching]] and the
+  [[chasm-distance-field]] behind the current prototype, and
+  [[wave-function-collapse]], [[model-synthesis-and-sectors]],
+  [[socket-adjacency]] and [[sector-skeleton-and-walkable-graph]] for the
+  generative world to come.
+- [[hash_vectors]]: reference vectors for the shared integer hash.
 
 ## Papers and references
 
-- Papers library (planned in #57): one note per paper or reference with its
-  citation, a summary, and the PDF where the licence allows it.
-- Until then, references are cited inline in [[RESEARCH_WFC]].
+- [[papers/README|Papers and references]]: one note per paper, talk or
+  documentation page with its citation, a plain-language summary and why it
+  matters here. PDFs are stored only where the licence allows it; the index
+  says which.
 
 ## Decisions
 
-- Decision log (planned in #59): one note per decision in ADR style.
-- Decisions already recorded in existing documents:
-  - [[PLAN_0.0.1#Decision: shared integer hash]]
-  - [[RESEARCH_WFC#Decisions to make]] (open)
+- [[decisions/README|Decision log]]: one dated note per decision with its
+  context, the decision and its consequences. Open questions are marked.
 
 ## Code map
 
