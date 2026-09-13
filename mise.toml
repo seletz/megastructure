@@ -130,3 +130,7 @@ run = "godot --path . --script res://scripts/tools/seed_check.gd"
 [tasks.screenshot-check]
 description = "Verify the HUD screenshot is saved with the HUD hidden (opens a window)"
 run = "godot --path . --script res://scripts/tools/screenshot_check.gd"
+
+[tasks.preset-check]
+description = "Verify presets save, reload and restore every value bitwise (headless)"
+run = "godot --headless --path . --script res://scripts/tools/preset_check.gd"

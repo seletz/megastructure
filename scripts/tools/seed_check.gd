@@ -20,10 +20,12 @@ func _run() -> void:
 	_check_clamp()
 
 	var main := MAIN_SCENE.instantiate()
+	var panel := main.get_node("TweakPanel") as TweakPanel
+	# Saved presets would override the default seed this check starts from.
+	panel.restore_last = false
 	root.add_child(main)
 	var quad := main.get_node(QUAD_PATH) as MeshInstance3D
 	var material := quad.get_active_material(0) as ShaderMaterial
-	var panel := main.get_node("TweakPanel") as TweakPanel
 	var control := _find_seed_control(panel)
 	_expect(control != null, "tweak panel contains a SeedControl")
 
