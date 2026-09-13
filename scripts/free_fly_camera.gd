@@ -5,6 +5,12 @@ extends Camera3D
 ## Right mouse drag (or a captured mouse, toggled with Esc) looks around.
 ## WASD moves in the camera's forward/right plane, Q/E moves down/up along
 ## world Y, Shift is a fast multiplier and the mouse wheel scales the base speed.
+##
+## Yaw and pitch use the prototype's convention, so exported values and
+## screenshots line up with the HTML prototypes:
+##     forward = (cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw))
+## Yaw 0 therefore looks toward +Z. A Godot Camera3D looks toward -Z, so the
+## rotation applied to the node is offset by PI around Y.
 
 const PITCH_LIMIT := 1.5
 const WHEEL_STEP := 1.15
@@ -69,7 +75,8 @@ func _process(delta: float) -> void:
 
 
 func _apply_rotation() -> void:
-	rotation = Vector3(pitch, yaw, 0.0)
+	# Prototype yaw 0 looks toward +Z; Camera3D looks toward -Z, hence the PI offset.
+	rotation = Vector3(pitch, yaw + PI, 0.0)
 
 
 func _toggle_mouse_capture() -> void:
