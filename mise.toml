@@ -95,8 +95,14 @@ else
 	tag="${major}.${minor}.${patch}-${status}"
 fi
 
-data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
-dest="$data_home/godot/export_templates/$version"
+# Godot's editor data folder: ~/Library/Application Support/Godot on macOS,
+# $XDG_DATA_HOME/godot elsewhere.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+	data_dir="$HOME/Library/Application Support/Godot"
+else
+	data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/godot"
+fi
+dest="$data_dir/export_templates/$version"
 if [[ -f "$dest/version.txt" ]]; then
 	echo "Export templates $version already installed in $dest"
 	exit 0
