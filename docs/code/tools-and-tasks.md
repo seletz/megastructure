@@ -40,9 +40,13 @@ up to date.
 | `export-debug` | import | Same as `export` with a debug build. |
 | `release:notes` | | Prints the Unreleased section of [[CHANGELOG]], the notes of the next release. |
 | `release:changelog-roll` | | `release:changelog-roll <version> [--date YYYY-MM-DD] [--dry-run]`: renames Unreleased to `<version> - <date>`, opens a fresh Unreleased section above it and commits `chore(release): <version>`. |
-| `release:bump` | | `release:bump <patch\|minor\|major> [--dry-run]`: raises `config/version` in `project.godot`, commits `chore(release): start <new>` and prints the new version. |
+| `release:bump` | | `release:bump <patch\|minor\|major> [--push] [--dry-run]`: raises `config/version` in `project.godot`, commits `chore(release): start <new>`, pushes the current branch with `--push` and prints the new version. |
 | `release:package` | | `release:package <linux\|macos>`: packs the exported build into `build/release/megastructure-<version>-linux-x86_64.tar.gz` or `-macos-universal.zip`; in the release workflow it fails if the tag does not match the version. |
 | `release:release` | | Releases the version in `project.godot`: checks it runs on a clean, up-to-date `develop` with `gh` logged in, then calls `release:notes` and `release:changelog-roll`, tags `v<version>`, pushes, creates the GitHub release and calls `release:bump patch` and pushes. `--dry-run` prints every command instead. See [[releasing]]. |
+| `wt:new` | | `wt:new <issue> <slug> [--base-dir DIR] [--herdr] [--dry-run]`: fetches, creates the worktree `<issue>-<slug>` on a new branch from `origin/develop` (default folder `~/.herdr/worktrees/megastructure`), trusts it with mise and prints its path. See [[maintaining]]. |
+| `wt:rm` | | `wt:rm <branch> [--dry-run]`: refuses on uncommitted changes, an unfinished rebase or merge, or commits that are on no branch of origin; otherwise removes the worktree, deletes the branch and prunes. |
+| `pr:status` | | Lists open pull requests with branch, merge state and check results. |
+| `pr:merge` | | `pr:merge <number> [--no-rebase] [--timeout SECONDS] [--dry-run]`: rebases the PR's worktree onto `origin/develop` (aborting on conflict), pushes with `--force-with-lease`, waits for the `check` run of the pushed HEAD, merges with a merge commit and fast-forwards `develop` in the main checkout. See [[maintaining]]. |
 | `mcp` | | Runs the Godot MCP server over stdio, used by `.mcp.json`. |
 | `clean` | | Deletes `.godot/` and `build/`. |
 | `hash-vectors` | import | Prints the hash reference table ([[hash]]). Headless. |
@@ -65,7 +69,8 @@ The `release:*` tasks follow one rule: `develop` always carries the NEXT
 version. `release:release` tags the version already in `project.godot` and
 never edits it before tagging; right afterwards `release:bump patch` moves
 `develop` on ([[0014-develop-is-always-the-next-version]]). The file-changing
-release tasks print each command as `+ command` and accept `--dry-run`.
+release tasks print each command as `+ command` and accept `--dry-run`, and
+so do the `wt:*` and `pr:*` tasks that change anything.
 
 ## Tool scripts
 
@@ -96,5 +101,6 @@ exit with status 1 on any failure.
 - [[0001-all-automation-through-mise]]: why every command is a mise task.
 - [[ci-and-export]]: the CI workflows and export tasks in context.
 - [[releasing]]: the release tasks in the release process.
+- [[maintaining]]: the worktree and pull request tasks in the maintainer loop.
 - [[tweak-ui]], [[hash]]: what the checks test.
 - [[CONVENTIONS]]: keeping these notes in step with the code.

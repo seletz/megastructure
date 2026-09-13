@@ -102,14 +102,14 @@ previous milestone (for example 0.1.3). Raise the minor version first, on an
 issue branch like any other change, then release:
 
 ```sh
-mise run release:bump minor          # 0.1.3 -> 0.2.0, commits "chore(release): start 0.2.0"
-# push the branch, open and merge the pull request, then on develop:
+mise run release:bump minor --push   # 0.1.3 -> 0.2.0, commits "chore(release): start 0.2.0" and pushes
+# open and merge the pull request, then on develop:
 mise run release:release
 ```
 
 The skipped patch version was never released, so nothing is lost. Use
 `release:bump major` the same way for 1.0.0. `release:bump` accepts
-`--dry-run` too.
+`--push` (push the current branch after committing) and `--dry-run` too.
 
 ## Verifying a release
 
@@ -129,6 +129,7 @@ The skipped patch version was never released, so nothing is lost. Use
 - [[0014-develop-is-always-the-next-version]]: why the version moves on
   right after a release.
 - [[ci-and-export]]: the export presets and both workflows.
+- [[maintaining]]: the worktree and pull request tasks.
 - [[tools-and-tasks]]: every release task in the task table.
 - [[CONVENTIONS#Changelog]]: how changelog entries are written.
 - [mise.toml](../../mise.toml): the `release:*` tasks.
