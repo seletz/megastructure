@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/free_fly_camera.gd" id="1_camera"]
 [ext_resource type="Shader" path="res://shaders/raymarch_world.gdshader" id="2_raymarch"]
-[ext_resource type="PackedScene" uid="uid://epjp3hm7equ7" path="res://scenes/ui/tweak_panel.tscn" id="3_tweak_panel"]
+[ext_resource type="PackedScene" path="res://scenes/ui/tweak_panel.tscn" id="3_tweak_panel"]
 [ext_resource type="Script" path="res://scripts/seed_uniform.gd" id="4_seed_uniform"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="5_hud"]
 
