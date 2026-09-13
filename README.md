@@ -51,6 +51,11 @@ This downloads the pinned Godot build (see `mise.toml`) and the other tools.
 - [`docs/hash_vectors.md`](docs/hash_vectors.md): the shared integer hash
   used by the shader, GDScript and the prototypes, with reference vectors.
 
+## Contributing
+
+Branching, commit and pull request rules are in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Editing
 
 GDScript files use tabs. A Zed configuration for the Godot language server is
