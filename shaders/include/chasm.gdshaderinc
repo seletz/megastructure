@@ -54,6 +54,20 @@ uniform float pillar_radius_max : hint_range(0.5, 50.0, 0.1) = 12.0;
 // Rings sit at every deck level (deck_spacing) and stick out this far.
 uniform float ring_extra_radius : hint_range(0.0, 20.0, 0.1) = 2.5;
 uniform float ring_height : hint_range(0.0, 10.0, 0.05) = 1.6;
+
+group_uniforms chasm.bridges;
+// At most one bridge per cell of bridge_cell (x along the chasm, y vertical).
+uniform vec2 bridge_cell = vec2(90.0, 40.0);
+uniform float bridge_probability : hint_range(0.0, 1.0, 0.01) = 0.5;
+// Bridges whose hash exceeds 1 - bridge_tube_fraction are tubes, the rest slabs.
+uniform float bridge_tube_fraction : hint_range(0.0, 1.0, 0.01) = 0.3;
+uniform float bridge_tube_radius : hint_range(0.5, 20.0, 0.1) = 3.5;
+// Full width (x) and height (y) of a slab bridge.
+uniform vec2 bridge_slab_size = vec2(6.0, 2.8);
+uniform float bridge_broken_fraction : hint_range(0.0, 1.0, 0.01) = 0.4;
+// Full length (z) of the gap in a broken span.
+uniform float bridge_gap_min : hint_range(0.0, 200.0, 0.5) = 16.0;
+uniform float bridge_gap_max : hint_range(0.0, 200.0, 0.5) = 44.0;
 group_uniforms;
 
 // Profile of a feature running along x: centred at v across its height,
@@ -255,6 +269,56 @@ float chasm_pillars(vec3 p, out int mat) {
 	return d;
 }
 
+// The bridge of one bridge cell, 1e5 where the cell has none. Bridges span the
+// chasm along z, slabs end 30 m inside the facades and tubes run on. The
+// hashed offsets follow the prototype and are clamped so a bridge stays inside
+// its cell whenever it fits, which chasm_bridges relies on.
+float chasm_bridge(vec3 p, ivec2 id) {
+	ivec3 bc = ivec3(id, 0);
+	if (hash3(bc, 31u) >= bridge_probability) {
+		return 1e5;
+	}
+	bool tube = hash3(bc, 34u) > 1.0 - bridge_tube_fraction;
+	vec2 half_size = tube ? vec2(bridge_tube_radius) : bridge_slab_size * 0.5;
+	vec2 reach = max(bridge_cell * 0.5 - half_size, 0.0);
+	vec2 offset = (vec2(hash3(bc, 32u), hash3(bc, 33u)) - 0.5) * max(bridge_cell - vec2(14.0, 8.0), 0.0);
+	offset = clamp(offset, -reach, reach);
+	vec3 q = vec3(p.xy - (vec2(id) + 0.5) * bridge_cell - offset, p.z);
+	float br;
+	if (tube) {
+		br = length(q.xy) - bridge_tube_radius;
+	} else {
+		br = sdBox(q, vec3(half_size, chasm_half_width + 30.0));
+	}
+	if (hash3(bc, 35u) < bridge_broken_fraction) {
+		// The prototype cuts a 20 x 20 m box that encloses the default cross
+		// sections; cutting the whole slab of the gap is the same there.
+		float zb = (hash3(bc, 36u) - 0.5) * (2.0 * chasm_half_width - 60.0);
+		float gap = mix(bridge_gap_min, bridge_gap_max, hash3(bc, 37u)) * 0.5;
+		br = max(br, gap - abs(q.z - zb));
+	}
+	return br;
+}
+
+// Bridges across the void. The prototype only looks at the point's own cell;
+// a bridge offset towards a border may stand closer in the neighbour, so the
+// cells towards the nearer border in x, in y and diagonally are checked too.
+// Every other cell lies beyond one of the far borders.
+float chasm_bridges(vec3 p, out int mat) {
+	mat = CHASM_MAT_METAL;
+	vec2 bid = floor(p.xy / bridge_cell);
+	vec2 bl = p.xy - (bid + 0.5) * bridge_cell;
+	ivec2 id = ivec2(bid);
+	ivec2 s = ivec2(bl.x < 0.0 ? -1 : 1, bl.y < 0.0 ? -1 : 1);
+	vec2 far = bridge_cell * 0.5 + abs(bl);
+	float d = min(far.x, far.y);
+	d = min(d, chasm_bridge(p, id));
+	d = min(d, chasm_bridge(p, id + ivec2(s.x, 0)));
+	d = min(d, chasm_bridge(p, id + ivec2(0, s.y)));
+	d = min(d, chasm_bridge(p, id + s));
+	return d;
+}
+
 // Both facades, mirrored in z as the prototype does.
 float chasm_facades(vec3 p, out int mat) {
 	int mat_a;
@@ -265,12 +329,20 @@ float chasm_facades(vec3 p, out int mat) {
 	return min(d, d_b);
 }
 
-// The whole chasm: facades and pillars.
+// The whole chasm: facades, pillars and bridges.
 float chasm_map(vec3 p, out int mat) {
-	int mat_f;
 	int mat_p;
-	float d = chasm_facades(p, mat_f);
+	int mat_b;
+	float d = chasm_facades(p, mat);
 	float d_p = chasm_pillars(p, mat_p);
-	mat = d_p < d ? mat_p : mat_f;
-	return min(d, d_p);
+	if (d_p < d) {
+		d = d_p;
+		mat = mat_p;
+	}
+	float d_b = chasm_bridges(p, mat_b);
+	if (d_b < d) {
+		d = d_b;
+		mat = mat_b;
+	}
+	return d;
 }
