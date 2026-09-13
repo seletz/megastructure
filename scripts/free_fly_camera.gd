@@ -32,6 +32,14 @@ func _ready() -> void:
 	_apply_rotation()
 
 
+## Places the camera at a position with the given prototype yaw and pitch.
+func set_pose(new_position: Vector3, new_yaw: float, new_pitch: float) -> void:
+	position = new_position
+	yaw = new_yaw
+	pitch = new_pitch
+	_apply_rotation()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
