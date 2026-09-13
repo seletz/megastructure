@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3 uid="uid://c3fr4k8xm2n1q"]
+[gd_scene load_steps=8 format=3 uid="uid://c3fr4k8xm2n1q"]
 
 [ext_resource type="Script" path="res://scripts/free_fly_camera.gd" id="1_camera"]
+[ext_resource type="Shader" path="res://shaders/raymarch_world.gdshader" id="2_raymarch"]
 
 [sub_resource type="Environment" id="Environment_dark"]
 background_mode = 1
@@ -8,6 +9,22 @@ background_color = Color(0.02, 0.02, 0.03, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.25, 0.25, 0.3, 1)
 ambient_light_energy = 0.5
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_raymarch"]
+render_priority = 0
+shader = ExtResource("2_raymarch")
+
+[sub_resource type="QuadMesh" id="QuadMesh_fullscreen"]
+material = SubResource("ShaderMaterial_raymarch")
+size = Vector2(2, 2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_test"]
+shading_mode = 0
+albedo_color = Color(0.9, 0.35, 0.1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_test"]
+material = SubResource("StandardMaterial3D_test")
+size = Vector3(4, 4, 4)
 
 [node name="Main" type="Node3D"]
 
@@ -17,3 +34,12 @@ script = ExtResource("1_camera")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_dark")
+
+[node name="RaymarchQuad" type="MeshInstance3D" parent="."]
+cast_shadow = 0
+extra_cull_margin = 16384.0
+mesh = SubResource("QuadMesh_fullscreen")
+
+[node name="DepthTestCube" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, -3, 5)
+mesh = SubResource("BoxMesh_test")
