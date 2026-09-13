@@ -69,8 +69,8 @@ echo "smoke: ok"
 '''
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main scene and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke"]
+description = "Import assets, parse scripts, run the main scene, run the skeleton histogram regression and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "skeleton-histogram"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]
