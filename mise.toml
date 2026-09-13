@@ -34,9 +34,43 @@ done < <(find . -path ./.godot -prune -o -name '*.gd' -print0)
 exit "$status"
 '''
 
+[tasks.smoke]
+description = "Run the main scene headlessly for 60 frames and fail on any script or scene error"
+depends = ["import"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+
+# Headless uses the dummy renderer, so shaders are never compiled here and
+# produce no messages; shader errors are not caught by this task.
+patterns=(-e 'SCRIPT ERROR' -e 'ERROR:' -e 'Parse Error' -e 'invalid UID')
+# Known benign lines (grep -E patterns) to ignore. Empty: the run log is clean.
+allow=()
+
+status=0
+timeout 120 godot --headless --path . --quit-after 60 2>&1 | tee "$log" || status=$?
+if [[ "$status" -ne 0 ]]; then
+	echo "smoke: godot exited with status $status" >&2
+	exit 1
+fi
+
+offending="$(grep -F "${patterns[@]}" "$log" || true)"
+for allowed in "${allow[@]}"; do
+	offending="$(printf '%s\n' "$offending" | grep -Ev -- "$allowed" || true)"
+done
+if [[ -n "$offending" ]]; then
+	echo "smoke: errors in the run log:" >&2
+	printf '%s\n' "$offending" >&2
+	exit 1
+fi
+echo "smoke: ok"
+'''
+
 [tasks.check]
-description = "Import assets, parse scripts and verify the project loads headlessly"
-depends = ["import", "check-scripts"]
+description = "Import assets, parse scripts, run the main scene and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]
