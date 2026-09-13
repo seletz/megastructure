@@ -2,10 +2,11 @@
 // Requires sdf.gdshaderinc and hash.gdshaderinc to be included first.
 //
 // Hash salts match the prototype's call sites so both agree for the same seed.
-// Material ids: 0 concrete, 1 metal.
+// Material ids: 0 concrete, 1 metal, 2 lit opening (emissive).
 
 const int CHASM_MAT_CONCRETE = 0;
 const int CHASM_MAT_METAL = 1;
+const int CHASM_MAT_LIT = 2;
 
 group_uniforms chasm;
 uniform float chasm_half_width : hint_range(20.0, 400.0, 1.0) = 140.0;
@@ -33,6 +34,16 @@ uniform float terrace_cell : hint_range(10.0, 400.0, 1.0) = 60.0;
 uniform float terrace_probability : hint_range(0.0, 1.0, 0.01) = 0.32;
 uniform float terrace_depth_min : hint_range(0.0, 100.0, 0.5) = 6.0;
 uniform float terrace_depth_max : hint_range(0.0, 100.0, 0.5) = 20.0;
+
+group_uniforms chasm.openings;
+// Openings sit one per cell of opening_cell_width by stratum_height.
+uniform float opening_cell_width : hint_range(1.0, 100.0, 0.1) = 8.0;
+uniform float opening_width : hint_range(0.0, 100.0, 0.05) = 5.2;
+uniform float opening_height : hint_range(0.0, 30.0, 0.05) = 3.4;
+uniform float opening_depth : hint_range(0.0, 50.0, 0.1) = 7.0;
+uniform float opening_presence : hint_range(0.0, 1.0, 0.01) = 0.5;
+// Present openings whose hash exceeds 1 - opening_lit_fraction are lit.
+uniform float opening_lit_fraction : hint_range(0.0, 1.0, 0.005) = 0.045;
 group_uniforms;
 
 // Profile of a feature running along x: centred at v across its height,
@@ -41,11 +52,29 @@ float chasm_profile(float v, float zz, float height, float depth) {
 	return sdBox2(vec2(v, zz - depth * 0.5), vec2(height * 0.5, depth * 0.5));
 }
 
-// Wall mass, ledges, decks and (unremoved) buttresses of a facade whose wall
-// plane lies zz in front of the point. fy, ky and bx are the point's offsets
-// from the nearest ledge, deck and buttress centre.
-float chasm_features(float fy, float ky, float bx, float zz) {
-	float d = zz;
+// Wall mass of a facade whose wall plane lies zz in front of the point,
+// punched by the opening of the point's opening cell when that one is open;
+// ol is the point's offset from the opening cell centre. The hole reaches
+// opening_depth behind the wall plane; the subtracted box extends as far in
+// front of it, where it cuts only void, so rays aimed at the mouth enter the
+// hole instead of converging on a zero distance at the coplanar front face.
+// Subtraction only removes material and a point inside the box is nearest
+// to solid outside it, so this stays a lower bound on the punched wall.
+float chasm_wall(vec2 ol, bool has_opening, float zz) {
+	if (!has_opening) {
+		return zz;
+	}
+	vec3 half_size = vec3(opening_width * 0.5, opening_height * 0.5, opening_depth);
+	return max(zz, -sdBox(vec3(ol, zz), half_size));
+}
+
+// Ledges, decks and (unremoved) buttresses in front of the given wall mass
+// distance; zz is the wall plane's distance in front of the point. fy, ky and
+// bx are the point's offsets from the nearest ledge, deck and buttress centre.
+// Features never reach behind the wall plane, so punching only the wall mass
+// carves the same solid as punching everything.
+float chasm_features(float fy, float ky, float bx, float wall, float zz) {
+	float d = wall;
 	d = min(d, chasm_profile(fy, zz, ledge_height, ledge_depth));
 	d = min(d, chasm_profile(ky, zz, deck_height, deck_depth));
 	d = min(d, chasm_profile(bx, zz, buttress_width, buttress_depth));
@@ -64,24 +93,37 @@ float chasm_terrace_recess(ivec2 cell, int side) {
 // Lower bound on the distance to geometry owned by other terrace cells, seen
 // from local offset tl inside a cell recessed by rec. A neighbour's geometry
 // lies within its own footprint and within its unremoved features, so the
-// larger of both distances bounds it. Recessing only moves geometry deeper,
-// so neighbours recessed at least as far are covered by the cell's own
-// field. The three neighbours towards the nearest corner get their actual
-// recess; every other cell is at least half a cell away and is assumed
-// un-recessed.
-float chasm_terrace_border(float z, float fy, float ky, float bx, ivec2 cell, vec2 tl, float rec, int side) {
+// larger of both distances bounds it.
+//
+// Recessing only moves geometry deeper, so neighbours recessed at least as
+// far are covered by the cell's own field in front of its wall plane. Inside
+// an opening (in_opening) the point is behind that plane, so more recessed
+// neighbours are checked as well; an opening cell may straddle a terrace
+// border.
+//
+// Opening cells do not depend on the terrace, so a neighbour punches the same
+// opening (ol, has_opening) at its own depth. Bounding it as an unpunched wall would
+// also be a lower bound, but one that reaches zero on the border plane right
+// through the hole, where rays would stop on it.
+//
+// The three neighbours towards the nearest corner get their actual recess;
+// every other cell is at least half a cell away and is assumed un-recessed
+// and unpunched, which only adds material.
+float chasm_terrace_border(float z, float fy, float ky, float bx, ivec2 cell, vec2 tl, vec2 ol, bool has_opening, float rec, bool in_opening, int side) {
 	float half_cell = terrace_cell * 0.5;
 	ivec2 s = ivec2(tl.x < 0.0 ? -1 : 1, tl.y < 0.0 ? -1 : 1);
 	vec2 lateral = half_cell - abs(tl);
 	ivec2 cells[3] = ivec2[3](cell + ivec2(s.x, 0), cell + ivec2(0, s.y), cell + s);
 	float distances[3] = float[3](lateral.x, lateral.y, length(lateral));
 
-	float bound = max(chasm_features(fy, ky, bx, chasm_half_width - z), half_cell);
+	float zz_flat = chasm_half_width - z;
+	float bound = max(chasm_features(fy, ky, bx, zz_flat, zz_flat), half_cell);
 	for (int i = 0; i < 3; i++) {
 		float rec_n = chasm_terrace_recess(cells[i], side);
-		if (rec_n < rec) {
+		if (rec_n < rec || (in_opening && rec_n > rec)) {
 			float zz_n = (chasm_half_width + rec_n) - z;
-			bound = min(bound, max(chasm_features(fy, ky, bx, zz_n), distances[i]));
+			float wall_n = chasm_wall(ol, has_opening, zz_n);
+			bound = min(bound, max(chasm_features(fy, ky, bx, wall_n, zz_n), distances[i]));
 		}
 	}
 	return bound;
@@ -131,8 +173,20 @@ float chasm_facade(vec3 p, int side, out int mat) {
 	float ky = mod(p.y + deck_spacing * 0.5, deck_spacing) - deck_spacing * 0.5;
 	float bx = mod(p.x + buttress_spacing * 0.5, buttress_spacing) - buttress_spacing * 0.5;
 
-	// Wall mass.
-	float d = zz;
+	// Wall mass, punched by an opening per cell of opening_cell_width by
+	// stratum_height.
+	vec2 opening_cell = vec2(opening_cell_width, stratum_height);
+	vec2 oid = floor(p.xy / opening_cell);
+	vec2 ol = p.xy - (oid + 0.5) * opening_cell;
+	float ho = hash3(ivec3(ivec2(oid), side), 11u);
+	bool has_opening = ho >= 1.0 - opening_presence;
+	float d = chasm_wall(ol, has_opening, zz);
+	bool in_opening = d > zz;
+	// A few lit openings; zz < -0.2 keeps the tint inside the hole.
+	if (has_opening && ho > 1.0 - opening_lit_fraction && zz < -0.2) {
+		mat = CHASM_MAT_LIT;
+	}
+
 	// Ledge per stratum.
 	d = min(d, chasm_profile(fy, zz, ledge_height, ledge_depth));
 	// Heavy deck.
@@ -149,9 +203,10 @@ float chasm_facade(vec3 p, int side, out int mat) {
 	d = min(d, but);
 
 	// Conservative near terrace borders: a less recessed neighbour carries its
-	// wall and protrusions right up to the border.
-	if (rec > 0.0) {
-		d = min(d, max(chasm_terrace_border(z, fy, ky, bx, ivec2(tid), tl, rec, side), 0.03));
+	// wall and protrusions right up to the border, and inside an opening so
+	// may a more recessed one.
+	if (rec > 0.0 || in_opening) {
+		d = min(d, max(chasm_terrace_border(z, fy, ky, bx, ivec2(tid), tl, ol, has_opening, rec, in_opening, side), 0.03));
 	}
 	return d;
 }
