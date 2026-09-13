@@ -16,6 +16,8 @@ status: current
 
 ## Unreleased
 
+## 0.1.1 - 2026-09-13
+
 ### Added
 
 - `mise run release:set <version>` corrects the version on develop, which is back to 0.1.1 until milestone 0.2.0 ships. (#122)
