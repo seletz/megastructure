@@ -57,6 +57,9 @@ fragment shader runs once per pixel. `fragment()` then:
    around the point (`calc_normal`, with the offset `normal_epsilon`), then
    ambient occlusion, albedo, lighting and fog. For a miss: the fog colour
    along the ray. Either way the result goes through `post_process()`.
+   Its film grain is off by default (`grain_amount` 0.0): at half render
+   resolution it flickers in 2x2 blocks
+   ([[0013-film-grain-off-by-default]]).
 
 The tuning uniforms for this loop are in the `marching` group.
 
@@ -111,8 +114,9 @@ defaults.
   pillars, bridges and cables from hashed cells.
 - [[integer-hash]]: the hash every layout decision uses.
 - [[0003-ray-marcher-is-a-throwaway-prototype]],
-  [[0006-tightened-distance-field-bounds]] and
-  [[0007-keep-overlaid-facade-layouts]]: decisions about this shader.
+  [[0006-tightened-distance-field-bounds]],
+  [[0007-keep-overlaid-facade-layouts]] and
+  [[0013-film-grain-off-by-default]]: decisions about this shader.
 - [[camera-and-scene]]: the quad the shader is drawn on.
 - Papers: [[quilez-2008-raymarching-distance-fields]],
   [[quilez-distance-functions]], [[quilez-2015-sdf-normals]],
