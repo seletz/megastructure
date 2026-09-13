@@ -29,6 +29,8 @@ status: current
 
 ## Plan and milestones
 
+- [[PLAN_0.2.0]]: milestone 0.2.0, the generative world: sector skeleton,
+  walkable graph, WFC fill with box-only tiles, placement and streaming.
 - [[PLAN_0.1.0]]: milestone 0.1.0, the ray-marched chasm prototype ported to
   Godot with a free-fly camera and a live tweak panel.
 - Milestones and epics are tracked on

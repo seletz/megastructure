@@ -91,7 +91,9 @@ how a version is released is in
 - [`docs/MEGASTRUCTURE_CONCEPT.md`](docs/MEGASTRUCTURE_CONCEPT.md): design
   goals, the three-layer generation architecture, tile vocabulary, look and
   lighting, and the long-term milestones.
-- [`docs/PLAN_0.1.0.md`](docs/PLAN_0.1.0.md): the plan for the current
+- [`docs/PLAN_0.2.0.md`](docs/PLAN_0.2.0.md): the plan for the current
+  milestone, the generative world.
+- [`docs/PLAN_0.1.0.md`](docs/PLAN_0.1.0.md): the plan for the first
   milestone, with links to the GitHub epics.
 - Prototypes: two self-contained ray-marched HTML pages that define the look.
   Open them directly in a browser.
