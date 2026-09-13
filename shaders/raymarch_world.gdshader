@@ -16,11 +16,13 @@ uniform float normal_epsilon = 0.004;
 
 uniform vec3 surface_color : source_color = vec3(0.55, 0.55, 0.6);
 uniform vec3 metal_color : source_color = vec3(0.30, 0.31, 0.34);
+// Temporary emissive tint for lit openings until real lighting lands.
+uniform vec3 lit_color : source_color = vec3(1.0, 0.72, 0.42);
 uniform vec3 fog_color : source_color = vec3(0.02, 0.02, 0.03);
 uniform float fog_density = 0.004;
 
 // World distance; mat receives the material id of the closest surface
-// (CHASM_MAT_CONCRETE or CHASM_MAT_METAL).
+// (CHASM_MAT_CONCRETE, CHASM_MAT_METAL or CHASM_MAT_LIT).
 float map(vec3 p, out int mat) {
 	return chasm_facades(p, mat);
 }
@@ -84,8 +86,13 @@ void fragment() {
 	vec3 p = ro + rd * t;
 	vec3 n = calc_normal(p, t, rd);
 	float headlight = max(dot(n, -rd), 0.0);
-	vec3 albedo = mat == CHASM_MAT_METAL ? metal_color : surface_color;
-	vec3 col = albedo * (0.08 + 0.92 * headlight);
+	vec3 col;
+	if (mat == CHASM_MAT_LIT) {
+		col = lit_color;
+	} else {
+		vec3 albedo = mat == CHASM_MAT_METAL ? metal_color : surface_color;
+		col = albedo * (0.08 + 0.92 * headlight);
+	}
 	col = mix(col, fog_color, 1.0 - exp(-t * fog_density));
 
 	ALBEDO = col;
