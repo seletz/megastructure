@@ -14,8 +14,6 @@ uniform float hit_epsilon = 0.002;
 // normals across ledges and terrace borders.
 uniform float normal_epsilon = 0.004;
 
-// Temporary emissive tint for lit openings until real lighting lands.
-uniform vec3 lit_color : source_color = vec3(1.0, 0.72, 0.42);
 uniform vec3 fog_color : source_color = vec3(0.02, 0.02, 0.03);
 uniform float fog_density = 0.004;
 
@@ -31,6 +29,7 @@ float map_distance(vec3 p) {
 }
 
 #include "res://shaders/include/surface.gdshaderinc"
+#include "res://shaders/include/lighting.gdshaderinc"
 
 // Tetrahedron-sampled gradient; falls back to facing the ray where it vanishes.
 vec3 calc_normal(vec3 p, float t, vec3 rd) {
@@ -85,15 +84,8 @@ void fragment() {
 
 	vec3 p = ro + rd * t;
 	vec3 n = calc_normal(p, t, rd);
-	float headlight = max(dot(n, -rd), 0.0);
-	vec3 col;
-	if (mat == CHASM_MAT_LIT) {
-		col = lit_color;
-	} else {
-		float occ = surface_ao(p, n);
-		col = surface_albedo(p, mat) * (0.08 + 0.92 * headlight);
-		col *= 0.5 + 0.5 * occ;
-	}
+	float occ = surface_ao(p, n);
+	vec3 col = lighting_shade(p, n, ro, surface_albedo(p, mat), occ, mat);
 	col = mix(col, fog_color, 1.0 - exp(-t * fog_density));
 
 	ALBEDO = col;
