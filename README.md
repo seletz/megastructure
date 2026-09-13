@@ -51,6 +51,7 @@ vault: open the `docs/` folder with "Open folder as vault". Start at
 [`docs/Home.md`](docs/Home.md), the map of content; how notes are written is in
 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md). The files are plain Markdown and
 also read fine on GitHub.
+What changed in each version is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 ## Documentation
 
