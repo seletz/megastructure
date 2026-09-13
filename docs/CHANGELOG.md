@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- `mise run check` now runs the main scene headlessly for 60 frames and fails on any script or scene error or invalid UID. (#104)
 - The `facade_overlay` knob turns off the prototype's overlaid facade layouts, so each chasm wall gets one layout and the recess, buttress removal and opening rates apply as set. (#105)
 
 ### Fixed
