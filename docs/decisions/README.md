@@ -33,6 +33,7 @@ status: current
 | 0013 | 2026-09-13 | [[0013-film-grain-off-by-default\|Film grain off by default]] | accepted |
 | 0014 | 2026-09-13 | [[0014-develop-is-always-the-next-version\|Develop is always the next version]] | accepted |
 | 0015 | 2026-09-13 | [[0015-hashed-multi-scale-sector-grammar\|Hashed multi-scale sector grammar]] | accepted |
+| 0016 | 2026-09-13 | [[0016-tuned-sector-grammar-solid-before-voids\|Tuned sector grammar: solid before voids]] | accepted |
 
 The remaining questions in [[RESEARCH_WFC#Decisions to make]] (cell-choice
 heuristic, GridMap lifetime, path-cell semantics, pipes and cables) get a

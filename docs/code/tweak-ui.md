@@ -82,7 +82,11 @@ in its `param_sources` get their `register_params(registry)` called before
 the panel is built; `material_source` may be empty in scenes without a
 shader, and `show_presets = false` drops the presets section. Floats and
 ints get a slider sharing its value with a spin box, bools a check box, vec2s
-two spin boxes, colours a colour picker. Every change goes straight to the
+two spin boxes, colours a colour picker. A check box fills the row right of
+its label and toggles on press, like a slider reacts, and clicking the label
+toggles it too; before, only a click released on the 24 px box counted
+(issue #114). `mise run panel-check` clicks each kind of script-backed widget
+in the skeleton viewer's panel. Every change goes straight to the
 material. On start it restores the last used preset.
 
 [seed_control.gd](../../scripts/ui/seed_control.gd) (`class_name

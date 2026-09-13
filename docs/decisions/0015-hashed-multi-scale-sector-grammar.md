@@ -34,7 +34,9 @@ neighbours makes a type depend on evaluation order, which breaks streaming.
   replacing the prototype's 112 m) with a hashed box inside; solid walls and
   floors per 5³-sector block on band-aligned planes; chasms per wide `x`/`y`
   band with a long vertical extent.
-- Fixed precedence: chasm > cavity > shaft > solid > stratum.
+- Fixed precedence: chasm > cavity > shaft > solid > stratum (changed to
+  chasm > solid > cavity > shaft > stratum by
+  [[0016-tuned-sector-grammar-solid-before-voids]]).
 - One salt per decision, 100 to 133, documented in
   [[sector-skeleton-and-walkable-graph]].
 - Parameters in a `SectorGrammar` resource with `@export` defaults.

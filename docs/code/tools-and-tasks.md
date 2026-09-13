@@ -31,11 +31,11 @@ up to date.
 | --- | --- | --- |
 | `editor` | | Opens the project in the Godot editor. |
 | `run` | import | Runs the main scene. |
-| `run-skeleton` | import | Runs the skeleton viewer scene, sector boxes around the camera ([[skeleton]]). |
+| `run-skeleton` | import | Runs the skeleton viewer scene, wireframe sector cubes around the camera ([[skeleton]]). |
 | `import` | | Imports all assets headlessly and regenerates `.godot/`. |
 | `check-scripts` | import | Parses every `.gd` file with `--check-only` and fails if any has errors. |
 | `smoke` | import | Runs the main scene, then the skeleton viewer scene, headlessly for 60 frames each (120 s timeout per run) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
-| `check` | import, check-scripts, smoke, skeleton-histogram | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
+| `check` | import, check-scripts, smoke, panel-check, skeleton-histogram, skeleton-stats | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
 | `export-debug` | import | Same as `export` with a debug build. |
@@ -57,6 +57,8 @@ up to date.
 | `preset-check` | import | Tests that presets round-trip bit for bit. Headless. |
 | `code-map-check` | import | Tests that every source file is linked from exactly one code map note. Headless. |
 | `skeleton-histogram` | import | Prints the seed 0 sector type histogram and tests `sector_type` against [[skeleton_histogram_seed0]]; `--update` rewrites the reference ([[skeleton]]). Headless; part of `check`. |
+| `skeleton-stats` | import | Measures the sector grammar over 20 random 5³ regions per seed 0 to 4 and fails unless shafts run at least 3 sectors on average and solid splits a region into at least 2 non-solid components on average ([[sector-skeleton-and-walkable-graph]]). Headless; part of `check`. |
+| `panel-check` | import | Clicks every kind of script-backed widget in the skeleton viewer's tweak panel and checks each setter ran ([[tweak-ui]]). Headless; part of `check`. |
 
 `smoke` matches the patterns case-sensitively. Its allow-list for known
 benign lines (the `allow` array in the task) is empty, because the run log is
@@ -90,14 +92,16 @@ exit with status 1 on any failure.
 | [preset_check.gd](../../scripts/tools/preset_check.gd) | `preset-check` | Changes every parameter, the seed and the camera, saves a preset, loads the defaults, reloads the preset from disk and compares everything bitwise, including a restart and delete; also tests name validation and exact float reading. Uses a scratch `user://preset_check` folder. |
 | [code_map_check.gd](../../scripts/tools/code_map_check.gd) | `code-map-check` | Collects every file under `scripts/`, `shaders/` and `scenes/` (except `.uid` and `.import`), scans the links in `docs/code/*.md`, and fails if a file is linked from no note or from more than one, or if a link points at a missing source file. |
 | [skeleton_histogram.gd](../../scripts/tools/skeleton_histogram.gd) | `skeleton-histogram` | Counts the sector types of the 9 × 9 × 9 sectors around the origin for seed 0, per layer and in total; checks `sector_type` returns a type for 2 000 hashed random cells and the int32 extremes, also under an out-of-range grammar, and that two evaluations (and a fresh `Skeleton`) agree; then compares the table rows with [[skeleton_histogram_seed0]], or rewrites that file with `--update`. |
+| [skeleton_stats.gd](../../scripts/tools/skeleton_stats.gd) | `skeleton-stats` | Samples 20 random 5 × 5 × 5 sector regions for each seed 0 to 4 and prints the type fractions, the mean vertical shaft run (each run followed past the region to its full length), the non-solid components per region (6-connected union-find), the cavity clusters per region and the stratum run lengths along x, z and y; fails below 3 sectors of shaft run or 2 components. `measure()` and `print_stats()` are static, so a scratch script can compare grammars. |
+| [panel_check.gd](../../scripts/tools/panel_check.gd) | `panel-check` | Opens the skeleton viewer's tweak panel with Tab and pushes mouse clicks: on the `show_stratum` box and its label, a press without release on `follow_camera`, the up arrows of the `radius`, `shaft_probability` and `solid_wall_grid` spin boxes and the `sector_size` slider; checks the viewer or grammar value changed each time. |
 
 ## How to run or check it
 
 - `mise run check` before every pull request; it must pass.
 - Run the check matching what you changed: `preset-check` for presets and the
   registry, `seed-check` and `screenshot-check` (with a display) for the seed
-  and HUD, `hash-vectors` for the hash, `skeleton-histogram` for the sector
-  grammar, `code-map-check` after adding, moving or removing a source file or
+  and HUD, `hash-vectors` for the hash, `skeleton-histogram` and `skeleton-stats` for the
+  sector grammar, `panel-check` for the tweak panel widgets, `code-map-check` after adding, moving or removing a source file or
   editing these notes.
 
 ## References
