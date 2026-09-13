@@ -7,13 +7,16 @@ render_mode unshaded, cull_disabled, depth_draw_always, fog_disabled;
 #include "res://shaders/include/chasm.gdshaderinc"
 #include "res://shaders/include/post.gdshaderinc"
 
-uniform int max_steps = 180;
-uniform float max_distance = 1400.0;
-uniform float step_scale = 0.8;
-uniform float hit_epsilon = 0.002;
+group_uniforms marching;
+uniform int max_steps : hint_range(1, 1024) = 180;
+uniform float max_distance : hint_range(10.0, 5000.0, 1.0) = 1400.0;
+uniform float step_scale : hint_range(0.1, 1.0, 0.01) = 0.8;
+// Hit threshold per unit of distance travelled (never below one unit).
+uniform float hit_epsilon : hint_range(0.0001, 0.05, 0.0001) = 0.002;
 // Absolute offset for the normal gradient; scaling it with distance smears
 // normals across ledges and terrace borders.
-uniform float normal_epsilon = 0.004;
+uniform float normal_epsilon : hint_range(0.0005, 0.1, 0.0005) = 0.004;
+group_uniforms;
 
 // World distance; mat receives the material id of the closest surface
 // (CHASM_MAT_CONCRETE, CHASM_MAT_METAL or CHASM_MAT_LIT).
