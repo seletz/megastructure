@@ -13,7 +13,8 @@ description = "Open the project in the Godot editor"
 run = "godot --editor --path ."
 
 [tasks.run]
-description = "Run the project (main scene)"
+description = "Run the project (main scene); imports first so new scripts and classes are registered"
+depends = ["import"]
 run = "godot --path ."
 
 [tasks.import]
