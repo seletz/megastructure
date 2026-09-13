@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Megastructure — ray-marched prototype</title>
+<style>
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; touch-action:none; }
+  canvas { display:block; width:100vw; height:100vh; }
+  #hint {
+    position:fixed; left:12px; bottom:10px; font:12px/1.5 system-ui, sans-serif;
+    color:rgba(255,255,255,.45); pointer-events:none; user-select:none; max-width:70vw;
+  }
+  #seed {
+    position:fixed; right:12px; bottom:10px; font:12px system-ui, sans-serif;
+    color:rgba(255,255,255,.55); background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15);
+    padding:5px 9px; border-radius:3px; cursor:pointer;
+  }
+  #seed:focus-visible { outline:1px solid #fff; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">Drag to look. WASD / arrows move, Q E up/down, Shift fast.<br>Touch: one finger looks, two fingers move.</div>
+<button id="seed">New seed</button>
+
+<script id="vs" type="x-shader">#version 300 es
+in vec2 a; void main(){ gl_Position = vec4(a,0.,1.); }
+</script>
+
+<script id="fs" type="x-shader">#version 300 es
+precision highp float;
+out vec4 fragColor;
+uniform vec2  uRes;
+uniform float uTime;
+uniform float uSeed;
+uniform vec3  uCam;
+uniform vec2  uRot; // yaw, pitch
+
+// ---------- structure parameters (metres) ----------
+const float H = 6.0;    // stratum height
+const float C = 8.0;    // column grid
+const float W = 32.0;   // wall grid
+const float S = 48.0;   // shaft cell
+const float V = 112.0;  // cavity cell
+
+float h3(vec3 p){
+  p += uSeed*13.7;
+  p = fract(p*vec3(.1031,.1030,.0973));
+  p += dot(p, p.yxz+33.33);
+  return fract((p.x+p.y)*p.z);
+}
+float sdBox(vec3 p, vec3 b){ vec3 q=abs(p)-b; return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.); }
+float sdBox2(vec2 p, vec2 b){ vec2 q=abs(p)-b; return length(max(q,0.))+min(max(q.x,q.y),0.); }
+
+// returns distance; mat: 0 concrete, 1 metal
+float map(vec3 p, out float mat){
+  mat = 0.0;
+  float yc = floor(p.y/H);
+  float ry = p.y - yc*H;                 // 0..H, floor at 0
+  float fy = mod(p.y + H*0.5, H) - H*0.5; // 0 at slab centre
+
+  // slabs
+  float d = abs(fy) - 0.3;
+
+  // columns (some removed)
+  vec2 cid = floor(p.xz/C);
+  vec2 cq  = p.xz - (cid+0.5)*C;
+  float col = max(abs(cq.x),abs(cq.y)) - 0.55;
+  // removed: nearest other column is at least (border + inset) away — never 0, so no phantom faces
+  if (h3(vec3(cid, yc)) < 0.10) col = (C*0.5 - max(abs(cq.x),abs(cq.y))) + (C*0.5 - 0.55);
+  d = min(d, col);
+
+  // walls along x (planes at z = n*W) with doorways
+  float wid = floor(p.z/W + 0.5);
+  float wz  = p.z - wid*W;
+  float wallA = abs(wz) - 0.35;
+  float dx = mod(p.x, 8.0) - 4.0;
+  wallA = max(wallA, -sdBox(vec3(dx, ry-1.6, wz), vec3(1.1, 1.6, 1.0)));
+  float xc = floor(p.x/16.0);
+  if (h3(vec3(wid, yc, xc)) < 0.45) {
+    float lx = p.x - (xc+0.5)*16.0;                   // -8..8
+    bool L = h3(vec3(wid, yc, xc-1.0)) >= 0.45, R = h3(vec3(wid, yc, xc+1.0)) >= 0.45;
+    float seg = min(L ? lx+8.0 : lx+24.0, R ? 8.0-lx : 24.0-lx);
+    wallA = max(abs(wz) - 0.35, seg);
+  }
+
+  // walls along z (planes at x = n*W)
+  float wid2 = floor(p.x/W + 0.5);
+  float wx   = p.x - wid2*W;
+  float wallB = abs(wx) - 0.35;
+  float dz = mod(p.z, 8.0) - 4.0;
+  wallB = max(wallB, -sdBox(vec3(wx, ry-1.6, dz), vec3(1.0, 1.6, 1.1)));
+  float zc = floor(p.z/16.0);
+  if (h3(vec3(wid2+50.0, yc, zc)) < 0.45) {
+    float lz = p.z - (zc+0.5)*16.0;
+    bool L = h3(vec3(wid2+50.0, yc, zc-1.0)) >= 0.45, R = h3(vec3(wid2+50.0, yc, zc+1.0)) >= 0.45;
+    float seg = min(L ? lz+8.0 : lz+24.0, R ? 8.0-lz : 24.0-lz);
+    wallB = max(abs(wx) - 0.35, seg);
+  }
+
+  d = min(d, min(wallA, wallB));
+
+  // ceiling beams along x, every 4 m
+  float bz = mod(p.z, 4.0) - 2.0;
+  float beam = sdBox2(vec2(ry-5.45, bz), vec2(0.35, 0.18));
+  // pipe bundle hugging wall A, near the ceiling
+  float pz = wz - 0.85;
+  float py = ry - 4.6;
+  float pipe = length(vec2(pz, py)) - 0.20;
+  pipe = min(pipe, length(vec2(pz+0.45, py-0.4)) - 0.14);
+  pipe = min(pipe, length(vec2(pz, py-0.55)) - 0.11);
+  pipe = min(pipe, length(vec2(pz+0.5, py+0.35)) - 0.09);
+  float metal = min(beam, pipe);
+
+  if (metal < d) { d = metal; mat = 1.0; }
+
+  // shafts: carve vertical voids on a coarse grid
+  vec2 sid = floor(p.xz/S);
+  float hs = h3(vec3(sid, 7.0));
+  float shaft = 1e5;
+  if (hs < 0.42) {
+    float size = 4.0 + 12.0*h3(vec3(sid, 3.0));
+    vec2 off = (vec2(h3(vec3(sid,1.0)), h3(vec3(sid,2.0))) - 0.5) * (S - 2.0*size - 8.0);
+    vec2 q = p.xz - (sid+0.5)*S - off;
+    shaft = max(abs(q.x), abs(q.y)) - size;
+  }
+
+  // cavities: rare enormous voids
+  vec3 vid = floor(p/V);
+  float hv = h3(vid + 11.0);
+  float cav = 1e5;
+  if (hv < 0.14) {
+    vec3 sz = vec3(18.0 + 28.0*h3(vid+1.0), 14.0 + 30.0*h3(vid+2.0), 18.0 + 28.0*h3(vid+3.0));
+    vec3 off = (vec3(h3(vid+4.0), h3(vid+5.0), h3(vid+6.0)) - 0.5) * (V - 2.0*sz - 6.0);
+    cav = sdBox(p - (vid+0.5)*V - off, sz);
+  }
+
+  float carve = min(shaft, cav);
+  if (-carve > d) { d = -carve; mat = 0.0; }
+
+  // parapet around shaft edges at each floor
+  if (hs < 0.42) {
+    float par = max(abs(shaft + 0.55) - 0.07, abs(fy - 0.85) - 0.55);
+    par = max(par, -cav);
+    if (par < d) { d = par; mat = 1.0; }
+  }
+  return d;
+}
+
+vec3 normal(vec3 p){
+  float m; const vec2 e = vec2(1.0,-1.0)*0.002;
+  return normalize( e.xyy*map(p+e.xyy,m) + e.yyx*map(p+e.yyx,m) + e.yxy*map(p+e.yxy,m) + e.xxx*map(p+e.xxx,m) );
+}
+float ao(vec3 p, vec3 n){
+  float m, occ = 0.0, sca = 1.0;
+  for (int i=1;i<=5;i++){
+    float h = 0.08 + 0.55*float(i)/5.0;
+    occ += (h - map(p + n*h, m)) * sca;
+    sca *= 0.6;
+  }
+  return clamp(1.0 - 1.4*occ, 0.0, 1.0);
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy*2.0 - uRes) / uRes.y;
+  float cy = cos(uRot.x), sy = sin(uRot.x), cp = cos(uRot.y), sp = sin(uRot.y);
+  vec3 fwd   = vec3(cp*sy, sp, cp*cy);
+  vec3 right = vec3(cy, 0.0, -sy);
+  vec3 up    = cross(right, fwd);
+  vec3 rd = normalize(fwd*1.3 + right*uv.x + up*uv.y);
+  vec3 ro = uCam;
+
+  float t = 0.0, m = 0.0;
+  const float MAXD = 420.0;
+  bool hit = false;
+  for (int i=0;i<170;i++){
+    vec3 p = ro + rd*t;
+    float d = map(p, m);
+    if (d < 0.0007*t + 0.001) { hit = true; break; }
+    t += d*0.85;
+    if (t > MAXD) break;
+  }
+
+  vec3 col = vec3(0.0);
+  vec3 fog = vec3(0.012, 0.014, 0.020);
+  if (hit) {
+    vec3 p = ro + rd*t;
+    vec3 n = normal(p);
+    float occ = ao(p, n);
+
+    // surface
+    float grime = h3(floor(p*2.0)+0.5)*0.35 + h3(floor(p*0.5)+0.5)*0.25;
+    vec3 alb = (m > 0.5) ? vec3(0.32,0.33,0.36)*(0.7+0.3*grime) : vec3(0.52,0.52,0.50)*(0.55+0.45*grime);
+
+    // headlight from the camera
+    vec3 L = ro - p; float dl = length(L); L /= dl;
+    float diff = max(dot(n, L), 0.0);
+    float att = 90.0 / (1.0 + 0.09*dl*dl);
+    vec3 key = vec3(1.0, 0.93, 0.80) * diff * att;
+    float spec = pow(max(dot(reflect(-L, n), -rd), 0.0), (m>0.5)?48.0:10.0) * ((m>0.5)?0.9:0.15) * att;
+
+    // faint cold skylight from above (shafts feel lit from far up)
+    vec3 sky = vec3(0.10, 0.13, 0.18) * (0.5 + 0.5*n.y);
+
+    col = alb*(key + sky*occ) + spec*occ;
+    col *= 0.4 + 0.6*occ;
+  }
+  float fogAmt = 1.0 - exp(-0.018*t);
+  col = mix(col, fog, fogAmt);
+
+  // tone, grain, vignette
+  col = 1.0 - exp(-col*1.6);
+  float g = h3(vec3(gl_FragCoord.xy, floor(uTime*24.0))) - 0.5;
+  col += g*0.045;
+  col *= 1.0 - 0.35*dot(uv*0.6, uv*0.6);
+  col = pow(max(col,0.0), vec3(1.0/2.2));
+  fragColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', {antialias:false, alpha:false});
+if (!gl) { document.getElementById('hint').textContent = 'WebGL2 is not available in this browser.'; }
+
+function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, document.getElementById('vs').textContent.trim()));
+gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent.trim()));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog,'a'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+const U = n => gl.getUniformLocation(prog, n);
+const uRes=U('uRes'), uTime=U('uTime'), uSeed=U('uSeed'), uCam=U('uCam'), uRot=U('uRot');
+
+// ---------- state ----------
+const state = {
+  pos: [3.0, 6*40 + 1.7, 3.0],
+  yaw: 0.6, pitch: -0.05,
+  seed: Math.random()*100,
+  keys: new Set(),
+};
+const scale = Math.min(window.devicePixelRatio, 2) * 0.5; // half-res marching
+function resize(){
+  canvas.width  = Math.floor(innerWidth  * scale);
+  canvas.height = Math.floor(innerHeight * scale);
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+addEventListener('resize', resize); resize();
+
+// ---------- input ----------
+addEventListener('keydown', e => { state.keys.add(e.key.toLowerCase()); if(e.key==='r') reseed(); });
+addEventListener('keyup',   e => state.keys.delete(e.key.toLowerCase()));
+
+let drag = null;
+canvas.addEventListener('pointerdown', e => { drag = {x:e.clientX, y:e.clientY}; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerup',   () => drag = null);
+canvas.addEventListener('pointermove', e => {
+  if (!drag || e.pointerType === 'touch') return;
+  look(e.clientX - drag.x, e.clientY - drag.y); drag = {x:e.clientX, y:e.clientY};
+});
+function look(dx, dy){
+  state.yaw   -= dx * 0.004;
+  state.pitch  = Math.max(-1.5, Math.min(1.5, state.pitch - dy * 0.004));
+}
+
+// touch: 1 finger look, 2 fingers move
+const touches = new Map(); let lastCentroid = null;
+canvas.addEventListener('touchstart', e => { for (const t of e.changedTouches) touches.set(t.identifier, [t.clientX,t.clientY]); lastCentroid = null; e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchend',   e => { for (const t of e.changedTouches) touches.delete(t.identifier); lastCentroid = null; }, {passive:false});
+canvas.addEventListener('touchmove',  e => {
+  e.preventDefault();
+  const pts = [...e.touches].map(t => [t.clientX, t.clientY]);
+  const c = pts.reduce((a,p)=>[a[0]+p[0]/pts.length, a[1]+p[1]/pts.length],[0,0]);
+  if (lastCentroid) {
+    const dx = c[0]-lastCentroid[0], dy = c[1]-lastCentroid[1];
+    if (pts.length === 1) look(dx, dy);
+    else moveRel(dx*0.03, -dy*0.03);
+  }
+  lastCentroid = c;
+}, {passive:false});
+
+function basis(){
+  const cy=Math.cos(state.yaw), sy=Math.sin(state.yaw), cp=Math.cos(state.pitch), sp=Math.sin(state.pitch);
+  return { fwd:[cp*sy, sp, cp*cy], right:[cy, 0, -sy] };
+}
+function moveRel(strafe, forward, upv=0){
+  const b = basis();
+  for (let i=0;i<3;i++) state.pos[i] += b.fwd[i]*forward + b.right[i]*strafe;
+  state.pos[1] += upv;
+}
+function reseed(){ state.seed = Math.random()*100; }
+document.getElementById('seed').addEventListener('click', reseed);
+
+// ---------- loop ----------
+let last = performance.now();
+function frame(now){
+  const dt = Math.min((now-last)/1000, 0.1); last = now;
+  const k = state.keys;
+  const sp = (k.has('shift') ? 18 : 5) * dt;
+  let f=0, s=0, u=0;
+  if (k.has('w')||k.has('arrowup'))    f += sp;
+  if (k.has('s')||k.has('arrowdown'))  f -= sp;
+  if (k.has('d')||k.has('arrowright')) s += sp;
+  if (k.has('a')||k.has('arrowleft'))  s -= sp;
+  if (k.has('e')) u += sp;
+  if (k.has('q')) u -= sp;
+  if (f||s||u) moveRel(s, f, u);
+
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uTime, now/1000);
+  gl.uniform1f(uSeed, state.seed);
+  gl.uniform3fv(uCam, state.pos);
+  gl.uniform2f(uRot, state.yaw, state.pitch);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
