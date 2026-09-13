@@ -372,6 +372,132 @@ usage = '''
 flag "-n --dry-run" help="Print every command instead of executing it"
 '''
 
+[tasks."wt:new"]
+description = "Create an issue worktree on a new branch <issue>-<slug> from origin/develop and print its path. Usage: mise run wt:new <issue> <slug>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# The worktree goes to <base-dir>/<issue>-<slug>, next to the other issue
+# worktrees. Only the path goes to stdout, so `cd "$(mise run wt:new ...)"`
+# works.
+
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+
+show() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; }
+run() { show "$@"; $dry_run || "$@"; }
+fail() { echo "wt:new: $*" >&2; exit 1; }
+
+issue="${usage_issue}"
+slug="${usage_slug}"
+[[ "$issue" =~ ^[1-9][0-9]*$ ]] || fail "issue must be a number, not '$issue'"
+[[ "$slug" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || fail "slug must be lowercase words joined by '-', not '$slug'"
+branch="$issue-$slug"
+
+base_dir="${usage_base_dir:-${WT_BASE_DIR:-$HOME/.herdr/worktrees/megastructure}}"
+path="$base_dir/$branch"
+# The main checkout is the first entry of the worktree list.
+main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
+
+git -C "$main" show-ref --quiet --verify "refs/heads/$branch" && fail "branch $branch already exists"
+[[ -e "$path" ]] && fail "$path already exists"
+
+run git -C "$main" fetch --quiet origin develop
+if [[ "${usage_herdr:-false}" == "true" ]]; then
+	[[ "${HERDR_ENV:-}" == "1" ]] || fail "--herdr needs HERDR_ENV=1 (run it inside Herdr)"
+	run herdr worktree create --cwd "$main" --branch "$branch" --base origin/develop \
+		--path "$path" --label "$branch" --no-focus
+else
+	run git -C "$main" worktree add --quiet -b "$branch" "$path" origin/develop
+fi
+# A worktree is a new directory, so mise asks to trust its mise.toml again.
+run mise trust --quiet "$path/mise.toml"
+echo "$path"
+'''
+usage = '''
+arg "<issue>" help="GitHub issue number, e.g. 110"
+arg "<slug>" help="Short kebab-case name, e.g. coordination-tasks"
+flag "--base-dir <dir>" help="Folder the worktree is created in (default: $WT_BASE_DIR or ~/.herdr/worktrees/megastructure)"
+flag "--herdr" help="Create it with 'herdr worktree create' as a Herdr workspace (needs HERDR_ENV=1)"
+flag "-n --dry-run" help="Print the commands instead of creating anything"
+'''
+
+[tasks."wt:rm"]
+description = "Remove an issue worktree and delete its branch, refusing if anything would be lost. Usage: mise run wt:rm <branch>"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# Refuses when the worktree has uncommitted changes or an unfinished rebase,
+# merge or cherry-pick, or when the branch has commits that are on no branch
+# of origin (after a fetch --prune). A branch merged into develop is safe to
+# delete because its commits are reachable from origin/develop.
+
+dry_run=false
+[[ "${usage_dry_run:-false}" == "true" ]] && dry_run=true
+
+show() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; }
+run() { show "$@"; $dry_run || "$@"; }
+fail() { echo "wt:rm: $*" >&2; exit 1; }
+
+branch="${usage_branch}"
+main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
+case "$branch" in
+	develop | main | master) fail "refusing to remove $branch" ;;
+esac
+git -C "$main" show-ref --quiet --verify "refs/heads/$branch" || fail "no local branch $branch"
+
+# The worktree that has the branch checked out, also while a rebase has
+# detached its HEAD.
+worktree_of() {
+	local wt="" line git_dir
+	while IFS= read -r line; do
+		case "$line" in
+			"worktree "*) wt="${line#worktree }" ;;
+			"branch refs/heads/$1") echo "$wt"; return ;;
+			detached)
+				git_dir="$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null)" || continue
+				if grep -qsx "refs/heads/$1" "$git_dir/rebase-merge/head-name" "$git_dir/rebase-apply/head-name"; then
+					echo "$wt"
+					return
+				fi
+				;;
+		esac
+	done < <(git -C "$main" worktree list --porcelain)
+}
+worktree="$(worktree_of "$branch")"
+
+if [[ -n "$worktree" ]]; then
+	[[ "$worktree" == "$main" ]] && fail "$branch is checked out in the main checkout $main"
+	here="$(git rev-parse --show-toplevel)"
+	[[ "$here" == "$worktree" ]] && fail "run this from another checkout, not from $worktree itself"
+	git_dir="$(git -C "$worktree" rev-parse --absolute-git-dir)"
+	for marker in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+		[[ -e "$git_dir/$marker" ]] && fail "$worktree has an unfinished operation ($marker); finish or abort it first"
+	done
+	if [[ -n "$(git -C "$worktree" status --porcelain)" ]]; then
+		git -C "$worktree" status --short >&2
+		fail "$worktree has uncommitted changes"
+	fi
+fi
+
+# Fetching is read-only, so it also runs in a dry run.
+show git -C "$main" fetch --quiet --prune origin
+git -C "$main" fetch --quiet --prune origin
+unpushed="$(git -C "$main" rev-list --count "refs/heads/$branch" --not --remotes=origin)"
+if [[ "$unpushed" -gt 0 ]]; then
+	git -C "$main" log --oneline "refs/heads/$branch" --not --remotes=origin >&2
+	fail "$branch has $unpushed commit(s) that are on no branch of origin; push or merge them first"
+fi
+
+[[ -n "$worktree" ]] && run git -C "$main" worktree remove "$worktree"
+run git -C "$main" branch -D "$branch"
+run git -C "$main" worktree prune
+'''
+usage = '''
+arg "<branch>" help="Branch of the worktree, e.g. 110-coordination-tasks"
+flag "-n --dry-run" help="Run the checks and print the commands instead of removing anything"
+'''
+
 [tasks.mcp]
 description = "Run the Godot MCP server over stdio (used by .mcp.json)"
 run = "godot-mcp"
