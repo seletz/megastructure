@@ -52,5 +52,7 @@ carries no notice permitting redistribution.
 
 - [[RESEARCH_WFC]], section 1 (algorithm choice), section 3 (failure model)
   and section 6 (reference implementations).
+- [[walkable-graph-connectivity]]: regions with fixed boundary edges, in the
+  spirit of solving in blocks.
 - Related: [[merrell-2009-model-synthesis-thesis]],
   [[merrell-2021-comparing-model-synthesis-and-wfc]].

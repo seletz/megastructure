@@ -44,3 +44,5 @@ costs nothing.
 
 - [[RESEARCH_WFC]], section 1 (sector boundaries), section 5 (streaming) and
   decision 1 (boundary scheme).
+- [[walkable-graph-connectivity]]: walkable graph edges decided per fixed
+  region of sectors, from the seed alone.

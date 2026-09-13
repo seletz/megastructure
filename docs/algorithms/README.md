@@ -23,6 +23,7 @@ flowchart LR
     H[integer-hash] --> R[sdf-ray-marching]
     R --> C[chasm-distance-field]
     H --> K[sector-skeleton-and-walkable-graph]
+    K --> G[walkable-graph-connectivity]
     K --> W[wave-function-collapse]
     W --> S[socket-adjacency]
     W --> M[model-synthesis-and-sectors]
@@ -48,7 +49,8 @@ either follow the renderer (left) or the generator (right).
 | [[wave-function-collapse]] | Simple-tiled WFC with a worked 2D example, cell choice, propagation, contradictions and restarts, determinism from the hash. |
 | [[model-synthesis-and-sectors]] | Merrell's block scheme and the face-first, order-independent sector boundaries that make streaming work. |
 | [[socket-adjacency]] | Sockets, symmetry and rotation conventions, deriving adjacency bitsets, validating a tileset. |
-| [[sector-skeleton-and-walkable-graph]] | The hashed sector grammar (implemented, with its rules, salts and parameters) and the path graph: portals, spanning tree plus loops. Draft. |
+| [[sector-skeleton-and-walkable-graph]] | The hashed sector grammar (implemented, with its rules, salts and parameters) and the path graph: portals and interior nodes. Draft. |
+| [[walkable-graph-connectivity]] | Edges of the walkable graph (implemented): Kruskal with hashed weights per 3³ region, tunnels through solid, boundary edges between regions, loops, and why region-aligned windows are connected. |
 
 ## Related
 
