@@ -44,6 +44,16 @@ uniform float opening_depth : hint_range(0.0, 50.0, 0.1) = 7.0;
 uniform float opening_presence : hint_range(0.0, 1.0, 0.01) = 0.5;
 // Present openings whose hash exceeds 1 - opening_lit_fraction are lit.
 uniform float opening_lit_fraction : hint_range(0.0, 1.0, 0.005) = 0.045;
+
+group_uniforms chasm.pillars;
+// At most one pillar per cell of pillar_cell along x.
+uniform float pillar_cell : hint_range(20.0, 1000.0, 1.0) = 110.0;
+uniform float pillar_probability : hint_range(0.0, 1.0, 0.01) = 0.55;
+uniform float pillar_radius_min : hint_range(0.5, 50.0, 0.1) = 4.0;
+uniform float pillar_radius_max : hint_range(0.5, 50.0, 0.1) = 12.0;
+// Rings sit at every deck level (deck_spacing) and stick out this far.
+uniform float ring_extra_radius : hint_range(0.0, 20.0, 0.1) = 2.5;
+uniform float ring_height : hint_range(0.0, 10.0, 0.05) = 1.6;
 group_uniforms;
 
 // Profile of a feature running along x: centred at v across its height,
@@ -211,6 +221,40 @@ float chasm_facade(vec3 p, int side, out int mat) {
 	return d;
 }
 
+// The pillar of one pillar cell with its deck rings, 1e5 where the cell has
+// none. The hashed offsets keep the pillar at least 3 m inside its cell along
+// x (so the rings stay inside with the defaults) and 20 m off the facades.
+float chasm_pillar(vec3 p, int id) {
+	ivec3 pc = ivec3(id, 0, 0);
+	if (hash3(pc, 21u) >= pillar_probability) {
+		return 1e5;
+	}
+	float r = mix(pillar_radius_min, pillar_radius_max, hash3(pc, 22u));
+	float xo = (hash3(pc, 23u) - 0.5) * max(pillar_cell - 2.0 * r - 6.0, 0.0);
+	float zo = (hash3(pc, 24u) - 0.5) * max(2.0 * chasm_half_width - 2.0 * r - 40.0, 0.0);
+	vec2 q = vec2(p.x - (float(id) + 0.5) * pillar_cell - xo, p.z - zo);
+	float pillar = length(q) - r;
+	// Same deck phase as the facades, so rings line up with their decks.
+	float ky = mod(p.y + deck_spacing * 0.5, deck_spacing) - deck_spacing * 0.5;
+	float ring = max(length(q) - (r + ring_extra_radius), abs(ky) - ring_height * 0.5);
+	return min(pillar, ring);
+}
+
+// Free-standing pillars in the void. The prototype only looks at the point's
+// own cell; the cell towards the nearer border is checked too, since its
+// pillar may stand closer than the one here. Cells further away lie beyond
+// the far border, at least half a cell off.
+float chasm_pillars(vec3 p, out int mat) {
+	mat = CHASM_MAT_CONCRETE;
+	float pid = floor(p.x / pillar_cell);
+	float lx = p.x - (pid + 0.5) * pillar_cell;
+	int id = int(pid);
+	float d = pillar_cell * 0.5 + abs(lx);
+	d = min(d, chasm_pillar(p, id));
+	d = min(d, chasm_pillar(p, id + (lx < 0.0 ? -1 : 1)));
+	return d;
+}
+
 // Both facades, mirrored in z as the prototype does.
 float chasm_facades(vec3 p, out int mat) {
 	int mat_a;
@@ -219,4 +263,14 @@ float chasm_facades(vec3 p, out int mat) {
 	float d_b = chasm_facade(vec3(p.x, p.y, -p.z), -1, mat_b);
 	mat = d_b < d ? mat_b : mat_a;
 	return min(d, d_b);
+}
+
+// The whole chasm: facades and pillars.
+float chasm_map(vec3 p, out int mat) {
+	int mat_f;
+	int mat_p;
+	float d = chasm_facades(p, mat_f);
+	float d_p = chasm_pillars(p, mat_p);
+	mat = d_p < d ? mat_p : mat_f;
+	return min(d, d_p);
 }
