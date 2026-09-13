@@ -19,6 +19,14 @@ mise install
 
 This downloads the pinned Godot build (see `mise.toml`) and the other tools.
 
+To export a build, install the matching export templates once, then export a
+preset from `export_presets.cfg`:
+
+```sh
+mise run templates
+mise run export linux build/linux/megastructure.x86_64
+```
+
 ## Tasks
 
 | Task                 | What it does                                             |
@@ -28,6 +36,7 @@ This downloads the pinned Godot build (see `mise.toml`) and the other tools.
 | `mise run check`     | Import, parse all scripts, verify the project loads (CI) |
 | `mise run check-scripts` | Parse every `.gd` file and fail on errors            |
 | `mise run import`    | Import all assets headlessly (regenerates `.godot/`)     |
+| `mise run templates` | Download export templates for the pinned Godot version   |
 | `mise run export`    | Export a release build: `mise run export <preset> <out>` |
 | `mise run export-debug` | Export a debug build, same arguments                  |
 | `mise run clean`     | Remove the import cache and build output                 |
