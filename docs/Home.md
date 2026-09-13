@@ -61,8 +61,9 @@ status: current
 
 ## Code map
 
-- Code map (planned in #60): where each concept lives in the source tree,
-  with relative links into `scripts/`, `shaders/` and `scenes/`.
+- [[code/README|Code map]]: one note per area of the source tree (camera and
+  scene, ray-march shader, hash, tweak UI, tools and tasks, CI and export)
+  with what it does, its files and how to run or check it.
 
 ## Prototypes
 
