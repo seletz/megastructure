@@ -25,6 +25,7 @@ Last verified against commit `3cd3cad`.
 | Camera and scene | [[camera-and-scene]] | The main scene, the free-fly camera, the quad the world is drawn on, the environment. |
 | Ray-march shader | [[raymarch-shader]] | The world shader and its includes: marching loop, materials, lighting, fog, post, debug views. |
 | Hash | [[hash]] | The shared integer hash in the shader and in GDScript, and its reference vectors. |
+| Skeleton | [[skeleton]] | The sector grammar parameters and `sector_type`, the first generator layer. |
 | Tweak UI | [[tweak-ui]] | World seed, parameter registry, tweak panel, seed control, presets, HUD and their keys. |
 | Tools and tasks | [[tools-and-tasks]] | Every mise task and every check script in `scripts/tools/`. |
 | CI and export | [[ci-and-export]] | The GitHub check and release workflows, branch protection, the Linux and macOS export presets and templates. |

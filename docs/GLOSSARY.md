@@ -446,10 +446,11 @@ See also: [[RESEARCH_WFC]].
 A set of rules for choosing sector types, with biases such as "shafts continue
 vertically" and "strata spread horizontally".
 
-In this project: planned first as a pure hashed function
-`sector_type(seed, ix, iy, iz)`.
+In this project: a pure hashed function `Skeleton.sector_type(seed, cell)`
+whose rules are decided on cells coarser than a sector, with parameters in a
+`SectorGrammar` resource ([skeleton.gd](../scripts/world/skeleton.gd)).
 
-See also: [[MEGASTRUCTURE_CONCEPT]].
+See also: [[MEGASTRUCTURE_CONCEPT]], [[sector-skeleton-and-walkable-graph]].
 
 ### GridMap
 
@@ -835,6 +836,9 @@ See also: [[RESEARCH_WFC]].
 
 The coarse building block of the world, a 48 m cube with one type: stratum,
 shaft, cavity, solid or chasm.
+
+In this project: indexed by `Vector3i`; the type comes from
+`Skeleton.sector_type`.
 
 See also: [[MEGASTRUCTURE_CONCEPT]], Skeleton.
 

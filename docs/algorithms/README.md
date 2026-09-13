@@ -48,7 +48,7 @@ either follow the renderer (left) or the generator (right).
 | [[wave-function-collapse]] | Simple-tiled WFC with a worked 2D example, cell choice, propagation, contradictions and restarts, determinism from the hash. |
 | [[model-synthesis-and-sectors]] | Merrell's block scheme and the face-first, order-independent sector boundaries that make streaming work. |
 | [[socket-adjacency]] | Sockets, symmetry and rotation conventions, deriving adjacency bitsets, validating a tileset. |
-| [[sector-skeleton-and-walkable-graph]] | The hashed sector grammar and the path graph: portals, spanning tree plus loops. Draft. |
+| [[sector-skeleton-and-walkable-graph]] | The hashed sector grammar (implemented, with its rules, salts and parameters) and the path graph: portals, spanning tree plus loops. Draft. |
 
 ## Related
 
