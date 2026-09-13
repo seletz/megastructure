@@ -196,7 +196,7 @@ flag "-n --dry-run" help="Print the commands instead of editing and committing"
 '''
 
 [tasks."release:bump"]
-description = "Bump config/version in project.godot, commit it and print the new version. Usage: mise run release:bump <patch|minor|major>"
+description = "Bump config/version in project.godot, commit it (and push with --push) and print the new version. Usage: mise run release:bump <patch|minor|major>"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
@@ -225,11 +225,15 @@ run() { printf '+' >&2; printf ' %q' "$@" >&2; printf '\n' >&2; $dry_run || "$@"
 run perl -pi -e "s/^config\\/version=\"\\Q$old\\E\"\$/config\\/version=\"$new\"/" project.godot
 run git add project.godot
 run git commit --quiet -m "chore(release): start $new"
+if [[ "${usage_push:-false}" == "true" ]]; then
+	run git push --quiet origin "$(git rev-parse --abbrev-ref HEAD)"
+fi
 echo "release:bump: $old -> $new" >&2
 echo "$new"
 '''
 usage = '''
 arg "<part>" help="Which part to bump: patch, minor or major"
+flag "--push" help="Push the current branch to origin after committing"
 flag "-n --dry-run" help="Print the commands instead of editing and committing"
 '''
 
