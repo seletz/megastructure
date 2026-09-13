@@ -42,7 +42,8 @@ turning walls into a closed lattice.
 
 - About 38 % of sectors are solid, and regions are separated by design, so
   the walkable graph must tunnel through solid or count connectivity per
-  open boundary (open question in [[sector-skeleton-and-walkable-graph]]).
+  open boundary; it tunnels
+  ([[0017-region-spanning-trees-with-tunnels]]).
 - Strata spread wider than tall; the tuning numbers and before/after
   screenshots are in [[sector-skeleton-and-walkable-graph#Tuning]].
 - No cellular pass is needed for now.
