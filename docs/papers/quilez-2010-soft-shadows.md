@@ -39,7 +39,7 @@ shadow maps.
 
 ## Used by
 
-- [[PLAN_0.0.1]], epic #12 (look and lighting).
+- [[PLAN_0.1.0]], epic #12 (look and lighting).
 - Code: `lighting_shadow()` in
   [lighting.gdshaderinc](../../shaders/include/lighting.gdshaderinc).
 - Prototype: `shadow()` in

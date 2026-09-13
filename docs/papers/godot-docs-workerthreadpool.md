@@ -42,4 +42,4 @@ into nodes.
 
 - [[RESEARCH_WFC]], section 4 (threads) and issue E3 in section 7.
 - Related: [[godot-docs-thread-safe-apis]].
-- No code yet; worker-thread sector jobs are planned for milestone 0.0.2.
+- No code yet; worker-thread sector jobs are planned for milestone 0.2.0.

@@ -7,7 +7,7 @@ links:
   - https://github.com/seletz/megastructure/issues/5
   - https://github.com/seletz/megastructure/pull/30
   - "[[hash_vectors]]"
-  - "[[PLAN_0.0.1]]"
+  - "[[PLAN_0.1.0]]"
 ---
 
 # Shared Integer Hash Replaces the Float Hash
@@ -50,5 +50,5 @@ honest.
 
 - #5, PR #30.
 - [[hash_vectors]]: definition and reference table.
-- [[PLAN_0.0.1#Decision: shared integer hash]].
+- [[PLAN_0.1.0#Decision: shared integer hash]].
 - Related: [[0011-typed-gdscript-solver-first]].

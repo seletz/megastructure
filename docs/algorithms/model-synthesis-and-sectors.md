@@ -3,7 +3,7 @@ tags:
   - algorithm
   - wfc
   - streaming
-  - milestone/0.0.2
+  - milestone/0.2.0
   - planned
 status: current
 ---

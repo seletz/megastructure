@@ -1,14 +1,14 @@
 # megastructure
 
-![The chasm at seed 1, milestone 0.0.1](docs/images/chasm-0.0.1-seed1.png)
+![The chasm at seed 1, milestone 0.1.0](docs/images/chasm-0.1.0-seed1.png)
 
 A generative, explorable rendering of a Blame!-style megastructure in Godot 4:
 endless strata, vertical shafts, and open chasms between stratified facades.
 No gameplay, just a world that generates itself from a seed.
 
-The current milestone (0.0.1) ports the ray-marched chasm prototype into a
+The current milestone (0.1.0) ports the ray-marched chasm prototype into a
 fullscreen shader with a free-fly camera and a live tweak panel. See
-[`docs/PLAN_0.0.1.md`](docs/PLAN_0.0.1.md).
+[`docs/PLAN_0.1.0.md`](docs/PLAN_0.1.0.md).
 
 ## Setup
 
@@ -80,14 +80,14 @@ What changed in each version is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 - [`docs/MEGASTRUCTURE_CONCEPT.md`](docs/MEGASTRUCTURE_CONCEPT.md): design
   goals, the three-layer generation architecture, tile vocabulary, look and
   lighting, and the long-term milestones.
-- [`docs/PLAN_0.0.1.md`](docs/PLAN_0.0.1.md): the plan for the current
+- [`docs/PLAN_0.1.0.md`](docs/PLAN_0.1.0.md): the plan for the current
   milestone, with links to the GitHub epics.
 - Prototypes: two self-contained ray-marched HTML pages that define the look.
   Open them directly in a browser.
   - [`docs/megastructure.html`](docs/megastructure.html): interior strata,
     shafts and cavities.
   - [`docs/megastructure-chasm.html`](docs/megastructure-chasm.html):
-    exterior chasm between facades, the reference for milestone 0.0.1.
+    exterior chasm between facades, the reference for milestone 0.1.0.
 - [`docs/hash_vectors.md`](docs/hash_vectors.md): the shared integer hash
   used by the shader, GDScript and the prototypes, with reference vectors.
 
@@ -101,6 +101,6 @@ Branching, commit and pull request rules are in
 GDScript files use tabs. A Zed configuration for the Godot language server is
 included under `.zed/`.
 
-- [`docs/RESEARCH_WFC.md`](docs/RESEARCH_WFC.md): research for milestone 0.0.2,
+- [`docs/RESEARCH_WFC.md`](docs/RESEARCH_WFC.md): research for milestone 0.2.0,
   the WFC / model synthesis sector fill in Godot, with a proposed issue
   breakdown.

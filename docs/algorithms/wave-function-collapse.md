@@ -2,7 +2,7 @@
 tags:
   - algorithm
   - wfc
-  - milestone/0.0.2
+  - milestone/0.2.0
   - planned
 status: current
 ---
@@ -16,7 +16,7 @@ status: current
 > commits it to one tile, and removes from the neighbouring cells every tile
 > that no longer fits, which may ripple further. If some cell runs out of
 > options, the attempt failed and is restarted with a different random
-> stream. The fill layer of milestone 0.0.2 will use the simple-tiled variant
+> stream. The fill layer of milestone 0.2.0 will use the simple-tiled variant
 > to place hand-made meshes inside each 48 m sector, with every random choice
 > taken from the [[integer-hash]] so the same seed always builds the same
 > world. Nothing is implemented yet; this note explains the algorithm and the

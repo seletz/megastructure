@@ -31,7 +31,7 @@ living web page rather than a paper, so the note links to it.
 
 ## Why it matters here
 
-Milestone 0.0.1 renders the ray-marched chasm exactly this way. A 2×2
+Milestone 0.1.0 renders the ray-marched chasm exactly this way. A 2×2
 `QuadMesh` whose vertex shader sets `POSITION = vec4(VERTEX.xy, 1.0, 1.0)`
 covers the screen, a large `extra_cull_margin` keeps it from being culled,
 and the fragment shader writes `DEPTH` using the reversed-Z convention, so
@@ -40,7 +40,7 @@ world.
 
 ## Used by
 
-- [[PLAN_0.0.1]]: "Fullscreen ray-march quad that composites with scene
+- [[PLAN_0.1.0]]: "Fullscreen ray-march quad that composites with scene
   geometry" (#4).
 - Code: `vertex()` and the `DEPTH` write in
   [raymarch_world.gdshader](../../shaders/raymarch_world.gdshader),

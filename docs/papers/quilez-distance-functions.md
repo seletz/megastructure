@@ -32,14 +32,14 @@ copied here.
 
 ## Why it matters here
 
-The ray-marched chasm of milestone 0.0.1 is built from these primitives and
+The ray-marched chasm of milestone 0.1.0 is built from these primitives and
 operators. The box distance (`sdBox`, `sdBox2`) and the min/max combinations
 come straight from this page, and every facade, deck, pillar and bridge in
 the chasm is assembled from them.
 
 ## Used by
 
-- [[PLAN_0.0.1]]: the ray-marched prototype port.
+- [[PLAN_0.1.0]]: the ray-marched prototype port.
 - Code: [sdf.gdshaderinc](../../shaders/include/sdf.gdshaderinc)
   (`sdSphere`, `sdBox`, `sdBox2`, `opUnion`) and
   [chasm.gdshaderinc](../../shaders/include/chasm.gdshaderinc), which builds

@@ -39,7 +39,7 @@ distance smeared normals across ledges and terrace borders.
 
 ## Used by
 
-- [[PLAN_0.0.1]], epic #12 (surfaces).
+- [[PLAN_0.1.0]], epic #12 (surfaces).
 - Code: `calc_normal()` in
   [raymarch_world.gdshader](../../shaders/raymarch_world.gdshader).
 - Prototype: `normal()` in

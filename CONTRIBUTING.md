@@ -4,9 +4,9 @@
 
 Work is tracked in GitHub issues and grouped in three levels:
 
-- **Milestones** (`gh` milestones, e.g. `0.0.1`) mark a releasable state.
+- **Milestones** (`gh` milestones, e.g. `0.1.0`) mark a releasable state.
   Each milestone has a plan document in `docs/` (e.g.
-  [`docs/PLAN_0.0.1.md`](docs/PLAN_0.0.1.md)).
+  [`docs/PLAN_0.1.0.md`](docs/PLAN_0.1.0.md)).
 - **Epics** are issues that describe a larger feature. They carry no code of
   their own and are closed when all their sub-issues are done.
 - **Sub-issues** hang off an epic (GitHub sub-issues) and are the unit of

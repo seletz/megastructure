@@ -49,7 +49,7 @@ unmodified).
 
 - [[hash_vectors]]: the nested form `pcg(h ^ cell.x)` ... is the paper's
   recommended way to hash several inputs.
-- [[PLAN_0.0.1]], decision "shared integer hash".
+- [[PLAN_0.1.0]], decision "shared integer hash".
 - [[RESEARCH_WFC]], section 1 (determinism): every solver draw is `hash3_u`.
 - Code: [hash.gdshaderinc](../../shaders/include/hash.gdshaderinc),
   [hash.gd](../../scripts/hash.gd),

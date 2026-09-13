@@ -20,30 +20,6 @@ status: current
 
 - `mise run check` now runs the main scene headlessly for 60 frames and fails on any script or scene error or invalid UID. (#104)
 - The `facade_overlay` knob turns off the prototype's overlaid facade layouts, so each chasm wall gets one layout and the recess, buttress removal and opening rates apply as set. (#105)
-
-### Fixed
-
-- `mise run run` imports first, so pulling new scripts no longer causes parse errors on the next run. (#101)
-- H toggles the HUD and P takes screenshots (F1 and F12 still work), the HUD is on by default with a controls hint, so keyboards without an F row reach every action. (#100)
-- Film grain is off by default, so the image no longer flickers like snow at half render resolution. (#73)
-
-### Docs
-
-- The README opens with a screenshot of the chasm at seed 1. (#106)
-- The Obsidian vault settings and theme are committed, so the wiki opens the same way on every machine. (#70)
-- A code map describes each area of the source tree, its files and how to run or check it. (#68)
-- The wiki home page links the glossary, papers, algorithm notes and decision log. (#67)
-- A papers and references library gives each source a note with its citation and why it matters. (#66)
-- Algorithm notes explain the hash, ray marching, the chasm distance field and the planned generator. (#65)
-- A decision log records each design decision with its context and consequences. (#64)
-- A glossary defines the jargon used across the wiki and the code. (#63)
-- `docs/` opens as an Obsidian vault with a home page and writing conventions. (#62)
-- A research note plans the Wave Function Collapse sector fill for milestone 0.0.2. (#42)
-
-## 0.0.1 - 2026-09-13
-
-### Added
-
 - Presets save and load every tweak value, the seed and the camera pose, with built-in prototype defaults. (#52)
 - A HUD shows frame time, camera pose and seed, and F12 saves a screenshot. (#51)
 - Marching quality can be tuned, and debug views show steps, depth, normals and materials. (#50)
@@ -69,14 +45,27 @@ status: current
 
 ### Fixed
 
+- `mise run run` imports first, so pulling new scripts no longer causes parse errors on the next run. (#101)
+- H toggles the HUD and P takes screenshots (F1 and F12 still work), the HUD is on by default with a controls hint, so keyboards without an F row reach every action. (#100)
+- Film grain is off by default, so the image no longer flickers like snow at half render resolution. (#73)
 - The seed check ignores film grain and the HUD, and the headless tool tasks import the project first. (#54)
 - The HTML prototypes render upright instead of rotated 180 degrees. (#35)
 
 ### Docs
 
+- The README opens with a screenshot of the chasm at seed 1. (#106)
+- The Obsidian vault settings and theme are committed, so the wiki opens the same way on every machine. (#70)
+- A code map describes each area of the source tree, its files and how to run or check it. (#68)
+- The wiki home page links the glossary, papers, algorithm notes and decision log. (#67)
+- A papers and references library gives each source a note with its citation and why it matters. (#66)
+- Algorithm notes explain the hash, ray marching, the chasm distance field and the planned generator. (#65)
+- A decision log records each design decision with its context and consequences. (#64)
+- A glossary defines the jargon used across the wiki and the code. (#63)
+- `docs/` opens as an Obsidian vault with a home page and writing conventions. (#62)
+- A research note plans the Wave Function Collapse sector fill for milestone 0.2.0. (#42)
 - The plan states that the ray-marched renderer is a throwaway prototype. (#37)
 - The contributing guide describes branches, commits, checks and pull requests. (#31)
-- The milestone 0.0.1 plan and the README describe the goal, setup and tasks. (#27)
+- The milestone 0.1.0 plan and the README describe the goal, setup and tasks. (#27)
 
 ## References
 
