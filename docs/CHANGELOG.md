@@ -18,6 +18,7 @@ status: current
 
 ### Fixed
 
+- `mise run run` imports first, so pulling new scripts no longer causes parse errors on the next run. (#101)
 - H toggles the HUD and P takes screenshots (F1 and F12 still work), the HUD is on by default with a controls hint, so keyboards without an F row reach every action. (#100)
 - Film grain is off by default, so the image no longer flickers like snow at half render resolution. (#73)
 
