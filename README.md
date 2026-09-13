@@ -27,7 +27,13 @@ preset from `export_presets.cfg`:
 ```sh
 mise run templates
 mise run export linux build/linux/megastructure.x86_64
+mise run export macos build/macos/megastructure.zip
 ```
+
+Every [GitHub release](https://github.com/seletz/megastructure/releases) has a
+Linux (x86_64) and a macOS (universal) build attached. The macOS build is not
+signed or notarized: on first launch, right-click the app and choose Open to
+get past Gatekeeper.
 
 ## Controls
 
@@ -63,6 +69,9 @@ to the console.
 | `mise run export-debug` | Export a debug build, same arguments                  |
 | `mise run clean`     | Remove the import cache and build output                 |
 | `mise run hash-vectors` | Print the shared hash reference vectors               |
+| `mise run release:release` | Tag and publish the version in `project.godot`, then bump `develop` (`--dry-run` to preview) |
+| `mise run release:bump` | Raise the version: `mise run release:bump <patch\|minor\|major>` |
+| `mise run release:notes` | Print the changelog section of the next release       |
 
 `mise tasks` lists everything with descriptions.
 
@@ -73,7 +82,9 @@ vault: open the `docs/` folder with "Open folder as vault". Start at
 [`docs/Home.md`](docs/Home.md), the map of content; how notes are written is in
 [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md). The files are plain Markdown and
 also read fine on GitHub.
-What changed in each version is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+What changed in each version is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md);
+how a version is released is in
+[`docs/process/releasing.md`](docs/process/releasing.md).
 
 ## Documentation
 
