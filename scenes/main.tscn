@@ -32,13 +32,14 @@ size = Vector3(4, 4, 4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -30)
 script = ExtResource("1_camera")
 
+[node name="RaymarchQuad" type="MeshInstance3D" parent="Camera"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1)
+cast_shadow = 0
+extra_cull_margin = 64.0
+mesh = SubResource("QuadMesh_fullscreen")
+
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_dark")
-
-[node name="RaymarchQuad" type="MeshInstance3D" parent="."]
-cast_shadow = 0
-extra_cull_margin = 16384.0
-mesh = SubResource("QuadMesh_fullscreen")
 
 [node name="DepthTestCube" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, -3, 5)
