@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- Every 48 m sector gets a type (stratum, shaft, cavity, solid or chasm) from a hashed grammar with tunable parameters, and `mise run skeleton-histogram` guards the seed 0 type counts. (#112)
 - `mise run wt:new`, `wt:rm`, `pr:status` and `pr:merge` create and remove issue worktrees and rebase, check and merge pull requests in one command each, and `release:bump --push` pushes the bump. (#111)
 
 ## 0.1.0 - 2026-09-13
