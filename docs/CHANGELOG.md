@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- `mise run run-skeleton` opens a viewer that draws the sectors around the camera as colour-coded boxes with a legend, and every grammar parameter can be tuned live in its tweak panel. (#113)
 - Every 48 m sector gets a type (stratum, shaft, cavity, solid or chasm) from a hashed grammar with tunable parameters, and `mise run skeleton-histogram` guards the seed 0 type counts. (#112)
 - `mise run wt:new`, `wt:rm`, `pr:status` and `pr:merge` create and remove issue worktrees and rebase, check and merge pull requests in one command each, and `release:bump --push` pushes the bump. (#111)
 
