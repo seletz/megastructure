@@ -34,7 +34,7 @@ up to date.
 | `import` | | Imports all assets headlessly and regenerates `.godot/`. |
 | `check-scripts` | import | Parses every `.gd` file with `--check-only` and fails if any has errors. |
 | `smoke` | import | Runs the main scene headlessly for 60 frames (120 s timeout) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
-| `check` | import, check-scripts, smoke | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
+| `check` | import, check-scripts, smoke, skeleton-histogram | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
 | `export-debug` | import | Same as `export` with a debug build. |
@@ -55,6 +55,7 @@ up to date.
 | `screenshot-check` | import | Tests the HUD screenshot. Opens a window. |
 | `preset-check` | import | Tests that presets round-trip bit for bit. Headless. |
 | `code-map-check` | import | Tests that every source file is linked from exactly one code map note. Headless. |
+| `skeleton-histogram` | import | Prints the seed 0 sector type histogram and tests `sector_type` against [[skeleton_histogram_seed0]]; `--update` rewrites the reference ([[skeleton]]). Headless; part of `check`. |
 
 `smoke` matches the patterns case-sensitively. Its allow-list for known
 benign lines (the `allow` array in the task) is empty, because the run log is
@@ -87,14 +88,16 @@ exit with status 1 on any failure.
 | [screenshot_check.gd](../../scripts/tools/screenshot_check.gd) | `screenshot-check` | Takes a HUD screenshot and checks the file name, folder and resolution, and that the HUD and panel were hidden for that frame and shown again afterwards; then presses H, F1 and P and checks they toggle the HUD and hint and save a screenshot, and are ignored while the seed field has focus. |
 | [preset_check.gd](../../scripts/tools/preset_check.gd) | `preset-check` | Changes every parameter, the seed and the camera, saves a preset, loads the defaults, reloads the preset from disk and compares everything bitwise, including a restart and delete; also tests name validation and exact float reading. Uses a scratch `user://preset_check` folder. |
 | [code_map_check.gd](../../scripts/tools/code_map_check.gd) | `code-map-check` | Collects every file under `scripts/`, `shaders/` and `scenes/` (except `.uid` and `.import`), scans the links in `docs/code/*.md`, and fails if a file is linked from no note or from more than one, or if a link points at a missing source file. |
+| [skeleton_histogram.gd](../../scripts/tools/skeleton_histogram.gd) | `skeleton-histogram` | Counts the sector types of the 9 × 9 × 9 sectors around the origin for seed 0, per layer and in total; checks `sector_type` returns a type for 2 000 hashed random cells and the int32 extremes, also under an out-of-range grammar, and that two evaluations (and a fresh `Skeleton`) agree; then compares the table rows with [[skeleton_histogram_seed0]], or rewrites that file with `--update`. |
 
 ## How to run or check it
 
 - `mise run check` before every pull request; it must pass.
 - Run the check matching what you changed: `preset-check` for presets and the
   registry, `seed-check` and `screenshot-check` (with a display) for the seed
-  and HUD, `hash-vectors` for the hash, `code-map-check` after adding, moving
-  or removing a source file or editing these notes.
+  and HUD, `hash-vectors` for the hash, `skeleton-histogram` for the sector
+  grammar, `code-map-check` after adding, moving or removing a source file or
+  editing these notes.
 
 ## References
 
@@ -102,5 +105,5 @@ exit with status 1 on any failure.
 - [[ci-and-export]]: the CI workflows and export tasks in context.
 - [[releasing]]: the release tasks in the release process.
 - [[maintaining]]: the worktree and pull request tasks in the maintainer loop.
-- [[tweak-ui]], [[hash]]: what the checks test.
+- [[tweak-ui]], [[hash]], [[skeleton]]: what the checks test.
 - [[CONVENTIONS]]: keeping these notes in step with the code.
