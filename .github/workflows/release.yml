@@ -1,0 +1,70 @@
+name: release
+
+on:
+  release:
+    types: [published]
+  # Build and package without uploading when the release pipeline itself changes.
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - export_presets.cfg
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxcursor1 libxinerama1 libxrandr2 libxi6 libgl1 libfontconfig1
+          sudo apt-get install -y --no-install-recommends libasound2t64 \
+            || sudo apt-get install -y --no-install-recommends libasound2
+
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+
+      - name: mise run templates
+        run: mise run templates
+
+      - name: mise run export linux
+        run: mise run export linux build/linux/megastructure.x86_64
+
+      - name: mise run release:package linux
+        run: mise run release:package linux
+
+      - name: Upload to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" build/release/* --clobber
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+
+      - name: mise run templates
+        run: mise run templates
+
+      - name: mise run export macos
+        run: mise run export macos build/macos/megastructure.zip
+
+      - name: mise run release:package macos
+        run: mise run release:package macos
+
+      - name: Upload to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" build/release/* --clobber
