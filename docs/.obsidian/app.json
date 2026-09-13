@@ -1,0 +1,8 @@
+{
+  "readableLineLength": true,
+  "useMarkdownLinks": false,
+  "newLinkFormat": "shortest",
+  "attachmentFolderPath": "papers/pdf",
+  "showUnsupportedFiles": true,
+  "alwaysUpdateLinks": true
+}
