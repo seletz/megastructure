@@ -1,12 +1,18 @@
 class_name SkeletonViewer
 extends Node3D
 ## Debug view of the skeleton: every sector within `radius` sectors of the
-## camera drawn as a colour-coded box, one MultiMeshInstance3D per type.
+## camera drawn as a colour-coded cube, one MultiMeshInstance3D per type.
 ##
-## Boxes are inset (44 m of a 48 m sector) so neighbours stay apart. Shaft,
-## cavity, chasm and stratum are unshaded and translucent without depth write;
-## solid is opaque grey. Stratum is hidden by default because it is the
-## majority and would hide everything else.
+## By default each sector is a wireframe cube (12 edges, PRIMITIVE_LINES),
+## unshaded and without depth write, so the lattice reads through itself while
+## flying inside it. `fill` switches to translucent filled boxes for looking at
+## the region from outside: shaft, cavity, chasm and stratum translucent
+## without depth write, solid opaque grey. Stratum is the majority, so it is
+## much fainter than the other types and drawn after them, which lets voids
+## and solid read through it; `show_stratum` hides it. Cubes are inset (44 m of
+## a 48 m sector) so neighbours stay apart. The sector the camera is in is
+## never drawn, and cubes farther than half the radius from the centre fade
+## towards FADE_MIN so the near structure dominates.
 ##
 ## The instance buffers are rebuilt only when the camera enters another
 ## sector or the radius, a toggle, the seed or a grammar parameter changes, as
@@ -22,6 +28,7 @@ extends Node3D
 const MAX_RADIUS := 6
 ## Box edge is the sector edge minus this, in metres (44 m of 48 m).
 const BOX_MARGIN := 4.0
+## Filled box colours per type; solid is opaque.
 const TYPE_COLORS: Array[Color] = [
 	Color(0.55, 0.62, 0.75, 0.12),
 	Color(0.2, 0.75, 1.0, 0.35),
@@ -29,19 +36,36 @@ const TYPE_COLORS: Array[Color] = [
 	Color(0.42, 0.42, 0.45, 1.0),
 	Color(0.95, 0.2, 0.35, 0.35),
 ]
+## Wireframe edge colours per type.
+const WIRE_COLORS: Array[Color] = [
+	Color(0.55, 0.62, 0.75, 0.12),
+	Color(0.2, 0.75, 1.0, 0.95),
+	Color(1.0, 0.6, 0.15, 0.95),
+	Color(0.6, 0.6, 0.64, 0.45),
+	Color(0.95, 0.2, 0.35, 0.95),
+]
+## Brightness of cubes at the radius and beyond; cubes within half the radius
+## stay at 1.
+const FADE_MIN := 0.2
 
 ## FreeFlyCamera whose sector the region is centred on.
 @export var camera: NodePath
 ## Hud whose label the legend is attached to (optional).
 @export var hud: NodePath
 ## Region radius in sectors: (2 radius + 1)^3 sectors are drawn.
-@export_range(0, MAX_RADIUS) var radius := 3:
+@export_range(0, MAX_RADIUS) var radius := 4:
 	set(value):
 		radius = clampi(value, 0, MAX_RADIUS)
 		_dirty = true
-@export var show_stratum := false:
+@export var show_stratum := true:
 	set(value):
 		show_stratum = value
+		_dirty = true
+## Translucent filled boxes instead of wireframe cubes (for the outside view).
+@export var fill := false:
+	set(value):
+		fill = value
+		_apply_style()
 		_dirty = true
 ## When false, the region stays at `center` while the camera moves.
 @export var follow_camera := true:
@@ -63,7 +87,11 @@ var last_refresh_usec := 0
 var refresh_count := 0
 
 var _instances: Array[MultiMeshInstance3D] = []
+var _box_mesh: BoxMesh
+var _wire_mesh: ArrayMesh
 var _camera: FreeFlyCamera
+## Sector the camera was in at the last refresh; it is left out of the drawing.
+var _camera_cell := Vector3i.ZERO
 var _dirty := true
 ## Sector index -> SectorType of the cells drawn by the last refresh.
 var _type_cache := {}
@@ -76,28 +104,31 @@ func _ready() -> void:
 		grammar = SectorGrammar.new()
 	skeleton = Skeleton.new(grammar)
 	_camera = get_node_or_null(camera) as FreeFlyCamera
-	var box := BoxMesh.new()
-	box.size = Vector3.ONE
+	_box_mesh = BoxMesh.new()
+	_box_mesh.size = Vector3.ONE
+	_wire_mesh = _cube_edges()
 	for type in Skeleton.SectorType.size():
 		var instance := MultiMeshInstance3D.new()
 		instance.name = Skeleton.type_name(type).capitalize()
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var multimesh := MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
-		multimesh.mesh = box
+		multimesh.use_colors = true
 		instance.multimesh = multimesh
-		instance.material_override = _material(TYPE_COLORS[type])
 		add_child(instance)
 		_instances.append(instance)
+	_apply_style()
 	_build_legend()
 	WorldState.seed_changed.connect(func(_seed: int) -> void: invalidate_types())
 
 
 func _process(_delta: float) -> void:
-	if follow_camera and _camera != null:
+	if _camera != null:
 		var cell := sector_of(_camera.global_position)
-		if cell != center:
+		if follow_camera and cell != center:
 			center = cell
+		if cell != _camera_cell:
+			_dirty = true
 	if _dirty:
 		refresh()
 
@@ -143,33 +174,49 @@ func refresh() -> void:
 				index += 1
 	_type_cache = cache
 
+	# Index of the camera's sector inside the region; -1 (never matched) without a camera.
+	var skipped := -Vector3i.ONE
+	if _camera != null:
+		_camera_cell = sector_of(_camera.global_position)
+		skipped = _camera_cell - (center - Vector3i.ONE * radius)
 	var size := _sector_size()
 	var box_size := maxf(size - BOX_MARGIN, size * 0.5)
 	var origin := Vector3(center - Vector3i.ONE * radius) * size + Vector3.ONE * (size * 0.5)
+	var fade_start := radius * 0.5
+	var fade_span := maxf(radius - fade_start, 0.001)
 	for type in Skeleton.SectorType.size():
 		var multimesh := _instances[type].multimesh
-		var count := counts[type] if type != Skeleton.SectorType.STRATUM or show_stratum else 0
-		# MultiMesh.buffer holds 12 floats per instance: the basis rows with the
-		# origin as the fourth column.
+		var drawn := type != Skeleton.SectorType.STRATUM or show_stratum
+		# Opaque filled solid dims its colour; everything else fades its alpha.
+		var dim_rgb := fill and TYPE_COLORS[type].a >= 1.0
+		# MultiMesh.buffer holds 16 floats per instance: the basis rows with the
+		# origin as the fourth column, then the instance colour.
 		var buffer := PackedFloat32Array()
-		buffer.resize(count * 12)
+		buffer.resize(counts[type] * 16 if drawn else 0)
 		var offset := 0
 		index = 0
-		if count > 0:
+		if drawn:
 			for x in side:
 				for y in side:
 					for z in side:
-						if types[index] == type:
+						if types[index] == type and Vector3i(x, y, z) != skipped:
+							var distance := Vector3(x - radius, y - radius, z - radius).length()
+							var brightness := lerpf(1.0, FADE_MIN, clampf((distance - fade_start) / fade_span, 0.0, 1.0))
 							buffer[offset] = box_size
 							buffer[offset + 3] = origin.x + x * size
 							buffer[offset + 5] = box_size
 							buffer[offset + 7] = origin.y + y * size
 							buffer[offset + 10] = box_size
 							buffer[offset + 11] = origin.z + z * size
-							offset += 12
+							buffer[offset + 12] = brightness if dim_rgb else 1.0
+							buffer[offset + 13] = brightness if dim_rgb else 1.0
+							buffer[offset + 14] = brightness if dim_rgb else 1.0
+							buffer[offset + 15] = 1.0 if dim_rgb else brightness
+							offset += 16
 						index += 1
-		multimesh.instance_count = count
-		if count > 0:
+		buffer.resize(offset)
+		multimesh.instance_count = offset / 16
+		if offset > 0:
 			multimesh.buffer = buffer
 	last_refresh_usec = Time.get_ticks_usec() - start
 	refresh_count += 1
@@ -181,8 +228,9 @@ func register_params(registry: ParamRegistry) -> void:
 	if grammar == null:
 		grammar = SectorGrammar.new()
 	registry.add_script_params("viewer", {
-		"radius": {"value": radius, "default": 3, "min": 0, "max": MAX_RADIUS, "step": 1},
-		"show_stratum": {"value": show_stratum, "default": false},
+		"radius": {"value": radius, "default": 4, "min": 0, "max": MAX_RADIUS, "step": 1},
+		"show_stratum": {"value": show_stratum, "default": true},
+		"fill": {"value": fill, "default": false},
 		"follow_camera": {"value": follow_camera, "default": true},
 	}, func(param_name: String, value: Variant) -> void: set(param_name, value))
 	registry.add_object_exports(grammar, func(param_name: String, value: Variant) -> void:
@@ -194,15 +242,52 @@ func register_params(registry: ParamRegistry) -> void:
 	, "grammar")
 
 
+## Mesh and material of every type for the current `fill` mode.
+func _apply_style() -> void:
+	for type in _instances.size():
+		var instance := _instances[type]
+		instance.multimesh.mesh = _box_mesh if fill else _wire_mesh
+		var material := _material(TYPE_COLORS[type] if fill else WIRE_COLORS[type])
+		if type == Skeleton.SectorType.STRATUM:
+			# Translucent passes draw in ascending priority: stratum goes last.
+			material.render_priority = 1
+		instance.material_override = material
+
+
 static func _material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.albedo_color = color
+	material.vertex_color_use_as_albedo = true
 	if color.a < 1.0:
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
+
+
+## The 12 edges of the unit cube centred on the origin as a line mesh.
+static func _cube_edges() -> ArrayMesh:
+	var vertices := PackedVector3Array()
+	for axis in 3:
+		var u := (axis + 1) % 3
+		var v := (axis + 2) % 3
+		for a in [-0.5, 0.5]:
+			for b in [-0.5, 0.5]:
+				var start := Vector3.ZERO
+				start[axis] = -0.5
+				start[u] = a
+				start[v] = b
+				var end := start
+				end[axis] = 0.5
+				vertices.append(start)
+				vertices.append(end)
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
+	return mesh
 
 
 func _build_legend() -> void:
