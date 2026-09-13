@@ -147,8 +147,9 @@ Keep the build automated with mise and enforce the branch workflow on GitHub.
 
 ## Comparing with the HTML prototype
 
-Press F1 in the Godot build to show the HUD (FPS, frame time, camera position,
-yaw/pitch, seed) and F12 to save a screenshot, without HUD and tweak panel, to
+The Godot build shows the HUD (FPS, frame time, camera position, yaw/pitch,
+seed) on start; H (or F1) toggles it. Press P (or F12) to save a screenshot,
+without HUD and tweak panel, to
 `user://screenshots/<seed>_<yyyymmdd-hhmmss>.png`; the absolute path is printed
 to the console. To render the same view in `docs/megastructure-chasm.html` (or
 `docs/megastructure.html`):

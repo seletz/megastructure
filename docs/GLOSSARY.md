@@ -504,8 +504,10 @@ See also: [[MEGASTRUCTURE_CONCEPT]].
 
 Heads-up display: an on-screen overlay of status information.
 
-In this project: F1 toggles FPS, frame time, camera pose and seed; F12 saves a
-screenshot without it ([hud.gd](../scripts/ui/hud.gd)).
+In this project: shown on start with FPS, frame time, camera pose, seed and a
+controls line; H (or F1) toggles it, leaving a dimmed "H: HUD   Tab: panel"
+hint, and P (or F12) saves a screenshot without it
+([hud.gd](../scripts/ui/hud.gd)).
 
 See also: [[PLAN_0.0.1]].
 
