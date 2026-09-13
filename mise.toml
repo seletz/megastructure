@@ -38,10 +38,58 @@ description = "Import assets, parse scripts and verify the project loads headles
 depends = ["import", "check-scripts"]
 run = "godot --headless --editor --path . --quit"
 
+[tasks.templates]
+description = "Download export templates for the pinned Godot version (skips if installed)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+# "4.7.2.stable.official.ed1daf0bf" -> "4.7.2.stable"
+full_version="$(godot --headless --version | tail -n 1)"
+version="$(printf '%s\n' "$full_version" | cut -d. -f1-4)"
+IFS=. read -r major minor patch status <<< "$version"
+if [[ -z "${status:-}" ]]; then
+	echo "Unexpected Godot version string: $full_version" >&2
+	exit 1
+fi
+
+# Release tags drop a zero patch level: 4.7.0 ships as "4.7-stable".
+if [[ "$patch" == "0" ]]; then
+	tag="${major}.${minor}-${status}"
+else
+	tag="${major}.${minor}.${patch}-${status}"
+fi
+
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+dest="$data_home/godot/export_templates/$version"
+if [[ -f "$dest/version.txt" ]]; then
+	echo "Export templates $version already installed in $dest"
+	exit 0
+fi
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+url="https://github.com/godotengine/godot/releases/download/${tag}/Godot_v${tag}_export_templates.tpz"
+echo "Downloading $url"
+progress=(--silent --show-error)
+[[ -t 2 ]] && progress=(--progress-bar)
+curl --fail --location "${progress[@]}" --output "$tmp/templates.tpz" "$url"
+unzip -q "$tmp/templates.tpz" -d "$tmp"
+
+mkdir -p "$(dirname "$dest")"
+rm -rf "$dest"
+mv "$tmp/templates" "$dest"
+echo "Installed export templates $version in $dest"
+'''
+
 [tasks.export]
 description = "Export a release build. Usage: mise run export <preset> <output-path>"
 depends = ["import"]
-run = "godot --headless --path . --export-release \"${usage_preset}\" \"${usage_output}\""
+run = [
+	'mkdir -p "$(dirname "${usage_output}")"',
+	'godot --headless --path . --export-release "${usage_preset}" "${usage_output}"',
+]
 usage = '''
 arg "<preset>" help="Export preset name from export_presets.cfg"
 arg "<output>" help="Output file path, e.g. build/linux/megastructure.x86_64"
@@ -50,7 +98,10 @@ arg "<output>" help="Output file path, e.g. build/linux/megastructure.x86_64"
 [tasks.export-debug]
 description = "Export a debug build. Usage: mise run export-debug <preset> <output-path>"
 depends = ["import"]
-run = "godot --headless --path . --export-debug \"${usage_preset}\" \"${usage_output}\""
+run = [
+	'mkdir -p "$(dirname "${usage_output}")"',
+	'godot --headless --path . --export-debug "${usage_preset}" "${usage_output}"',
+]
 usage = '''
 arg "<preset>" help="Export preset name from export_presets.cfg"
 arg "<output>" help="Output file path"
