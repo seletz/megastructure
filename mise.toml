@@ -122,3 +122,7 @@ run = "godot --headless --path . --script res://scripts/tools/hash_vectors.gd"
 [tasks.ui-params]
 description = "Print the shader parameter groups the tweak panel discovers"
 run = "godot --headless --path . --script res://scripts/tools/registry_dump.gd"
+
+[tasks.seed-check]
+description = "Verify seed control, shader uniform and seed-reproducible frames (opens a window)"
+run = "godot --path . --script res://scripts/tools/seed_check.gd"

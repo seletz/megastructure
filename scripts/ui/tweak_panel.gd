@@ -92,6 +92,9 @@ func _build() -> void:
 	title.text = "Parameters (Tab to close)"
 	_sections.add_child(title)
 
+	_sections.add_child(SeedControl.new())
+	_sections.add_child(HSeparator.new())
+
 	for group in registry.groups:
 		_build_group(group)
 
