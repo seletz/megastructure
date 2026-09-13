@@ -63,3 +63,7 @@ run = "godot-mcp"
 [tasks.clean]
 description = "Remove generated import cache and build output"
 run = "rm -rf .godot build"
+
+[tasks.hash-vectors]
+description = "Print the shared integer hash reference vectors (see docs/hash_vectors.md)"
+run = "godot --headless --path . --script res://scripts/tools/hash_vectors.gd"

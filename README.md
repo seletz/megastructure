@@ -31,6 +31,7 @@ This downloads the pinned Godot build (see `mise.toml`) and the other tools.
 | `mise run export`    | Export a release build: `mise run export <preset> <out>` |
 | `mise run export-debug` | Export a debug build, same arguments                  |
 | `mise run clean`     | Remove the import cache and build output                 |
+| `mise run hash-vectors` | Print the shared hash reference vectors               |
 
 `mise tasks` lists everything with descriptions.
 
@@ -47,6 +48,8 @@ This downloads the pinned Godot build (see `mise.toml`) and the other tools.
     shafts and cavities.
   - [`docs/megastructure-chasm.html`](docs/megastructure-chasm.html):
     exterior chasm between facades, the reference for milestone 0.0.1.
+- [`docs/hash_vectors.md`](docs/hash_vectors.md): the shared integer hash
+  used by the shader, GDScript and the prototypes, with reference vectors.
 
 ## Editing
 
