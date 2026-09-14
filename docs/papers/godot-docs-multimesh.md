@@ -39,11 +39,20 @@ Link only: living web pages. The class reference is MIT-licensed.
   transform.
 - Transforms are uploaded in one `PackedFloat32Array` through `buffer`, built
   on a worker thread. The class reference does not document that buffer's
-  float layout, so the placement issue must verify it and pin it with a test.
+  float layout. With `TRANSFORM_3D` and no colour or custom data it is 12
+  floats per instance, the three basis rows each followed by that row's
+  origin component (`x.x y.x z.x o.x  x.y y.y z.y o.y  x.z y.z z.z o.z`,
+  x, y, z the basis columns); verified against `set_instance_transform` on
+  the OpenGL renderer (`mise run multimesh-draw-calls`) and pinned by hand in
+  `mise run multimesh-check`. The headless dummy renderer stores a buffer
+  you set but ignores `set_instance_transform`.
 - Setting `custom_aabb` to the sector box avoids recomputing bounds.
 
 ## Used by
 
 - [[RESEARCH_WFC]], section 5 (placement) and issues E2 to E4 in section 7.
 - Related: [[godot-docs-gridmap]], [[godot-docs-workerthreadpool]].
-- No code yet; placement is planned for milestone 0.2.0.
+- [[placement]]: `SectorMultiMesh` (#96) builds one buffer per tile mesh per
+  sector on a `SectorJobs` worker and makes one `MultiMeshInstance3D` each,
+  with `custom_aabb` set to the sector box; the walk scene's default.
+- [[sector-jobs]]: the worker side of that placement data.

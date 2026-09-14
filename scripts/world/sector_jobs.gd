@@ -22,8 +22,11 @@ extends Node
 ## a `Skeleton` and a `WalkableGraph` (whose face cache it writes), an
 ## `EdgeRasteriser`, then `SectorDomains` and a `SectorSolver`, or with
 ## `use_boundaries` a cold `SectorBoundaries`. The only objects tasks share
-## are read-only after `configure`: the `TileLibrary` and a private copy of
-## the `SectorGrammar`. The result dictionary is built on the worker, pushed
+## are read-only after `configure`: the `TileLibrary`, a private copy of
+## the `SectorGrammar` and the tile faces `SectorMultiMesh.prototype_faces`
+## read from the meshes on the main thread. With `build_placement` a task
+## that solved also builds the sector's MultiMesh buffers and collision faces
+## (`SectorMultiMesh.build`), so the main thread only makes nodes. The result dictionary is built on the worker, pushed
 ## into a mutex-protected outbox keyed by job id and taken out by the main
 ## thread after the wait. Its fields are in `solve_sector`; the pipeline,
 ## thread-safety rules and cancellation are in docs/algorithms/sector-jobs.md.
@@ -47,11 +50,13 @@ class Job:
 	var grammar: SectorGrammar
 	var seed := 0
 	var boundaries := false
+	## `SectorMultiMesh.prototype_faces`, or an empty Array for no placement.
+	var faces := []
 	var outbox: Outbox
 
 	## Runs on a worker thread.
 	func run() -> void:
-		var result := SectorJobs.solve_sector(library, grammar, seed, sector, boundaries, outbox.is_cancelled.bind(id))
+		var result := SectorJobs.solve_sector(library, grammar, seed, sector, boundaries, outbox.is_cancelled.bind(id), faces)
 		outbox.push(id, result)
 
 
@@ -110,6 +115,9 @@ var world_seed := 0
 ## Solve through `SectorBoundaries` (cold, one instance per task) instead of
 ## `SectorDomains` and one `SectorSolver`; applies to tasks started from now on.
 var use_boundaries := false
+## Tasks that solve also build `SectorMultiMesh` placement data into the
+## result's `placement`; applies to tasks started from now on.
+var build_placement := false
 ## Most tasks running at once, cancelled ones included. The default is half
 ## the logical CPUs: with one task per logical CPU but one, polls on an
 ## 8-core, 16-thread CPU blocked up to 9 ms instead of under 1 ms at the same
@@ -136,6 +144,8 @@ var last_poll_usec := 0
 var max_poll_usec := 0
 
 var _grammar: SectorGrammar
+## `SectorMultiMesh.prototype_faces(library)`, read once in `configure`.
+var _faces := []
 var _outbox := Outbox.new()
 var _next_id := 0
 ## Queued jobs, in request order.
@@ -167,6 +177,7 @@ func configure(tile_library: TileLibrary, seed := 0, grammar: SectorGrammar = nu
 	clear()
 	library = tile_library
 	world_seed = seed
+	_faces = SectorMultiMesh.prototype_faces(tile_library) if tile_library != null and tile_library.errors.is_empty() else []
 	_grammar = grammar.duplicate() as SectorGrammar if grammar != null else SectorGrammar.new()
 
 
@@ -243,6 +254,11 @@ func reset_poll_stats() -> void:
 	max_poll_usec = 0
 
 
+## `SectorMultiMesh.prototype_faces` of `library`, read in `configure`.
+func faces() -> Array:
+	return _faces
+
+
 ## Half the logical CPUs, at least 1.
 static func default_max_in_flight() -> int:
 	return maxi(OS.get_processor_count() / 2, 1)
@@ -306,7 +322,11 @@ func wait_all() -> void:
 ## - `degraded` (bool): some or all cells are the solid fallback, not a solve.
 ## - `error` (String): why it failed, or "".
 ## - `cancelled` (bool).
-static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed: int, sector: Vector3i, boundaries := false, cancelled := Callable()) -> Dictionary:
+## - `placement` (Dictionary): with `faces` (from
+##   `SectorMultiMesh.prototype_faces`) and a SOLVED outcome,
+##   `SectorMultiMesh.build` of the cells, built on this thread; else empty.
+##   Its `build_usec` is not part of `time_usec`.
+static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed: int, sector: Vector3i, boundaries := false, cancelled := Callable(), faces := []) -> Dictionary:
 	var started := Time.get_ticks_usec()
 	var result := {
 		"sector": sector,
@@ -317,6 +337,7 @@ static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed
 		"degraded": false,
 		"error": "",
 		"cancelled": false,
+		"placement": {},
 	}
 	if cancelled.is_valid() and cancelled.call():
 		return _cancelled(result, started)
@@ -348,6 +369,8 @@ static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed
 			result.degraded = solved.degraded
 			result.error = solved.error
 	result.time_usec = Time.get_ticks_usec() - started
+	if not faces.is_empty() and result.outcome == SectorSolver.Outcome.SOLVED:
+		result.placement = SectorMultiMesh.build(tile_library, faces, result.cells)
 	return result
 
 
@@ -388,6 +411,7 @@ func _start_pending(poll_started: int) -> void:
 		job.grammar = _grammar
 		job.seed = world_seed
 		job.boundaries = use_boundaries
+		job.faces = _faces if build_placement else []
 		job.outbox = _outbox
 		job.task_id = WorkerThreadPool.add_task(job.run, high_priority, "SectorJobs %s" % job.sector)
 		tasks_started += 1

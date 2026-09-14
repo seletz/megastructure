@@ -29,7 +29,7 @@ Last verified against commit `3cd3cad`.
 | Walkable graph | [[walkable-graph]] | Portals on the faces between open sectors and interior nodes, the second generator layer. |
 | Tileset | [[tileset]] | Tile prototypes with sockets, weights, families and rotations, the tileset resource and its validator. |
 | Solver | [[solver]] | `SectorSolver`, which fills a cell grid with tiles by Wave Function Collapse, the sector borders, sector jobs on worker threads, and their checks. |
-| Placement and walking | [[placement]] | `SectorGridMap`, which places solved sectors as GridMaps with collision, the walk scene and the player capsule, and their checks. |
+| Placement and walking | [[placement]] | `SectorMultiMesh`, which places solved sectors as one MultiMesh per tile mesh with merged collision built on the worker, `SectorGridMap` kept for debugging, the walk scene and the player capsule, and their checks. |
 | Tweak UI | [[tweak-ui]] | World seed, parameter registry, tweak panel, seed control, presets, HUD and their keys. |
 | Tools and tasks | [[tools-and-tasks]] | Every mise task and every check script in `scripts/tools/`. |
 | CI and export | [[ci-and-export]] | The GitHub check and release workflows, branch protection, the Linux and macOS export presets and templates. |

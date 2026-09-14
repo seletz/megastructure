@@ -105,7 +105,9 @@ sequenceDiagram
    out of the outbox.
 5. **Emit.** After the timing of the poll ends, `sector_ready(result)` is
    emitted for every job that was not cancelled. Turning the cells into
-   nodes (#95, #96) happens in the handler, on the main thread.
+   nodes (#95, #96) happens in the handler, on the main thread; with
+   `build_placement` the task has already built the MultiMesh buffers and
+   collision faces, so the handler only makes nodes.
 
 ## Handoff format
 
@@ -122,6 +124,7 @@ with another thread:
 | `degraded` | `bool` | Some or all cells are the solid fallback, not a solve. |
 | `error` | `String` | Why it failed, or `""`. |
 | `cancelled` | `bool` | Always false in an emitted result. |
+| `placement` | `Dictionary` | With `build_placement` and a `SOLVED` outcome, `SectorMultiMesh.build` of the cells: `buffers` (one `PackedFloat32Array` per prototype in the `MultiMesh.buffer` layout), `faces` (`PackedVector3Array` collision triangles), `cells_per_sector`, `instances`, `triangles`, `culled_triangles`, `build_usec` (not part of `time_usec`). Otherwise empty. See [[placement]]. |
 
 Packed arrays are copy-on-write with an atomic reference count, so handing
 `cells` over costs nothing, and the main thread's copy never changes.
@@ -145,6 +148,10 @@ What a task may touch follows [[godot-docs-thread-safe-apis]]:
   - The `SectorGrammar`. `configure` duplicates the caller's resource, so
     editing a grammar in the tweak panel never reaches a running task.
     Call `configure` again after a change.
+  - The tile faces. `configure` reads each prototype mesh's `get_faces()`
+    once on the main thread (`SectorMultiMesh.prototype_faces`); a task with
+    placement only reads those arrays, transforms copies of them and builds
+    its own buffers.
 - **The plain `Skeleton` is read-only after construction.** `sector_type`
   only reads `grammar` and calls the static `Hash` functions, so it could be
   shared. Each task still builds its own, which costs nothing. The caching
@@ -231,8 +238,9 @@ Two design choices keep the poll short:
 - **Interrupting a solve.** A cancelled task finishes the solve it is in.
   A cancel check between solver attempts would free the slot sooner, but it
   would put a callable into `SectorSolver`.
-- **Worker-side placement data.** E2 (#96) moves the MultiMesh buffers and
-  collision faces into the task, and they join the result dictionary.
+- **Main-thread collision cost** (#175): the worker builds the collision
+  faces (#96), but Jolt builds the sector's trimesh when its body enters
+  the tree, on the main thread, about 1.5 s for a mixed sector.
 - **Solver cost** dominates: see the native threshold #138.
 
 ## References
