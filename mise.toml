@@ -152,14 +152,28 @@ depends = ["import"]
 description = "Run the tileset validation (mise run tiles-check) on the placeholder tileset with the default options (headless)"
 run = "godot --headless --path . --script res://scripts/tools/tiles_check.gd -- res://resources/tilesets/placeholder.tres"
 
+[tasks.solver-check]
+depends = ["import"]
+description = "Check the sector solver on the placeholder tileset: unconstrained 8^3 solves at seeds 0..4 succeed, repeat byte for byte on a second solver instance, allow every adjacency and match the seed 0 reference in docs/solver_reference_seed0.md; the entropy flag and domain restrictions work; print the tile histogram, steps and time per seed and the time of one 24^3 solve (headless). --update rewrites the reference"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+[[ "${usage_update:-false}" == "true" ]] && args+=(--update)
+godot --headless --path . --script res://scripts/tools/solver_check.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--update" help="Rewrite docs/solver_reference_seed0.md from the current solver instead of comparing"
+'''
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main, skeleton viewer and tile contact sheet scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures, check the placeholder tileset is up to date and passes the tileset validation, and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder"]
+description = "Import assets, parse scripts, run the main, skeleton viewer and tile contact sheet scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures, check the placeholder tileset is up to date and passes the tileset validation, check the sector solver, and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]
