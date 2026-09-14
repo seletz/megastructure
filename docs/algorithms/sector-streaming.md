@@ -30,8 +30,8 @@ sources:
 > in each sector's skeleton type colour fill the ring just outside R, so
 > the world does not end at the last placed sector. Walking 10 sectors in a
 > straight line and back never leaves a hole under the player, memory
-> returns to within 1.3 % of where it started, and no frame after the first
-> placements took longer than 16 ms.
+> returns to within 1.4 % of where it started, and one frame in 206 715
+> after the first placements took longer than 16 ms (16.3 ms).
 
 This is milestone 0.2.0 item E4 of [[RESEARCH_WFC]] section 7, following
 its section 5 on streaming and LOD and [[MEGASTRUCTURE_CONCEPT]] section 5.
@@ -175,13 +175,13 @@ refresh frame (rare) may skip the rest:
 
 1. **Refresh** when the focus sector changed: cancel jobs, queue unloads,
    list the missing impostor boxes, request or take from the cache (up to
-   2.1 ms at a crossing with R = 1).
+   1.1 to 2.1 ms at a crossing with R = 1).
 2. **Free** queued chunk shapes for a quarter of the budget, then **at most
    one sector**: its bodies, its node (deleted at the end of the frame,
    outside the budget, which is why only one) and its impostor.
 3. **Place** the ready result nearest to the focus sector: **at most one
    sector per frame**. A `SectorMultiMesh` is one `MultiMeshInstance3D`
-   per tile mesh (up to 19), 3 ms.
+   per tile mesh (up to 19), up to 3.4 ms.
 4. **Add collision**: first the 27 chunks around the focus (sampled at the
    focus plus and minus one chunk edge on each axis), whatever sector they
    are in; then the nearest sector with missing chunks, its chunks sorted
@@ -258,50 +258,54 @@ within R is placed and the collision around the next position is there.
 
 | Measure | Result |
 | --- | --- |
-| First placements, 27 sectors (19 solved, all collision added) | 19.4 s |
-| A crossing on the way out (9 sectors solved and placed) | 7 to 10 s |
-| A crossing on the way back (9 sectors from the cache) | 0.5 to 1.1 s |
-| Whole run (warm-up, 10 out, 10 back, settle) | 129 s |
-| Frames without the player's sector or its collision | 0 of 144 072 |
+| First placements, 27 sectors (all collision added) | 20.3 s |
+| A crossing on the way out (9 sectors solved and placed) | 8.5 to 11.7 s |
+| A crossing on the way back (9 sectors from the cache) | 0.5 to 1.0 s |
+| Whole run (warm-up, 10 out, 10 back, settle) | 140 s |
+| Frames without the player's sector or its collision | 0 of 206 715 |
 | Steps missing a face neighbour or a sector within R, or keeping one beyond R + 1 | 0 |
 | Solves on the way back | 0 (81 cache hits) |
 | Sectors placed, freed | 198, 162 |
-| Static memory, baseline and after walking back | 277.8 MB, 281.4 MB (+1.3 %) |
-| Objects, nodes | 2490 and 482, both unchanged |
-| Longest frame after the first placements | 15.2 ms; 0 frames over 16 ms |
-| Longest streamer update, refresh, placement, unload | 13.3, 2.1, 3.2, 2.0 ms |
+| Static memory, baseline and after walking back | 257.2 MB, 260.9 MB (+1.4 %) |
+| Objects, nodes | 2460 and 467, both unchanged |
+| Longest frame after the first placements | 16.3 ms; 1 frame over 16 ms, none over 33 ms |
+| Longest streamer update, refresh, placement, unload | 11.0, 1.1, 3.4, 2.3 ms |
 | Longest `SectorJobs` poll | 0.5 ms |
 
-The timeline (one row per sector boundary crossed; `+placed` and `-freed`
-count since the row before, `collision pending` the placed sectors still
-missing chunks):
+The timeline (one row per sector boundary crossed, shortened; `+placed` and
+`-freed` count since the row before, `collision pending` the placed sectors
+still missing chunks):
 
 | t (s) | Event | Player sector | Placed | +placed | -freed | Solved | Cache hits | Collision pending |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 19.4 | first placements done | (0, 0, 0) | 27 | 27 | 0 | 27 | 0 | 0 |
-| 32.0 | baseline, after the warm-up | (0, 0, 0) | 36 | 9 | 0 | 36 | 0 | 0 |
-| 39.9 | enter | (3, 0, 0) | 35 | 9 | 10 | 45 | 0 | 3 |
-| 64.4 | enter | (6, 0, 0) | 35 | 9 | 9 | 72 | 0 | 5 |
-| 100.0 | enter | (10, 0, 0) | 35 | 9 | 9 | 108 | 0 | 4 |
-| 106.7 | enter | (9, 0, 0) | 36 | 9 | 8 | 117 | 0 | 2 |
-| 109.0 | enter | (5, 0, 0) | 36 | 9 | 9 | 117 | 36 | 21 |
-| 112.1 | enter | (0, 0, 0) | 35 | 8 | 9 | 117 | 81 | 22 |
-| 128.9 | final | (0, 0, 0) | 36 | 9 | 8 | 117 | 81 | 0 |
+| 20.3 | first placements done | (0, 0, 0) | 27 | 27 | 0 | 27 | 0 | 0 |
+| 32.8 | baseline, after the warm-up | (0, 0, 0) | 36 | 9 | 0 | 36 | 0 | 0 |
+| 41.9 | enter | (3, 0, 0) | 35 | 9 | 10 | 45 | 0 | 2 |
+| 71.4 | enter | (6, 0, 0) | 35 | 9 | 9 | 72 | 0 | 5 |
+| 113.7 | enter | (10, 0, 0) | 35 | 9 | 9 | 108 | 0 | 4 |
+| 119.9 | enter | (9, 0, 0) | 36 | 9 | 8 | 117 | 0 | 2 |
+| 122.1 | enter | (5, 0, 0) | 36 | 9 | 9 | 117 | 36 | 20 |
+| 124.9 | enter | (0, 0, 0) | 35 | 8 | 9 | 117 | 81 | 21 |
+| 139.9 | final | (0, 0, 0) | 36 | 9 | 8 | 117 | 81 | 0 |
 
-- **Walking out is bound by solving**: a slab of 9 sectors takes 7 to 10 s
+- **Walking out is bound by solving**: a slab of 9 sectors takes 8 to 12 s
   on 8 tasks, so a player walking at 4 m/s (12 s per sector) keeps just
   ahead of it; running (8 m/s) is held at boundaries.
 - **Walking back is bound by collision**: cached sectors are placed within
-  a second, but their 1.2 s of chunk work each piles up (22 sectors pending
+  a second, but their 1.2 s of chunk work each piles up (21 sectors pending
   on arrival); the chunks around the player always come first, so no step
-  waited long. The last 17 s of the run are that backlog.
-- **Memory**: the 1.3 % left over after walking back is the cache (117
+  waited long. The last 15 s of the run are that backlog.
+- **Memory**: the 1.4 % left over after walking back is the cache (117
   entries of about 55 KB each is 6.4 MB) and allocator slack; nodes and
   objects return exactly.
 - **Frame times** were measured with the headless frame pacing sleep
-  switched off, while another worker's checks kept the load average near 5.
-  Before one unload per frame and budgeted impostor boxes, frames that freed
-  6 to 8 sectors or made 25 impostor boxes at once reached 18 to 32 ms.
+  switched off, with another worker's checks keeping the load average near
+  4. Before one unload per frame and budgeted impostor boxes, frames that
+  freed 6 to 8 sectors or made 25 impostor boxes at once reached 18 to
+  32 ms. With the load average at 13 (another worker's solver runs on 5
+  cores) a single chunk add took up to 25 ms and three frames passed 33 ms:
+  the check is as sensitive to a busy machine as `jobs-check`, which is why
+  both run alone.
 
 `--quick` (2 sectors out and back) takes about 55 s and gives the same
 checks; the numbers above are from the full walk (`mise run
