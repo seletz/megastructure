@@ -15,7 +15,9 @@ extends SceneTree
 ## (each record dropped in turn while the rest still fail) and prints those
 ## records relative to the first. With `--no-solve` it only builds and
 ## propagates the starting domains, which is enough to count failures before
-## an attempt. Exits 1 when any sector fails before an attempt, or when
+## an attempt. Every solved sector is checked for walk faces its floor,
+## bridge, tunnel or portal tiles block (`SolverSectorRun.count_blocked_walk_faces`).
+## Exits 1 when any sector fails before an attempt or blocks a walk face, or when
 ## `--min-solved N` is given and fewer than N sectors of some seed solve.
 ## Run with `mise run solver-real [--seeds S] [--count N] [--solid N]
 ## [--no-solve] [--min-solved N]`; `--min-solved` applies to the strata.
@@ -61,6 +63,7 @@ func _init() -> void:
 		quit(1)
 		return
 	var failed_before := 0
+	var blocked := 0
 	var short := 0
 	var rows := PackedStringArray()
 	for seed in seeds:
@@ -70,20 +73,21 @@ func _init() -> void:
 			var sectors := SolverSectorRun.real_sectors(rasteriser, count if type == Skeleton.SectorType.STRATUM else solid, type)
 			if sectors.is_empty():
 				continue
-			var counts := {"solved": 0, "degraded": 0, "failed": 0, "rejected": 0, "propagation": 0}
+			var counts := {"solved": 0, "degraded": 0, "failed": 0, "rejected": 0, "propagation": 0, "blocked": 0}
 			for sector in sectors:
 				_run_sector(library, rasteriser, solver, seed, sector, type, solve, counts)
 			var before: int = counts.rejected + counts.propagation
 			failed_before += before
+			blocked += counts.blocked
 			if type == Skeleton.SectorType.STRATUM and min_solved >= 0 and counts.solved < min_solved:
 				short += 1
-			rows.append("  seed %d, %d %s: %d solved, %d degraded, %d failed in an attempt, %d rejected by the record checks, %d failed on the starting propagation" % [
-				seed, sectors.size(), Skeleton.type_name(type), counts.solved, counts.degraded, counts.failed, counts.rejected, counts.propagation,
+			rows.append("  seed %d, %d %s: %d solved, %d degraded, %d failed in an attempt, %d rejected by the record checks, %d failed on the starting propagation, %d blocked walk faces" % [
+				seed, sectors.size(), Skeleton.type_name(type), counts.solved, counts.degraded, counts.failed, counts.rejected, counts.propagation, counts.blocked,
 			])
 	for row in rows:
 		print(row)
-	var ok := failed_before == 0 and short == 0
-	print("solver real: %s" % ("ok" if ok else "%d sector(s) failed before an attempt, %d seed(s) below %d solved" % [failed_before, short, min_solved]))
+	var ok := failed_before == 0 and short == 0 and blocked == 0
+	print("solver real: %s" % ("ok" if ok else "%d sector(s) failed before an attempt, %d seed(s) below %d solved, %d blocked walk face(s)" % [failed_before, short, min_solved, blocked]))
 	quit(0 if ok else 1)
 
 
@@ -111,6 +115,8 @@ func _run_sector(library: TileLibrary, rasteriser: EdgeRasteriser, solver: Secto
 	var result := solver.solve(seed, sector, built.words)
 	var outcome: String = SectorSolver.OUTCOME_NAMES[result.outcome]
 	counts[outcome] += 1
+	if result.outcome == SectorSolver.Outcome.SOLVED:
+		counts.blocked += SolverSectorRun.count_blocked_walk_faces(library, size, records, result.cells)
 	print("  %s: %d records, %s after %d attempt(s)%s" % [label, records.size(), outcome, result.attempts, "" if result.ok else ": %s" % result.error])
 
 
