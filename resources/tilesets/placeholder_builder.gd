@@ -27,14 +27,19 @@ const COLUMN_HALF := 0.55
 const WALL_HALF := 0.35
 const PARAPET_TOP := SLAB_TOP + 1.1
 const PARAPET := 0.14
+const PARAPET_END := 0.2
+## Gap that keeps an end piece's geometry off a face whose socket is symmetric.
+const INSET := 0.02
 const LINTEL_BOTTOM := 0.8
 const JAMB := 0.2
 const TREADS := 5
 const TREAD := 0.4
 const STAIR_HALF := 0.9
+const TREAD_PLATE := 0.1
 const CATWALK_WIDTH := 1.0
 const CATWALK_DECK := 0.2
 const RAIL := 0.06
+const CATWALK_END := 0.2
 const LADDER_HALF := 0.3
 const LADDER_WALL_GAP := 0.14
 const RUNGS := 5
@@ -132,6 +137,18 @@ static func build() -> TileSet3D:
 			_box(Vector3(-H, -H, -WALL_HALF), Vector3(-H + JAMB, H, WALL_HALF)),
 			_box(Vector3(H - JAMB, -H, -WALL_HALF), Vector3(H, H, WALL_HALF)),
 		]), 0.5, FAMILY.PORTAL_OPENING, ["3s", "3s", "3_0", "0i", "0s", "0s"], 2),
+		_prototype("floor_open", _mesh([slab]), 1.0, FAMILY.FLOOR, ["0s", "0s", "0i", "0i", "0s", "0s"], 1),
+		_prototype("slab_edge_end", _mesh(_slab_edge_end_boxes(1.0)), 0.5, FAMILY.FLOOR, ["2", "0s", "0i", "1i", "0s", "0s"], 4),
+		_prototype("slab_edge_end_f", _mesh(_slab_edge_end_boxes(-1.0)), 0.5, FAMILY.FLOOR, ["0s", "2f", "0i", "1i", "0s", "0s"], 4),
+		_prototype("stair_open", _mesh(_open_stair_boxes()), 0.5, FAMILY.STAIR, ["0s", "0s", "0i", "0i", "0s", "0s"], 4),
+		_prototype("catwalk_end", _mesh(_catwalk_end_boxes(1.0)), 0.25, FAMILY.CATWALK, ["4", "0s", "0i", "0i", "1s", "0s"], 4),
+		_prototype("catwalk_end_f", _mesh(_catwalk_end_boxes(-1.0)), 0.25, FAMILY.CATWALK, ["0s", "4f", "0i", "0i", "1s", "0s"], 4),
+		_prototype("portal_frame", _mesh([
+			slab,
+			_box(Vector3(-H, SLAB_TOP, -WALL_HALF), Vector3(-H + JAMB, H, WALL_HALF)),
+			_box(Vector3(H - JAMB, SLAB_TOP, -WALL_HALF), Vector3(H, H, WALL_HALF)),
+			_box(Vector3(-H + JAMB, LINTEL_BOTTOM, -WALL_HALF), Vector3(H - JAMB, H, WALL_HALF)),
+		]), 0.5, FAMILY.PORTAL_OPENING, ["0s", "0s", "0i", "0i", "0s", "0s"], 2),
 	]
 	return tileset
 
@@ -142,6 +159,45 @@ static func _stair_boxes() -> Array[AABB]:
 	var boxes: Array[AABB] = []
 	for i in TREADS:
 		boxes.append(_box(Vector3(-H + TREAD * i, -H, -STAIR_HALF), Vector3(H, -H + TREAD * (i + 1), STAIR_HALF)))
+	return boxes
+
+
+## The same five treads as `_stair_boxes`, each a plate TREAD_PLATE thick
+## under its walking surface, with open space below.
+static func _open_stair_boxes() -> Array[AABB]:
+	var boxes: Array[AABB] = []
+	for i in TREADS:
+		var top := -H + TREAD * (i + 1)
+		boxes.append(_box(Vector3(-H + TREAD * i, top - TREAD_PLATE, -STAIR_HALF), Vector3(-H + TREAD * (i + 1), top, STAIR_HALF)))
+	return boxes
+
+
+## A slab whose parapet runs out of the cell towards `side` (+1 +x, -1 -x)
+## and stops PARAPET_END short of the other face, kept INSET off the +z face
+## so the open face shows no lopsided profile.
+static func _slab_edge_end_boxes(side: float) -> Array[AABB]:
+	var end := -side * (H - PARAPET_END)
+	return [
+		_box(Vector3(-H, -H, -H), Vector3(H, SLAB_TOP, H)),
+		_box(Vector3(minf(end, side * H), SLAB_TOP, H - PARAPET - INSET), Vector3(maxf(end, side * H), PARAPET_TOP, H - INSET)),
+	]
+
+
+## A catwalk deck that runs out of the cell towards `side` (+1 +x, -1 -x)
+## and stops CATWALK_END short of the other face, with a railing on its open
+## side and across its end. It keeps CATWALK_END off the +z face too, so the
+## rock face it hangs on shows no lopsided profile.
+static func _catwalk_end_boxes(side: float) -> Array[AABB]:
+	var end := -side * (H - CATWALK_END)
+	var near := minf(end, side * H)
+	var far := maxf(end, side * H)
+	var back := H - CATWALK_END
+	var boxes: Array[AABB] = [
+		_box(Vector3(near, SLAB_TOP - CATWALK_DECK, H - CATWALK_WIDTH), Vector3(far, SLAB_TOP, back)),
+		_box(Vector3(near, SLAB_TOP, H - CATWALK_WIDTH), Vector3(far, PARAPET_TOP, H - CATWALK_WIDTH + RAIL)),
+	]
+	var post := end if side > 0 else end - RAIL
+	boxes.append(_box(Vector3(post, SLAB_TOP, H - CATWALK_WIDTH + RAIL), Vector3(post + RAIL, PARAPET_TOP, back)))
 	return boxes
 
 
