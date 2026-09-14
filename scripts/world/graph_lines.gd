@@ -72,7 +72,7 @@ const _UNITS: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(0, 1, 0), Vector3i(
 		invalidate()
 		changed.emit()
 ## WalkableGraph.void_wall_tunnels_last for the drawn graph.
-@export var void_wall_tunnels_last := false:
+@export var void_wall_tunnels_last := true:
 	set(value):
 		void_wall_tunnels_last = value
 		invalidate()

@@ -197,7 +197,7 @@ var boundary_scheme := BoundaryScheme.PER_FACE:
 		_clear_caches()
 ## When true a tunnel from a cavity or chasm into solid weighs more than every
 ## other tunnel, so trees drill from strata and shafts first.
-var void_wall_tunnels_last := false:
+var void_wall_tunnels_last := true:
 	set(value):
 		void_wall_tunnels_last = value
 		_clear_caches()
@@ -208,7 +208,7 @@ var _face_cache := {}
 var _occupied_cache := {}
 
 
-func _init(seed_value: int, sector_skeleton: Skeleton = null, scheme := BoundaryScheme.PER_FACE, void_walls_last := false) -> void:
+func _init(seed_value: int, sector_skeleton: Skeleton = null, scheme := BoundaryScheme.PER_FACE, void_walls_last := true) -> void:
 	world_seed = seed_value
 	skeleton = sector_skeleton if sector_skeleton != null else Skeleton.new()
 	boundary_scheme = scheme
