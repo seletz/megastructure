@@ -76,6 +76,29 @@ mise run shot scenes/tile_contact_sheet.tscn docs/images/placeholder-tileset.png
 The tiles and their sockets are described in
 [`docs/code/tileset.md`](docs/code/tileset.md).
 
+### First walkable sector
+
+![Inside sector (-1, 1, -1) at seed 0: floor slabs, stair flights, bridges and ladders placed as GridMap cells](docs/images/first-sector.png)
+
+The solver's output can now be walked. The walk scene solves the 27 sectors
+around the origin on worker threads and places each one as a Godot
+`GridMap` as soon as it is done, with collision generated from the tile
+meshes. A sector the solver could not fill shows up as a translucent red
+box. A capsule drops onto the first sector that solved:
+
+```sh
+mise run run-walk
+```
+
+WASD walks relative to the view, Space jumps, Shift runs, Esc captures the
+mouse, V switches between first and third person, and F switches to the
+free-fly camera and back (the capsule lands where the camera is). At seed 0
+on the placeholder tileset 11 of the 27 sectors solve; the rest wait on
+[#161](https://github.com/seletz/megastructure/issues/161). `mise run
+walk-check` walks the capsule over stairs and landings, and `mise run
+walk-check --sector x,y,z` tries a real sector portal to portal. How it
+works is in [`docs/code/placement.md`](docs/code/placement.md).
+
 ## Controls
 
 | Key              | Action                                               |
