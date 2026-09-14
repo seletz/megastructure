@@ -103,14 +103,27 @@ depends = ["import"]
 description = "Check the tile resource format: socket string grammar on every face, a prototype of every tile family, the fixture tileset loads and validates, and the broken fixture reports exactly the expected errors (headless)"
 run = "godot --headless --path . --script res://scripts/tools/tileset_check.gd"
 
+[tasks.adjacency-check]
+depends = ["import"]
+description = "Check tile rotation expansion and the adjacency bitsets: socket matching rules, a hand-computed quarter turn against Godot's basis, the worked example, exclusions both ways, the fixture tileset's tiles and table, the word layout past 64 tiles, and that every table matches pairwise socket comparison and is symmetric; print build times and the fixture dump (headless)"
+run = "godot --headless --path . --script res://scripts/tools/adjacency_check.gd"
+
+[tasks.adjacency-dump]
+depends = ["import"]
+description = "Print the rotated tiles and adjacency table of a tileset. Usage: mise run adjacency-dump <res://path/to/tileset.tres> (headless)"
+run = 'godot --headless --path . --script res://scripts/tools/adjacency_check.gd -- --dump "${usage_tileset}"'
+usage = '''
+arg "<tileset>" help="TileSet3D resource path, e.g. res://tests/fixtures/tilesets/fixture_tileset.tres"
+'''
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check"]
+description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format and the adjacency table and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]
