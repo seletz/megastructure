@@ -295,17 +295,19 @@ run = "godot --headless --path . --script res://scripts/tools/gridmap_check.gd"
 
 [tasks.walk-check]
 depends = ["import"]
-description = "Walk the Player capsule through a SectorGridMap with move_and_slide, one physics step per frame, and fail when it falls below the floor, gets stuck or ends over 1 m from the goal. Default: a hand-laid course of placeholder tiles (floor, a flight up onto a landing, a turn, a flight down). --sector x,y,z [--seed N] solves a real sector and walks from one portal to another along the edge rasteriser's records (headless)"
+description = "Walk the Player capsule through a SectorGridMap with move_and_slide, one physics step per frame, and fail when it falls below the floor, gets stuck or ends over 1 m from the goal. Default: a hand-laid course of placeholder tiles (floor, a flight up onto a landing, a turn, a flight down). --sector x,y,z [--seed N] solves a real sector and walks from one portal to another along the edge rasteriser's records; --all-solving [--seed N] does that for every stratum sector within 3 sectors of the origin that solves and reports how many walk portal to portal (headless)"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 args=()
 [[ -n "${usage_sector:-}" ]] && args+=(--sector "${usage_sector}" --seed "${usage_seed:-0}")
+[[ "${usage_all_solving:-false}" == "true" ]] && args+=(--all-solving --seed "${usage_seed:-0}")
 godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- "${args[@]}"
 '''
 usage = '''
 flag "--sector <x,y,z>" help="Walk this real sector portal to portal instead of the hand-laid course, e.g. -1,1,-1"
-flag "--seed <n>" default="0" help="World seed and solve seed of --sector"
+flag "--all-solving" help="Walk every solving stratum sector within 3 sectors of the origin portal to portal"
+flag "--seed <n>" default="0" help="World seed and solve seed of --sector or --all-solving"
 '''
 
 [tasks.panel-check]
