@@ -126,6 +126,33 @@ a failure there means a merged change broke a full-size statistical check, so
 open an issue and fix it before merging more generator or solver work. For
 such changes, run `mise run check-full` in the worktree before `pr:merge`.
 
+## Benchmarking the solver
+
+`mise run wfc-bench [--seed N] [--sectors N] [--boundaries]` measures the
+sector solver against the native extension threshold of decision #138: a
+mean above 1 s per stratum sector in typed GDScript means porting
+`SectorSolver.solve()` to a native extension. It is not part of `check`.
+Run it after a change that could move solver time (the solver, the
+tileset, the domains or the boundaries) and before deciding #138:
+
+```sh
+mise run wfc-bench                          # seed 0, 10 sectors
+mise run wfc-bench --boundaries             # also cold face-first sectors
+mise run wfc-bench --seed 3 --sectors 20 > build/bench.md
+gh issue comment 138 --body-file build/bench.md
+```
+
+It takes the first stratum sectors walking outwards from the origin, so a
+seed always benchmarks the same sectors. The output is markdown: a table per
+run (real pipeline, the same sectors unconstrained, and cold boundaries),
+a summary table and a verdict line, ready to paste into an issue or pull
+request. Many real sectors still fail before an attempt because records
+and the placeholder tileset disagree (#159, #161); they show as `rejected`
+or `failed` and count under "failed before an attempt", and the verdict
+falls back to the unconstrained solves when no real sector ran one. Times
+depend on the machine and its load: close other Godot runs (checks in other
+worktrees) first, and note the processor line when comparing numbers.
+
 ## References
 
 - [CONTRIBUTING.md](../../CONTRIBUTING.md): branches, worktrees, commits and
