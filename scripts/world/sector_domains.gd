@@ -20,11 +20,13 @@ extends RefCounted
 ## wall doorway under its lintel). A floor record also drops the tiles that
 ## block a side face (`TileLibrary.Tile.blocked_faces`, a parapet) towards a
 ## face-neighbour record a walker may step to: any record but headroom at the
-## same height, or a stair one lower climbing into the floor. Cells without a record take the sector type's default: free in a
-## stratum, solid only in a solid sector, air only in a shaft, cavity or chasm,
-## except in the support columns, the full-height columns within
-## `support_radius` (Chebyshev, in x and z) of a record's column, which stay
-## free so stairs, ladders and catwalks can find rock and headroom. A fixed
+## same height, or a stair one lower climbing into the floor. Cells without a
+## record take the sector's fill tile, solid in a solid sector and air in
+## every other (#180), except the support cells: a cell across a face of a
+## record where no tile of the record allows the fill tile (on the placeholder
+## tileset the rock face a catwalk or ladder hangs on) keeps the free tiles,
+## those of no family, that every such record allows there. So walk-family
+## tiles stand only in record cells (decision 0018). A fixed
 ## face lists, per boundary cell, the tile of the neighbour sector across the
 ## face or -1; the boundary cell keeps only the tiles allowed next to it.
 ## Records that cannot hold (outside the grid, two at one cell, an orientation
@@ -33,9 +35,6 @@ extends RefCounted
 ## `error` instead. Steps and a worked example are in
 ## docs/algorithms/sector-solver.md.
 
-## Columns within this Chebyshev distance of a record's column stay free in
-## solid and void sectors.
-const SUPPORT_RADIUS := 1
 ## Grid step of each face index, +x, -x, +y, -y, +z, -z.
 const STEPS: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
@@ -54,17 +53,19 @@ const AUTHORED_YAW := {
 var words := PackedInt64Array()
 ## Cell index of every record, ascending.
 var record_cells := PackedInt32Array()
+## Cell index of every support cell, ascending.
+var support_cells := PackedInt32Array()
 ## Why the domains could not be built, empty when they could.
 var error := ""
 
 
 ## The domains of a real sector: its type from the graph's skeleton and its
 ## records from the rasteriser, on a 24³ grid (the graph's cells per sector).
-static func for_sector(library: TileLibrary, rasteriser: EdgeRasteriser, sector: Vector3i, faces: Array[PackedInt32Array] = [], support_radius := SUPPORT_RADIUS) -> SectorDomains:
+static func for_sector(library: TileLibrary, rasteriser: EdgeRasteriser, sector: Vector3i, faces: Array[PackedInt32Array] = []) -> SectorDomains:
 	var graph := rasteriser.graph
 	var n := graph.cells_per_sector()
 	var type := graph.skeleton.sector_type(graph.world_seed, sector)
-	return build(library, Vector3i(n, n, n), type, rasteriser.records_for_sector(sector), faces, support_radius)
+	return build(library, Vector3i(n, n, n), type, rasteriser.records_for_sector(sector), faces)
 
 
 ## The domains of a grid of `size` cells of sector type `type` holding
@@ -72,7 +73,7 @@ static func for_sector(library: TileLibrary, rasteriser: EdgeRasteriser, sector:
 ## +x, -x, +y, -y, +z, -z, each empty (free) or one entry per boundary cell,
 ## indexed `u + size_u * v` with u and v the two other axes in xyz order: the
 ## tile index of the neighbour cell across the face, or -1 for free.
-static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorType, records: Array[EdgeRasteriser.Record], faces: Array[PackedInt32Array] = [], support_radius := SUPPORT_RADIUS) -> SectorDomains:
+static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorType, records: Array[EdgeRasteriser.Record], faces: Array[PackedInt32Array] = []) -> SectorDomains:
 	var built := SectorDomains.new()
 	var tile_count := library.tile_count()
 	if tile_count == 0 or not library.errors.is_empty():
@@ -81,22 +82,15 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 	var word_count := library.word_count
 	var cell_count := size.x * size.y * size.z
 
-	var full := PackedInt64Array()
-	full.resize(word_count)
-	full.fill(0)
-	for tile in tile_count:
-		full[tile >> 6] |= 1 << (tile & 63)
-	var fill := full
-	if type != Skeleton.SectorType.STRATUM:
-		var only := library.solid_tile if type == Skeleton.SectorType.SOLID else library.air_tile
-		fill = _single(word_count, only)
+	var fill := _single(word_count, library.solid_tile if type == Skeleton.SectorType.SOLID else library.air_tile)
+	var free := _single(word_count, -1)
+	for tile in library.tiles:
+		if tile.prototype.family == TilePrototype.FAMILY_NONE:
+			free[tile.index >> 6] |= 1 << (tile.index & 63)
 
-	# Records and their masks by cell, and the support columns.
+	# Records and their masks by cell.
 	var by_cell := {}
 	var masks := {}
-	var support := PackedByteArray()
-	support.resize(size.x * size.z)
-	support.fill(0)
 	for record in records:
 		var cell := record.cell
 		if cell.x < 0 or cell.y < 0 or cell.z < 0 or cell.x >= size.x or cell.y >= size.y or cell.z >= size.z:
@@ -115,12 +109,6 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 			return built
 		masks[cell] = mask
 		by_cell[cell] = record
-		for dz in range(-support_radius, support_radius + 1):
-			for dx in range(-support_radius, support_radius + 1):
-				var x := cell.x + dx
-				var z := cell.z + dz
-				if x >= 0 and z >= 0 and x < size.x and z < size.z:
-					support[x + size.x * z] = 1
 
 	# A floor keeps its faces towards walkable neighbours open.
 	for record in records:
@@ -151,6 +139,28 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 				built.error = "%s and %s cannot touch across %s: no tile of the first allows a tile of the second there" % [record, other, TilePrototype.FACE_NAMES[dir]]
 				return built
 
+	# A cell beside a record also takes the free tiles a tile of the record
+	# needs there: what it allows across a face where it does not allow fill.
+	var supports := {}
+	for record in records:
+		for dir in TilePrototype.FACE_COUNT:
+			var next: Vector3i = record.cell + STEPS[dir]
+			if next.x < 0 or next.y < 0 or next.z < 0 or next.x >= size.x or next.y >= size.y or next.z >= size.z:
+				continue
+			if masks.has(next):
+				continue
+			var needed := _needed(library, dir, masks[record.cell], fill)
+			var added := false
+			for w in word_count:
+				needed[w] &= free[w]
+				added = added or needed[w] != 0
+			if not added:
+				continue
+			var domain: PackedInt64Array = supports.get(next, fill).duplicate()
+			for w in word_count:
+				domain[w] |= needed[w]
+			supports[next] = domain
+
 	built.words.resize(cell_count * word_count)
 	for z in size.z:
 		for y in size.y:
@@ -161,8 +171,9 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 				if masks.has(position):
 					domain = masks[position]
 					built.record_cells.append(cell)
-				elif support[x + size.x * z] == 1:
-					domain = full
+				elif supports.has(position):
+					domain = supports[position]
+					built.support_cells.append(cell)
 				for w in word_count:
 					built.words[cell * word_count + w] = domain[w]
 
@@ -264,6 +275,24 @@ static func _any_allowed(library: TileLibrary, dir: int, from: PackedInt64Array,
 			if allowed[w] & to[w] != 0:
 				return true
 	return false
+
+
+## The tiles the tiles of `from` need in direction `dir`: the union of what
+## each allows there, over those that do not allow a tile of `fill` there.
+static func _needed(library: TileLibrary, dir: int, from: PackedInt64Array, fill: PackedInt64Array) -> PackedInt64Array:
+	var result := _single(library.word_count, -1)
+	for tile in library.tile_count():
+		if (from[tile >> 6] >> (tile & 63)) & 1 == 0:
+			continue
+		var allowed := library.allowed(dir, tile)
+		var takes_fill := false
+		for w in library.word_count:
+			takes_fill = takes_fill or allowed[w] & fill[w] != 0
+		if takes_fill:
+			continue
+		for w in library.word_count:
+			result[w] |= allowed[w]
+	return result
 
 
 ## Whether `p` comes before `q` in cell index order, so each pair is checked once.
