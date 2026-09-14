@@ -45,6 +45,15 @@ const LADDER_WALL_GAP := 0.14
 const RUNGS := 5
 const TUNNEL_WALL := 0.3
 const BACKING := 0.3
+## Open side faces of each tunnel, vault and bridge shape, unrotated. The
+## straight tunnel and bridge are the `tunnel` and `bridge` prototypes.
+const TUNNEL_SHAPES := {
+	"straight": [0, 1],
+	"corner": [0, 4],
+	"t": [0, 1, 4],
+	"cross": [0, 1, 4, 5],
+	"end": [0],
+}
 
 const FAMILY := EdgeRasteriser.TileFamily
 
@@ -158,7 +167,110 @@ static func build() -> TileSet3D:
 			_box(Vector3(-H + INSET, -H, -H), Vector3(H - INSET, H, -H + BACKING)),
 		]), 0.5, TilePrototype.FAMILY_NONE, ["0s", "0s", "0i", "0i", "0s", "1s"], 4),
 	]
+	# Passages through rock (#182). A tunnel's walk turns, meets others at the
+	# hub and ends at stairs and portals, so the tunnel comes as a corner, a
+	# T, a cross and an end besides the straight piece. Above every tunnel
+	# cell the head room is a vault: nothing in the lowest 1.8 m, a ceiling
+	# above, rock sockets on top and on the closed sides.
+	for shape: String in TUNNEL_SHAPES:
+		var open: Array = TUNNEL_SHAPES[shape]
+		if shape != "straight":
+			tileset.prototypes.append(_prototype("tunnel_%s" % shape, _mesh(_tunnel_boxes(open, SLAB_TOP)), 0.25, FAMILY.TUNNEL, _rock_sockets(open, "1i", "1i"), _shape_rotations(open)))
+	for shape: String in TUNNEL_SHAPES:
+		var open: Array = TUNNEL_SHAPES[shape]
+		var suffix := "" if shape == "straight" else "_%s" % shape
+		tileset.prototypes.append(_prototype("vault%s" % suffix, _mesh([
+			_box(Vector3(-H, -H + TileLibrary.HEADROOM_CLEAR, -H), Vector3(H, H, H)),
+		]), 0.25, TilePrototype.FAMILY_NONE, _rock_sockets(open, "1i", "1i"), _shape_rotations(open)))
+	# A bridge's walk turns and meets others at the hub too; without these a
+	# parapet of the straight bridge stood across the turn (#181).
+	for shape: String in TUNNEL_SHAPES:
+		var open: Array = TUNNEL_SHAPES[shape]
+		if shape != "straight":
+			tileset.prototypes.append(_prototype("bridge_%s" % shape, _mesh(_bridge_boxes(open)), 0.25, FAMILY.BRIDGE, ["0s", "0s", "0i", "0i", "0s", "0s"], _shape_rotations(open)))
+	tileset.prototypes.append_array([
+		# A stair between rock walls, and the cell over it: open to the vault
+		# above so the top tread keeps its two cells of head room, with a
+		# ledge of rock along the closed sides above the head-room band.
+		_prototype("stair_tunnel", _mesh(_stair_tunnel_boxes()), 0.25, FAMILY.STAIR, ["1s", "0s", "0i", "1i", "1s", "1s"], 4),
+		_prototype("stairwell", _mesh(_side_boxes([0, 1], -H + TileLibrary.HEADROOM_CLEAR, H, TUNNEL_WALL)), 0.25, TilePrototype.FAMILY_NONE, ["0s", "0s", "1i", "0i", "1s", "1s"], 2),
+		# The same over the first stair from a floor or ceiling portal, which
+		# reserves no head room: rock on its low side.
+		_prototype("stairwell_end", _mesh(_side_boxes([0], -H + TileLibrary.HEADROOM_CLEAR, H, TUNNEL_WALL)), 0.25, TilePrototype.FAMILY_NONE, ["0s", "1s", "1i", "0i", "1s", "1s"], 4),
+		# Portals in rock: a tunnel whose passage runs along z (the authored
+		# portal yaw) through a side face, and a tunnel end open to +z under a
+		# floor or ceiling portal, where the walk steps sideways to its stair.
+		_prototype("portal_tunnel", _mesh(_tunnel_boxes([4, 5], SLAB_TOP)), 0.25, FAMILY.PORTAL_OPENING, _rock_sockets([4, 5], "1i", "1i"), 2),
+		_prototype("portal_tunnel_end", _mesh(_tunnel_boxes([4], SLAB_TOP)), 0.25, FAMILY.PORTAL_OPENING, _rock_sockets([4], "1i", "1i"), 4),
+	])
 	return tileset
+
+
+## Six socket strings for a passage in rock open on the side faces `open`
+## (face indices): `0s` there, `1s` on the other side faces, `top` and
+## `bottom` on +y and -y.
+static func _rock_sockets(open: Array, top: String, bottom: String) -> Array:
+	var sockets := []
+	for face in TilePrototype.FACE_COUNT:
+		if face == TilePrototype.FACE_POS_Y:
+			sockets.append(top)
+		elif face == TilePrototype.FACE_NEG_Y:
+			sockets.append(bottom)
+		else:
+			sockets.append("0s" if face in open else "1s")
+	return sockets
+
+
+## Distinct quarter turns of a passage open on `open`: 1 for the cross, 2
+## for the straight piece, 4 otherwise.
+static func _shape_rotations(open: Array) -> int:
+	if open.size() == 4:
+		return 1
+	if open.size() == 2 and open[0] ^ 1 == open[1]:
+		return 2
+	return 4
+
+
+## A slab (unless `wall_bottom` is -H, for a stair's own treads) and a
+## TUNNEL_WALL thick wall from `wall_bottom` to the top along every side face
+## not in `open` (`_side_boxes`).
+static func _tunnel_boxes(open: Array, wall_bottom: float) -> Array[AABB]:
+	var boxes: Array[AABB] = []
+	if wall_bottom > -H:
+		boxes.append(_box(Vector3(-H, -H, -H), Vector3(H, SLAB_TOP, H)))
+	boxes.append_array(_side_boxes(open, wall_bottom, H, TUNNEL_WALL))
+	return boxes
+
+
+## A slab with a parapet along every side face not in `open`.
+static func _bridge_boxes(open: Array) -> Array[AABB]:
+	var boxes: Array[AABB] = [_box(Vector3(-H, -H, -H), Vector3(H, SLAB_TOP, H))]
+	boxes.append_array(_side_boxes(open, SLAB_TOP, PARAPET_TOP, PARAPET))
+	return boxes
+
+
+## A `thickness` thick box from `bottom` to `top` along every side face not
+## in `open`. A box runs out to the faces beside it only where the box across
+## from it does too, else it stops INSET short of them, so every face shows a
+## mirror-symmetric profile.
+static func _side_boxes(open: Array, bottom: float, top: float, thickness: float) -> Array[AABB]:
+	var boxes: Array[AABB] = []
+	for face: int in [TilePrototype.FACE_POS_X, TilePrototype.FACE_NEG_X, TilePrototype.FACE_POS_Z, TilePrototype.FACE_NEG_Z]:
+		if face in open:
+			continue
+		var axis := face >> 1
+		var across := 2 if axis == 0 else 0
+		var reach := H if (face ^ 1) not in open else H - INSET
+		var from := Vector3.ZERO
+		var to := Vector3.ZERO
+		from.y = bottom
+		to.y = top
+		from[axis] = H - thickness if face & 1 == 0 else -H
+		to[axis] = H if face & 1 == 0 else -H + thickness
+		from[across] = -reach
+		to[across] = reach
+		boxes.append(_box(from, to))
+	return boxes
 
 
 ## Five treads climbing towards +x, each 0.4 m deeper and higher than the
@@ -167,6 +279,13 @@ static func _stair_boxes() -> Array[AABB]:
 	var boxes: Array[AABB] = []
 	for i in TREADS:
 		boxes.append(_box(Vector3(-H + TREAD * i, -H, -STAIR_HALF), Vector3(H, -H + TREAD * (i + 1), STAIR_HALF)))
+	return boxes
+
+
+## The five treads of `_stair_boxes` between rock walls on both sides.
+static func _stair_tunnel_boxes() -> Array[AABB]:
+	var boxes := _stair_boxes()
+	boxes.append_array(_tunnel_boxes([0, 1], -H))
 	return boxes
 
 
