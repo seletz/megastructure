@@ -96,7 +96,9 @@ seconds". It changes nothing.
    `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`, every 15 seconds.
    No run yet counts as pending, because the workflow needs a moment to start
    after a push. It stops on any conclusion other than `success` and after
-   `--timeout` seconds (default 900, 15 minutes).
+   `--timeout` seconds (default 900, 15 minutes). On a pull request that
+   check is the quick tier, `mise run check`, which finishes in a few
+   minutes including setup.
 6. `gh pr merge --merge --match-head-commit <sha>`: a merge commit, and only
    if the pull request head is still the commit that passed. The branch on
    GitHub is deleted automatically.
@@ -114,6 +116,15 @@ request, the refusals, the fetch, the current state of the check) and prints
 every other command instead of running it.
 
 The worktree stays after a merge; remove it with `wt:rm` once you are done.
+
+## After merging: the full check
+
+The pull request only ran the quick tier. The push of the merge commit to
+`develop` runs `mise run check-full` (about 10 minutes), and the same runs
+nightly. Look at it with `gh run list --workflow check.yml --branch develop`;
+a failure there means a merged change broke a full-size statistical check, so
+open an issue and fix it before merging more generator or solver work. For
+such changes, run `mise run check-full` in the worktree before `pr:merge`.
 
 ## References
 

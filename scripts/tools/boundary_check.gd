@@ -27,8 +27,13 @@ const RANGE := 1000
 const SEARCH_LIMIT := 20000
 ## Salt for picking test sectors and faces; outside the grammar's salt range.
 const SALT_TEST_BOUNDARY := 906
+## With `--quick` (the `check` tier): fewer faces, only the unconstrained 8³
+## pairs, fewer of them, and no 24³ pairs or timings.
+const QUICK_FACES_PER_SEED := 4
+const QUICK_PAIRS := 10
 
 var _failures := 0
+var _faces_per_seed := FACES_PER_SEED
 
 
 func _init() -> void:
@@ -39,12 +44,18 @@ func _init() -> void:
 		return
 	print("boundary check: %s, %d tiles" % [TILESET.trim_prefix("res://"), library.tile_count()])
 
+	var quick := "--quick" in OS.get_cmdline_user_args()
+	if quick:
+		_faces_per_seed = QUICK_FACES_PER_SEED
 	_check_faces(library)
 	_check_determinism(library)
-	_check_pairs(library, false, 8, PAIRS)
-	_check_pairs(library, false, 24, PAIRS_LARGE)
-	_check_pairs(library, true, 24, PAIRS)
-	_print_timings(library)
+	if quick:
+		_check_pairs(library, false, 8, QUICK_PAIRS)
+	else:
+		_check_pairs(library, false, 8, PAIRS)
+		_check_pairs(library, false, 24, PAIRS_LARGE)
+		_check_pairs(library, true, 24, PAIRS)
+		_print_timings(library)
 
 	if _failures > 0:
 		printerr("boundary check: %d failure(s)" % _failures)
@@ -63,7 +74,7 @@ func _check_faces(library: TileLibrary) -> void:
 	for seed in SEEDS:
 		var from_sector := SectorBoundaries.new(library, seed, EdgeRasteriser.new(WalkableGraph.new(seed)))
 		var from_neighbour := SectorBoundaries.new(library, seed, EdgeRasteriser.new(WalkableGraph.new(seed)))
-		for i in FACES_PER_SEED:
+		for i in _faces_per_seed:
 			var sector := _sample_sector(seed, i)
 			var dir := Hash.hash3_u(seed, Vector3i(i, 3, 0), SALT_TEST_BOUNDARY) % TilePrototype.FACE_COUNT
 			var neighbour := sector + SectorBoundaries.STEPS[dir]
@@ -79,7 +90,7 @@ func _check_faces(library: TileLibrary) -> void:
 				printerr("  face %s %s differs from %s %s at seed %d" % [sector, TilePrototype.FACE_NAMES[dir], neighbour, TilePrototype.FACE_NAMES[dir ^ 1], seed])
 		for outcome in 3:
 			outcomes[outcome] += from_sector.level_outcomes[SectorBoundaries.Level.FACE * 3 + outcome]
-	_expect(same == total and total == SEEDS.size() * FACES_PER_SEED, "faces: %d of %d random faces identical from the sector and from its neighbour (seeds 0..4, real records)" % [same, total])
+	_expect(same == total and total == SEEDS.size() * _faces_per_seed, "faces: %d of %d random faces identical from the sector and from its neighbour (seeds 0..4, real records)" % [same, total])
 	print("  faces: %d solved, %d degraded, %d failed face pieces; %.1f ms mean per face from a cold cache" % [outcomes[0], outcomes[1], outcomes[2], usec / 1000.0 / maxi(total, 1)])
 
 

@@ -33,9 +33,10 @@ up to date.
 | `run` | import | Runs the main scene. |
 | `run-skeleton` | import | Runs the skeleton viewer scene, wireframe sector cubes around the camera ([[skeleton]]). |
 | `import` | | Imports all assets headlessly and regenerates `.godot/`. |
-| `check-scripts` | import | Parses every `.gd` file with `--check-only` and fails if any has errors. |
+| `check-scripts` | import | Parses every `.gd` file with `--check-only`, one Godot per CPU in parallel, and fails if any has errors. |
 | `smoke` | import | Runs the main scene, then the skeleton viewer and the tile contact sheet scenes, headlessly for 60 frames each (120 s timeout per run) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
-| `check` | import, check-scripts, smoke, panel-check, skeleton-histogram, skeleton-stats, graph-check, graph-connectivity, raster-check, tileset-check, adjacency-check, tiles-check-fixtures, tileset-build-check, tiles-check-placeholder, solver-check, boundary-check | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
+| `check` | import, check-scripts, smoke, panel-check, skeleton-histogram, skeleton-stats, graph-check, graph-connectivity --quick, raster-check --quick, tileset-check, adjacency-check, tiles-check-fixtures, tileset-build-check, tiles-check-placeholder --quick, solver-check --quick, boundary-check --quick | The pull request tier, under 2 minutes: the statistical tasks run on their reduced sample ([[#Check tiers]]). Additionally loads the project headlessly in editor mode and quits. CI runs it on every pull request ([[ci-and-export]]). |
+| `check-full` | the same tasks without `--quick` | The full tier, about 10 minutes: every statistical task at full size, then the same headless editor load. CI runs it on pushes to `develop` and nightly. |
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
 | `export-debug` | import | Same as `export` with a debug build. |
@@ -60,8 +61,8 @@ up to date.
 | `skeleton-histogram` | import | Prints the seed 0 sector type histogram and tests `sector_type` against [[skeleton_histogram_seed0]]; `--update` rewrites the reference ([[skeleton]]). Headless; part of `check`. |
 | `skeleton-stats` | import | Measures the sector grammar over 20 random 5³ regions per seed 0 to 4 and fails unless shafts run at least 3 sectors on average and solid splits a region into at least 2 non-solid components on average ([[sector-skeleton-and-walkable-graph]]). Headless; part of `check`. |
 | `graph-check` | import | Checks the walkable graph's portals and interior nodes over 100 random adjacent open sector pairs per seed 0 to 4 ([[walkable-graph]]). Headless; part of `check`. |
-| `graph-connectivity` | import | Checks the walkable graph's edges for every boundary scheme and tunnel weight variant over a random and a chasm-centred 15³ sample per seed 0 to 9 and fails unless every region-aligned 3³, 6³ and 9³ window has one component of open sectors; reports per variant the tunnel fraction, tunnels with a chasm or cavity end, strict 5³ windows and the mean vertical run ([[walkable-graph-connectivity]]). `--variants=a,b` runs only some. Headless; part of `check`. |
-| `raster-check` | import | Checks the edge rasteriser over 1 000 random sectors at seeds 0 to 4: determinism, no conflicting records, cells inside the sector, portal openings in both endpoint sectors, no rejected edge, and every walk changing level only on stairs and ladders; prints family counts and the stair cells level changes produce ([[edge-rasteriser]]). Headless; part of `check`. |
+| `graph-connectivity` | import | Checks the walkable graph's edges for every boundary scheme and tunnel weight variant over a random and a chasm-centred 15³ sample per seed 0 to 9 and fails unless every region-aligned 3³, 6³ and 9³ window has one component of open sectors; reports per variant the tunnel fraction, tunnels with a chasm or cavity end, strict 5³ windows and the mean vertical run ([[walkable-graph-connectivity]]). `--variants a,b` runs only some; `--quick` runs the reduced sample. Headless; part of `check`. |
+| `raster-check` | import | Checks the edge rasteriser over 1 000 random sectors at seeds 0 to 4: determinism, no conflicting records, cells inside the sector, portal openings in both endpoint sectors, no rejected edge, and every walk changing level only on stairs and ladders; prints family counts and the stair cells level changes produce ([[edge-rasteriser]]). `--quick` runs the reduced sample. Headless; part of `check`. |
 | `tileset-check` | import | Checks the tile resource format: the socket string grammar on every face, a prototype of every tile family, that the fixture tileset validates and that the broken fixture reports exactly its expected errors ([[tileset]]). Headless; part of `check`. |
 | `adjacency-check` | import | Checks tile rotation expansion and the adjacency bitsets: socket matching rules, a hand-computed quarter turn against Godot's basis, the worked example, exclusions both ways, the fixture tileset's table, the word layout past 64 tiles, pairwise agreement and symmetry; prints build times and the fixture dump ([[tileset]]). Headless; part of `check`. |
 | `adjacency-dump` | import | Prints the rotated tiles and adjacency table of a tileset: `mise run adjacency-dump <res://…tres>`; exits 1 with the validation errors of an invalid one ([[tileset]]). |
@@ -69,11 +70,31 @@ up to date.
 | `tiles-check-fixtures` | import | Self-test of `tiles-check`: the fixture tileset passes, the dead socket fixture fails with exactly its expected categories, placement is deterministic per seed, and the mesh symmetry check passes, fails and skips built meshes ([[tileset]]). Headless; part of `check`. |
 | `tileset-build` | import | Regenerates `resources/tilesets/placeholder.tres` from `resources/tilesets/placeholder_builder.gd`, the box-only placeholder tileset ([[tileset#The placeholder tileset]]). Headless. |
 | `tileset-build-check` | import | Builds the placeholder tileset into a temporary file and fails when the committed resource differs (script ids aside) or when it misses a tile family ([[tileset]]). Headless; part of `check`. |
-| `tiles-check-placeholder` | import | `tiles-check` on the placeholder tileset with the default options ([[socket-adjacency#Worked example: the placeholder tileset]]). Headless; part of `check`. |
-| `solver-check` | import | Checks `SectorSolver` on the placeholder tileset: unconstrained 8³ solves at seeds 0 to 4 succeed at the first attempt, repeat byte for byte on a second instance, allow every adjacency and match [[solver_reference_seed0]]; the entropy flag and `domains` restrictions work; restarts, the all-solid degradation, inconsistent records failing fast, consistent records holding and fixed faces. Prints the tile histogram, steps and time per seed, a 24³ solve with restarts and the outcome of 20 real stratum sectors at seed 0; `--update` rewrites the reference ([[solver]]). Headless; part of `check`. |
+| `tiles-check-placeholder` | import | `tiles-check` on the placeholder tileset with the default options ([[socket-adjacency#Worked example: the placeholder tileset]]); `--quick` places 20 runs instead of 100. Headless; part of `check`. |
+| `solver-check` | import | Checks `SectorSolver` on the placeholder tileset: unconstrained 8³ solves at seeds 0 to 4 succeed at the first attempt, repeat byte for byte on a second instance, allow every adjacency and match [[solver_reference_seed0]]; the entropy flag and `domains` restrictions work; restarts, the all-solid degradation, inconsistent records failing fast, consistent records holding and fixed faces. Prints the tile histogram, steps and time per seed, a 24³ solve with restarts and the outcome of 20 real stratum sectors at seed 0; `--update` rewrites the reference; `--quick` runs the reduced sample ([[solver]]). Headless; part of `check`. |
 | `solver-sector` | import | Runs the fill pipeline for one real sector: `mise run solver-sector <x> <y> <z> [--seed N]`. Prints the sector type, records, outcome, attempts, restarts, pre-collapsed cells, time and a family histogram; exits 1 when the domains or the solve fail or a solved result breaks a record or an adjacency ([[solver]]). Headless. |
-| `boundary-check` | import | Checks the face-first sector boundaries on the placeholder tileset: 100 random faces at seeds 0 to 4 are identical from the sector and from its neighbour on separate instances, a sector repeats on a second instance, 50 unconstrained 8³ and 2 24³ adjacent pairs all solve with no socket mismatch across the shared face or inside, and 50 real 24³ pairs whose records build have none in every pair that solved; prints the outcome counts and the corner, edge, face and interior time of a 24³ sector ([[solver]]). Headless; part of `check`. |
+| `boundary-check` | import | Checks the face-first sector boundaries on the placeholder tileset: 100 random faces at seeds 0 to 4 are identical from the sector and from its neighbour on separate instances, a sector repeats on a second instance, 50 unconstrained 8³ and 2 24³ adjacent pairs all solve with no socket mismatch across the shared face or inside, and 50 real 24³ pairs whose records build have none in every pair that solved; prints the outcome counts and the corner, edge, face and interior time of a 24³ sector; `--quick` runs the reduced sample ([[solver]]). Headless; part of `check`. |
 | `panel-check` | import | Clicks every kind of script-backed widget in the skeleton viewer's tweak panel and checks each setter ran ([[tweak-ui]]). Headless; part of `check`. |
+
+## Check tiers
+
+`check` is the tier for every pull request and stays under 2 minutes;
+`check-full` runs the same tasks at full size on pushes to `develop` and
+nightly, and before merging a change to the grammar, the graph, the
+rasteriser, the tileset or the solver. The five statistical tasks take a
+`--quick` flag that shrinks their sample; the cheap reference comparisons
+(skeleton histogram, solver seed 0 digest) and every other task run
+unchanged in both tiers. Each quick run still fails on the same conditions,
+only over fewer cases.
+
+| Task | `check` (`--quick`) | `check-full` |
+| --- | --- | --- |
+| `graph-connectivity` | the default variant only, seeds 0 to 2, strict 5³ windows at every second offset (216 per seed) | all five variants, seeds 0 to 9, all 1 331 strict windows per seed |
+| `raster-check` | 40 sectors per seed 0 to 4 (200) | 200 sectors per seed (1 000) |
+| `tiles-check-placeholder` | 20 placement runs | 100 placement runs |
+| `solver-check` | 8³ solves at seeds 0 and 1 (seed 0 against the reference), the entropy, domain, restart, record and face checks; no 24³ solve, no real sectors | 8³ solves at seeds 0 to 4, the same checks, a 24³ solve and 20 real stratum sectors |
+| `boundary-check` | 4 faces per seed 0 to 4 (20), the determinism check, 10 unconstrained 8³ pairs | 20 faces per seed (100), the determinism check, 50 unconstrained 8³ pairs, 2 unconstrained and 50 real 24³ pairs, level timings |
+| `skeleton-histogram`, `skeleton-stats`, `graph-check`, the tileset and adjacency checks | unchanged, a few seconds each | unchanged |
 
 `smoke` matches the patterns case-sensitively. Its allow-list for known
 benign lines (the `allow` array in the task) is empty, because the run log is
@@ -125,7 +146,10 @@ exit with status 1 on any failure.
 
 ## How to run or check it
 
-- `mise run check` before every pull request; it must pass.
+- `mise run check` before every pull request; it must pass. Run
+  `mise run check-full` as well when a change touches the grammar, the
+  walkable graph, the rasteriser, the tileset or the solver, since the
+  statistical tasks only see their full sample there.
 - Run the check matching what you changed: `preset-check` for presets and the
   registry, `seed-check` and `screenshot-check` (with a display) for the seed
   and HUD, `hash-vectors` for the hash, `skeleton-histogram` and `skeleton-stats` for the

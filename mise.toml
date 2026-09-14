@@ -32,11 +32,10 @@ depends = ["import"]
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-status=0
-while IFS= read -r -d '' file; do
-	godot --headless --path . --check-only --script "res://${file#./}" || status=1
-done < <(find . -path ./.godot -prune -o -name '*.gd' -print0)
-exit "$status"
+# One Godot per file, as many at a time as there are CPUs; xargs exits
+# non-zero when any of them fails.
+find . -path ./.godot -prune -o -name '*.gd' -print0 \
+	| xargs -0 -r -n 1 -P "$(nproc)" sh -c 'godot --headless --path . --check-only --script "res://${1#./}"' check-scripts
 '''
 
 [tasks.smoke]
@@ -90,13 +89,33 @@ run = "godot --headless --path . --script res://scripts/tools/graph_check.gd"
 
 [tasks.graph-connectivity]
 depends = ["import"]
-description = "Check the walkable graph edges for every boundary scheme and tunnel weight variant, seeds 0..9, over a random 15^3 sample and one centred on a chasm wall: kinds, portals, determinism, edges_for_sector; fail unless every region-aligned 3^3 and 6^3 window has one non-solid component; report tunnel fraction, tunnels with a chasm or cavity end, strict 5^3 windows and mean vertical run per variant. Pass --variants=per_face,void_walls_last to run only some (headless)"
-run = "godot --headless --path . --script res://scripts/tools/graph_connectivity_check.gd --"
+description = "Check the walkable graph edges for every boundary scheme and tunnel weight variant, seeds 0..9, over a random 15^3 sample and one centred on a chasm wall: kinds, portals, determinism, edges_for_sector; fail unless every region-aligned 3^3 and 6^3 window has one non-solid component; report tunnel fraction, tunnels with a chasm or cavity end, strict 5^3 windows and mean vertical run per variant. Pass --variants per_face,void_walls_last to run only some; --quick runs only the default variant at seeds 0..2 with strict windows at every second offset (headless)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+[[ "${usage_quick:-false}" == "true" ]] && args+=(--quick)
+[[ -n "${usage_variants:-}" ]] && args+=("--variants=${usage_variants}")
+godot --headless --path . --script res://scripts/tools/graph_connectivity_check.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--quick" help="Only the default variant, seeds 0..2, strict 5^3 windows at every second offset (the check tier)"
+flag "--variants <names>" help="Comma-separated variant names to run, e.g. per_face,void_walls_last"
+'''
 
 [tasks.raster-check]
 depends = ["import"]
-description = "Check the edge rasteriser over 1000 random sectors at seeds 0..4: determinism against a fresh graph, no conflicting records, cells inside 0..23, a portal opening in both endpoint sectors of every edge, no rejected edge, one connected group per sector, every routing a walk with explicit stairs or ladders at level changes; print family counts, mean records and stair cells per sector and the stair, ladder and landing cells level changes produce (headless)"
-run = "godot --headless --path . --script res://scripts/tools/raster_check.gd"
+description = "Check the edge rasteriser over 1000 random sectors at seeds 0..4: determinism against a fresh graph, no conflicting records, cells inside 0..23, a portal opening in both endpoint sectors of every edge, no rejected edge, one connected group per sector, every routing a walk with explicit stairs or ladders at level changes; print family counts, mean records and stair cells per sector and the stair, ladder and landing cells level changes produce (headless). --quick checks 200 sectors, 40 per seed"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+[[ "${usage_quick:-false}" == "true" ]] && args+=(--quick)
+godot --headless --path . --script res://scripts/tools/raster_check.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--quick" help="40 sectors per seed instead of 200 (the check tier)"
+'''
 
 [tasks.tileset-check]
 depends = ["import"]
@@ -149,21 +168,32 @@ run = "godot --headless --path . --script res://resources/tilesets/placeholder_b
 
 [tasks.tiles-check-placeholder]
 depends = ["import"]
-description = "Run the tileset validation (mise run tiles-check) on the placeholder tileset with the default options (headless)"
-run = "godot --headless --path . --script res://scripts/tools/tiles_check.gd -- res://resources/tilesets/placeholder.tres"
+description = "Run the tileset validation (mise run tiles-check) on the placeholder tileset with the default options (headless). --quick places 20 runs instead of 100"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+[[ "${usage_quick:-false}" == "true" ]] && args+=(--runs 20)
+godot --headless --path . --script res://scripts/tools/tiles_check.gd -- res://resources/tilesets/placeholder.tres "${args[@]}"
+'''
+usage = '''
+flag "--quick" help="20 placement runs instead of 100 (the check tier)"
+'''
 
 [tasks.solver-check]
 depends = ["import"]
-description = "Check the sector solver on the placeholder tileset: unconstrained 8^3 solves at seeds 0..4 succeed at the first attempt, repeat byte for byte on a second solver instance, allow every adjacency and match the seed 0 reference in docs/solver_reference_seed0.md; the entropy flag and domain restrictions work; restarts and the all-solid degradation, inconsistent records failing fast with a clear error, consistent records holding in every solved result and fixed faces; print the tile histogram, steps and time per seed, a 24^3 solve with restarts and the solved, degraded and failed counts and mean attempts of 20 real stratum sectors at seed 0 (headless). --update rewrites the reference"
+description = "Check the sector solver on the placeholder tileset: unconstrained 8^3 solves at seeds 0..4 succeed at the first attempt, repeat byte for byte on a second solver instance, allow every adjacency and match the seed 0 reference in docs/solver_reference_seed0.md; the entropy flag and domain restrictions work; restarts and the all-solid degradation, inconsistent records failing fast with a clear error, consistent records holding in every solved result and fixed faces; print the tile histogram, steps and time per seed, a 24^3 solve with restarts and the solved, degraded and failed counts and mean attempts of 20 real stratum sectors at seed 0 (headless). --update rewrites the reference; --quick solves 8³ at seeds 0 and 1 only and skips the 24³ solve and the real sectors"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 args=()
 [[ "${usage_update:-false}" == "true" ]] && args+=(--update)
+[[ "${usage_quick:-false}" == "true" ]] && args+=(--quick)
 godot --headless --path . --script res://scripts/tools/solver_check.gd -- "${args[@]}"
 '''
 usage = '''
 flag "--update" help="Rewrite docs/solver_reference_seed0.md from the current solver instead of comparing"
+flag "--quick" help="8³ solves at seeds 0 and 1 only, no 24³ solve or real sectors (the check tier)"
 '''
 
 [tasks.solver-sector]
@@ -179,8 +209,17 @@ flag "--seed <n>" default="0" help="World seed and solve seed"
 
 [tasks.boundary-check]
 depends = ["import"]
-description = "Check the face-first sector boundaries on the placeholder tileset: 100 random faces at seeds 0..4 are identical computed from the sector and from its neighbour on a separate instance, a sector repeats on a second instance, 50 random adjacent 8³ pairs and 2 24³ pairs with unconstrained domains all solve with no socket mismatch across the shared face or inside, and 50 real pairs whose records build have none in every pair that solved; print the solved and failed counts and the time of corners, edges, faces and interior of a 24³ sector (headless)"
-run = "godot --headless --path . --script res://scripts/tools/boundary_check.gd"
+description = "Check the face-first sector boundaries on the placeholder tileset: 100 random faces at seeds 0..4 are identical computed from the sector and from its neighbour on a separate instance, a sector repeats on a second instance, 50 random adjacent 8³ pairs and 2 24³ pairs with unconstrained domains all solve with no socket mismatch across the shared face or inside, and 50 real pairs whose records build have none in every pair that solved; print the solved and failed counts and the time of corners, edges, faces and interior of a 24³ sector (headless). --quick checks 20 faces and 10 unconstrained 8³ pairs only"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+[[ "${usage_quick:-false}" == "true" ]] && args+=(--quick)
+godot --headless --path . --script res://scripts/tools/boundary_check.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--quick" help="4 faces per seed and 10 unconstrained 8³ pairs; no 24³ pairs or timings (the check tier)"
+'''
 
 [tasks.panel-check]
 depends = ["import"]
@@ -188,7 +227,12 @@ description = "Click every kind of script-backed widget in the skeleton viewer's
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main, skeleton viewer and tile contact sheet scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures, check the placeholder tileset is up to date and passes the tileset validation, check the sector solver and the face-first sector boundaries, and verify the project loads headlessly"
+description = "The pull request tier (under 2 minutes): import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check, with graph-connectivity, raster-check, tiles-check-placeholder, solver-check and boundary-check on their --quick sample, and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity --quick", "raster-check --quick", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder --quick", "solver-check --quick", "boundary-check --quick"]
+run = "godot --headless --editor --path . --quit"
+
+[tasks.check-full]
+description = "The full tier, run by CI on pushes to develop and nightly: the tasks of mise run check with every statistical task at full size, and verify the project loads headlessly"
 depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check", "boundary-check"]
 run = "godot --headless --editor --path . --quit"
 

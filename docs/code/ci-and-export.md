@@ -10,7 +10,9 @@ status: current
 > [!summary]
 > Every pull request and every push to `develop` is checked automatically on
 > GitHub: a fresh Linux machine installs the pinned tools and runs the same
-> `mise run check` a developer runs locally. `develop` only accepts changes
+> task a developer runs locally, the quick `mise run check` for a pull
+> request and the full `mise run check-full` for `develop`, again every
+> night. `develop` only accepts changes
 > whose check has passed on an up-to-date branch. Building a standalone
 > program uses an export preset per platform (Linux and macOS) and two tasks:
 > one fetches Godot's export templates, the other produces the build. A second
@@ -20,8 +22,10 @@ status: current
 ## Check workflow
 
 [check.yml](../../.github/workflows/check.yml) defines one job, `check`, on
-`ubuntu-latest`. It runs for every pull request and for pushes to `develop`.
-A newer run on the same ref cancels the older one.
+`ubuntu-latest`. It runs for every pull request, for pushes to `develop`,
+nightly at 03:17 UTC on `develop` (`schedule`) and by hand
+(`workflow_dispatch`). A newer run of the same event on the same ref cancels
+the older one.
 
 The steps:
 
@@ -31,11 +35,19 @@ The steps:
    fallback for the older ALSA package name).
 3. Install mise and the tools from `mise.toml` with `jdx/mise-action`, cached
    between runs.
-4. Run `mise run check`: import, parse every script, run the main scene and
-   the skeleton viewer headlessly for 60 frames each and fail on any script
-   or scene error (`smoke`), load the project ([[tools-and-tasks]]). The runner has no GPU, but the
-   headless dummy renderer does not compile shaders, so `smoke` needs no
-   allow-list for shader messages.
+4. On a pull request, run `mise run check`, the quick tier (under 2
+   minutes): import, parse every script, run the scenes headlessly and fail
+   on any script or scene error (`smoke`), every headless check with the
+   statistical tasks on their `--quick` sample, and load the project
+   ([[tools-and-tasks#Check tiers]]). On any other event, run
+   `mise run check-full` instead, the same tasks at full size (about 10
+   minutes). The runner has no GPU, but the headless dummy renderer does not
+   compile shaders, so `smoke` needs no allow-list for shader messages.
+
+Both steps report as the one `check` status. A regression that only the full
+sample finds shows up on `develop` after the merge or in the nightly run, not
+on the pull request; run `mise run check-full` locally before merging a change
+to the generator or the solver.
 
 The window-based checks (`seed-check`, `screenshot-check`) are not run in CI,
 since the runner has no rendering device. The headless `preset-check` and
@@ -111,7 +123,9 @@ The output folder `build/` is ignored by git and removed by `mise run clean`.
 
 ## How to run or check it
 
-- `mise run check` locally gives the same result as CI.
+- `mise run check` locally gives the same result as CI on a pull request,
+  `mise run check-full` the same as on `develop` and nightly.
+- Nightly runs: `gh run list --workflow check.yml --event schedule`.
 - The workflow result is shown as the `check` status on each pull request.
 - `mise run templates && mise run export linux build/linux/megastructure.x86_64`,
   then run the produced file; `mise run release:package linux` packs it like
