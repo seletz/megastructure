@@ -17,9 +17,13 @@ status: current
 > GPU draws in one call, and one static body. The first version,
 > `SectorGridMap`, puts each cell into a Godot `GridMap` instead; it is kept
 > behind a panel toggle for debugging while #139 is open. A sector that
-> fails or degrades is shown as a translucent red box. A capsule body walks
-> the result with the keyboard, climbing stair treads with a step-up, and F
-> switches to the free-fly camera. Checks pin the buffer format by hand,
+> fails or degrades is shown as a translucent red box. `SectorStreamer`
+> keeps the sectors around the player loaded as it walks: it loads within a
+> radius, frees beyond the next ring, caches solved cells, places one
+> sector per frame and adds its collision in small chunks within a frame
+> budget, with translucent boxes standing in for sectors not placed. A
+> capsule body walks the result with the keyboard, climbing stair treads
+> with a step-up, and F switches to the free-fly camera. Checks pin the buffer format by hand,
 > show the two placements put every tile and every collision surface in the
 > same place, and walk the capsule along a route of cells on both.
 
@@ -34,20 +38,29 @@ status: current
 - [sector_gridmap.gd](../../scripts/world/sector_gridmap.gd) (`class_name
   SectorGridMap`, a `GridMap`): the mesh library built from a
   `TileLibrary`, the yaw to orientation table and `place`.
+- [sector_streamer.gd](../../scripts/world/sector_streamer.gd) (`class_name
+  SectorStreamer`, a `Node3D`): loads and frees sectors around a focus
+  position with hysteresis, the LRU cache of solved cells, the frame budget
+  for freeing, placing and adding collision chunks, failure boxes and
+  impostor boxes ([[sector-streaming]]).
 - [world_walker.gd](../../scripts/world/world_walker.gd) (`class_name
-  WorldWalker`, a `Node3D`): the root of the walk scene; requests the
-  sectors, places results as MultiMeshes or GridMaps, draws failure boxes, spawns the player, the F
-  and V keys, the panel params and the HUD legend.
+  WorldWalker`, a `Node3D`): the root of the walk scene; starts the
+  streamer and hands it the player or camera position, spawns the player
+  and holds it while the collision around it loads, the F and V keys, the
+  panel params and the HUD legend.
 - [player.gd](../../scripts/player.gd) (`class_name Player`, a
   `CharacterBody3D`): the capsule controller and the camera follow.
 - [world_walk.tscn](../../scenes/world_walk.tscn): the walk scene:
   `WorldWalker` root, a `FreeFlyCamera` with a headlight, environment with
-  fog, a `SectorJobs` node, the `Sectors` parent, the `Player` with its
+  fog, a `SectorJobs` node, the `Streamer` (a `SectorStreamer`, parent of
+  the placed sectors and boxes), the `Player` with its
   capsule shape and a visible capsule, the tweak panel and the HUD.
-- `scripts/tools/multimesh_check.gd`, `scripts/tools/gridmap_check.gd` and
-  `scripts/tools/walk_check.gd`: the scripts behind `mise run
-  multimesh-check`, `multimesh-draw-calls`, `gridmap-check` and `walk-check`,
-  listed in [[tools-and-tasks]].
+- `scripts/tools/multimesh_check.gd`, `scripts/tools/gridmap_check.gd`,
+  `scripts/tools/walk_check.gd`, `scripts/tools/streaming_check.gd` and
+  `scripts/tools/collision_cook_bench.gd`: the scripts behind `mise run
+  multimesh-check`, `multimesh-draw-calls`, `gridmap-check`, `walk-check`,
+  `streaming-check` and `collision-cook-bench`, listed in
+  [[tools-and-tasks]].
 
 ## Using it
 
@@ -74,8 +87,12 @@ builds the same dictionary on the calling thread.
 | `SectorMultiMesh` member | Meaning |
 | --- | --- |
 | `prototype_faces(library)` (static, main thread) | Per prototype index, the mesh's `get_faces()` triangles sorted into seven lists: those lying on cell face `+x`, `-x`, `+y`, `-y`, `+z`, `-z` (all three corners within 1 mm of the plane) and the rest (`INTERIOR`). Empty for a prototype without a mesh. `SectorJobs.configure` calls it once. |
-| `build(library, faces, cells)` (static, any thread) | The placement data of an n³ result, below. Reads only its arguments. |
-| `place(meshes, sector, placement)` (main thread) | Frees the children of an earlier call, moves the node to `sector_origin` and adds one `MultiMeshInstance3D` named `Mesh_<prototype>` per prototype with instances (`TRANSFORM_3D`, `custom_aabb` the sector box, `buffer` assigned in one call) and a `StaticBody3D` named `Collision` with one `ConcavePolygonShape3D` of the faces. Returns the MultiMeshInstance3D count (also `multimesh_count`; `instance_count`, `triangle_count`). |
+| `build(library, faces, cells, chunk_cells := 0)` (static, any thread) | The placement data of an n³ result, below. Reads only its arguments. With `chunk_cells` > 0 the collision stays in chunks of `chunk_cells`³ cells. |
+| `place(meshes, sector, placement)` (main thread) | Frees the children and collision of an earlier call, moves the node to `sector_origin` and adds one `MultiMeshInstance3D` named `Mesh_<prototype>` per prototype with instances (`TRANSFORM_3D`, `custom_aabb` the sector box, `buffer` assigned in one call) and, for merged faces, a `StaticBody3D` named `Collision` with one `ConcavePolygonShape3D` of the faces. Chunked placement data adds no collision here. Returns the MultiMeshInstance3D count (also `multimesh_count`; `instance_count`, `triangle_count`). |
+| `add_collision_chunk(index)`, `add_all_collision()` (main thread, in the tree) | Adds one chunk (or all) as a `ConcavePolygonShape3D` of one of the sector's `BODY_BLOCKS`³ = 8 static bodies, made through `PhysicsServer3D` with this node as collider (`collision_bodies`, `chunk_shapes`, `chunks_added`, `chunks_with_faces`). False for an empty or added chunk. |
+| `is_chunk_ready(index)`, `is_collision_complete()` | A chunk has its shape or no faces; every chunk with faces is added (true for merged collision). |
+| `release_collision()`, `free_collision()` | Frees the chunk bodies and returns the chunk shapes to free later, or frees them too. Leaving the tree frees them. |
+| `chunks_per_axis(n, chunk_cells)`, `chunk_index(cell, n, chunk_cells)`, `body_of_chunk(index)` | Chunks along an axis, the chunk of a local cell (`cx + k * (cy + k * cz)`), and the body a chunk goes into. |
 | `build_meshes(library, family_colours := true)` (static) | One mesh per prototype index, null for air; with `family_colours` the same coloured copies `SectorGridMap.build_mesh_library` makes. |
 | `YAW_BASES`, `yaw_basis(r)`, `cell_transform(cell, r)` (static) | The exact basis of 0 to 3 quarter turns about `+y` and a tile's sector-local transform: that basis at the cell centre `(cell + 0.5) * 2` m. |
 | `write_instance(buffer, i, transform)`, `read_instance(buffer, i)` (static) | Instance `i` of a `MultiMesh.buffer` written from or read back as a `Transform3D`. |
@@ -84,7 +101,8 @@ builds the same dictionary on the calling thread.
 | `build` field | Type | Meaning |
 | --- | --- | --- |
 | `buffers` | `Array` of `PackedFloat32Array` | By prototype index: the `MultiMesh.buffer` of that prototype's cells in cell order; empty for air or an unused prototype. Rotated variants share their prototype's buffer. |
-| `faces` | `PackedVector3Array` | Collision triangles of every tile, sector-local. |
+| `faces` | `PackedVector3Array` | Collision triangles of every tile, sector-local; empty with chunks. |
+| `chunks`, `chunk_cells` | `Array` of `PackedVector3Array`, `int` | With `chunk_cells` > 0, the triangles per chunk by chunk index; else empty and 0. |
 | `cells_per_sector` | `int` | n, the cube root of the cell count. |
 | `instances`, `triangles`, `culled_triangles` | `int` | Instances written, triangles kept and triangles dropped between solid cells. |
 | `build_usec` | `int` | Wall time of `build`. |
@@ -128,6 +146,15 @@ are unknown, so border faces stay. On the main thread `place` passes the
 array to `ConcavePolygonShape3D.set_faces` in one call; the capsule walks on
 exactly the triangles GridMap's per-item trimesh shapes had, minus the
 hidden ones.
+
+Jolt builds that shape on the main thread when its body enters the world,
+1.5 s for a mixed sector (decision #175). For streaming, `build(..., 3)`
+keeps the triangles per chunk of 3³ cells (a tile's triangles never leave
+its cell, so the chunks are exactly the merged faces), and
+`add_collision_chunk` adds one chunk at a time as a shape of one of the
+sector's 8 bodies, about 5 ms each; `SectorStreamer` spreads them over
+frames. `mise run collision-cook-bench` measures the options and checks
+rays hit the same heights on each ([[sector-streaming#The collision cook strategy]]).
 
 `multimesh-check` places a solved 8³ sector both ways at sector (1, -1, 2):
 all instance transforms (GridMap's `get_meshes()` against the buffers read
@@ -185,25 +212,58 @@ the corner the hand-worked turn predicts and not in the mirrored one, and
 every placeholder stair rotation is high on the face `TileLibrary` gives its
 `1s` socket. An earlier guess with 1 and 3 swapped failed all three.
 
+### Streaming
+
+```gdscript
+var streamer := SectorStreamer.new()
+add_child(streamer)                                   # and a SectorJobs in the tree
+streamer.start(jobs, library, seed)                   # configures the jobs
+streamer.focus_position = player.global_position      # every frame
+```
+
+| `SectorStreamer` member | Meaning |
+| --- | --- |
+| `radius` (0 to `MAX_RADIUS` = 3, default 1) | Sectors within this Chebyshev distance of the focus sector are loaded; placed sectors beyond `radius` + 1 are freed. |
+| `cache_size` (256) | Results kept in the LRU cache (outcome, cells, degraded, error). |
+| `frame_budget_usec` (6000) | Main-thread work per `update` for freeing, placing and collision chunks. |
+| `collision_chunk_cells` (3) | Cells per collision chunk edge; applies from the next `start`. |
+| `show_impostors`, `show_failed`, `use_gridmap` | Impostor boxes, failure boxes, GridMap placement (from the next `start`). |
+| `start(jobs, library, seed)`, `clear()` | Configures the jobs (`build_placement`, `collision_chunk_cells`) and streams; frees everything. |
+| `update()` (from `_process`) | Refresh on a focus sector change, then free, place one, add chunks, within the budget. |
+| `focus_position`, `focus_sector`, `sector_of(position)`, `distance(a, b)` (static) | The followed position, its sector at the last refresh, a position's sector, the Chebyshev distance. |
+| `placed`, `outcomes`, `is_loaded(sector)` | Sector to node and outcome of every placed sector. |
+| `is_collision_ready_at(position)` | The 27 chunks around a position have their shapes (or none to add). |
+| `is_loading_done()`, `is_settled()` | Nothing requested, ready or queued to free within `radius`; and all collision added and freed shapes gone. |
+| `requested_count()`, `ready_count()`, `unload_count()`, `cache_count()`, `impostor_count()`, `collision_pending_count()`, `shapes_to_free_count()`, `cached(sector)` | Queue sizes and a cache entry, for tools and the legend. |
+| `impostor_distance()` | Beyond this camera distance a placed sector's impostor replaces its MultiMeshes. |
+| `solved_count`, `cache_hits`, `placed_count`, `unloaded_count`, `chunks_added_count`, `last_*` and `max_*_usec` | Counters and timings since `start`, and what the last update did. |
+| `sector_placed(sector, result)`, `sector_unloaded(sector)` | Signals after a placement and after a sector was freed. |
+
+A cached SOLVED sector is requested with `SectorJobs.request(sector, cells)`,
+whose task runs `SectorJobs.place_solved` (placement data only, `cached`
+true). The rules, the cache, the collision strategy, the budget and the
+impostors are in [[sector-streaming]].
+
 ### The walk scene
 
 `mise run run-walk` opens [world_walk.tscn](../../scenes/world_walk.tscn)
-at seed 0. `WorldWalker` configures `SectorJobs` with the placeholder
-tileset and the seed and requests the (2 `block_radius` + 1)³ sectors around
-sector (0, 0, 0), nearest first, with `build_placement` on, so every task
-that solves also builds its placement data on its worker. Each
-`sector_ready` result that solved becomes a `SectorMultiMesh` under
-`Sectors` (with `use_gridmap` a `SectorGridMap`; a result without placement
-data is built on the main thread); a failed or degraded one becomes
-a translucent red unshaded box inset 0.5 m from its sector (a degraded
-result is all solid and would hide the gap). A seed change clears
-everything and requests the block again.
+at seed 0. `WorldWalker` starts the `Streamer` with the `SectorJobs`, the
+placeholder tileset and the seed. Each frame it hands the streamer the
+camera position (while flying or before the spawn) or the capsule's feet.
+The streamer loads the sectors within `radius` (27 at radius 1) around
+that, nearest first; each result that solved becomes a `SectorMultiMesh`
+under `Streamer` (with `use_gridmap` a `SectorGridMap`), a failed or
+degraded one a translucent red unshaded box inset 0.5 m from its sector (a
+degraded result is all solid and would hide the gap), and every sector
+within `radius` + 1 not placed a translucent box in its skeleton type
+colour. A seed change clears everything and streams again.
 
-The player is frozen until the first solved sector with records arrives;
+The player is frozen until the first solved sector with records is placed;
 then its feet go onto that sector's hub cell (the interior node every
-walk of the sector meets at, a floor record) and it walks. At seed 0 on
-the current tileset 11 of the 27 sectors solve, 16 fail before an attempt
-(#161).
+walk of the sector meets at, a floor record) and it walks. While the
+collision around its feet is not added yet, its physics process stops
+(decision #178) and the legend says "holding: collision loading". At seed 0
+on the current tileset 19 of the 27 sectors around the origin solve.
 
 | Key | Action |
 | --- | --- |
@@ -216,15 +276,19 @@ the current tileset 11 of the 27 sectors solve, 16 fail before an attempt
 | V | First or third person |
 | Tab, H, P, R | Panel, HUD, screenshot, random seed, as in every scene |
 
-The panel has a `walk` group (`free_fly`, `show_failed`, `use_gridmap`,
-`block_radius` 0 to 2; changing `use_gridmap` places the block again) and a `player` group (`first_person`, walk and run speed, jump velocity,
-step height, third person distance). The legend under the HUD label shows
-the sectors placed, failed, degraded, queued and running, the placement
-path with the frame's draw calls and the mean worker build time per sector,
-the mode and the feet position.
+The panel has a `walk` group (`free_fly`, `show_failed`, `show_impostors`,
+`use_gridmap`, `radius` 0 to 3, `cache_size`; changing `use_gridmap`
+streams again) and a `player` group (`first_person`, walk and run speed,
+jump velocity, step height, third person distance). The legend under the
+HUD label shows the sectors placed, failed, degraded, queued, running and
+cached, the radius with the results waiting to be placed, sectors waiting
+to be freed, sectors with collision pending and the streamer's update time,
+the placement path with the frame's draw calls and the mean worker build
+time per sector, the mode and the feet position.
 
 `use_gridmap` keeps the GridMap path for debugging, the conservative answer
-while #139 (whether GridMap stays once MultiMesh placement lands) is open.
+while #139 (whether GridMap stays once MultiMesh placement lands) is open;
+a GridMap sector builds its collision in the frame it is placed.
 
 ### The player
 
@@ -284,7 +348,9 @@ of which the MultiMesh nodes take about 4 ms and `set_faces` about 11 ms;
 the rest is Jolt building the 303 176-triangle shape when the body enters
 the tree. Whether to keep one merged trimesh per sector, split it, cut
 more triangles or build it off the main thread is decision #175; #96
-keeps the merged trimesh.
+keeps the merged trimesh for `place` without chunks, and streaming (#98)
+adds chunks of 3³ cells as shapes of 8 bodies per sector over frames,
+4.8 to 6.1 ms each at most ([[sector-streaming#The collision cook strategy]]).
 
 ## How to run or check it
 
@@ -316,6 +382,13 @@ keeps the merged trimesh.
   horizontal edge back along that edge's records to the hub and out along
   the last edge's records to its portal, with the same failure rules and a
   print of the tiles around the feet when it fails.
+- `mise run streaming-check [--quick]` (`--quick` part of `check`, the full
+  walk of `check-full`) walks a frozen capsule through 10 streamed sectors
+  and back (2 with `--quick`) and checks the load and unload rule, holes at
+  the player, the cache on the way back, memory and node counts against a
+  baseline and frame times ([[sector-streaming#Measurements]]).
+- `mise run collision-cook-bench` (not part of `check`) prints the
+  collision strategy table of decision #175.
 - `mise run smoke` runs the walk scene for 60 frames.
 - `mise run run-walk`, then Tab and `use_gridmap`, switches the scene to
   GridMap placement for comparison.
@@ -361,13 +434,15 @@ demand only (decision #171, question 2).
 ## References
 
 - [[RESEARCH_WFC]], sections 4 (threads) and 5 (placement) and section 7
-  (E1, E2).
+  (E1, E2, E4).
 - [[godot-docs-multimesh]]: the class the default placement uses and its
   buffer.
 - [[godot-docs-thread-safe-apis]]: why the worker builds data and the main
   thread makes nodes.
 - [[godot-docs-gridmap]]: the class the debugging placement uses.
 - [[sector-jobs]]: the tasks that build the placement data.
+- [[sector-streaming]]: loading, freeing, caching and chunked collision
+  around the player.
 - [[solver]]: the results placed here and `SectorJobs`.
 - [[tileset]]: the prototypes, their meshes and the rotation convention.
 - [[edge-rasteriser]]: the records the real-sector walk follows.
@@ -375,3 +450,5 @@ demand only (decision #171, question 2).
 - #139: whether GridMap stays as a debug tool once MultiMesh placement lands;
   until it is decided it stays behind `use_gridmap`.
 - #175: the main-thread cost of adding a sector's merged trimesh.
+- #177 and #178: what the streaming cache keeps, and holding the player
+  while collision loads.
