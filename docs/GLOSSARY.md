@@ -136,8 +136,10 @@ See also: [[RESEARCH_WFC]], [[socket-adjacency]].
 ### Boundary edge
 
 A walkable graph edge across the face between two neighbouring regions,
-decided from the lower region so both sides agree. Every region face gets at
-least one, which stitches the regions' spanning trees together.
+decided from the lower region so both sides agree. With the default boundary
+scheme every region face gets at least one, which stitches the regions'
+spanning trees together; the other schemes skip faces a 2³ block of regions
+is already joined without.
 
 In this project: `WalkableGraph.boundary_edges`.
 

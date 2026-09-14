@@ -60,9 +60,15 @@ for edge in graph.edges_for_sector(Vector3i(0, 0, 0)):
 var region_edges := graph.edges_in_region(WalkableGraph.region_of(Vector3i(0, 0, 0)))
 ```
 
-`WalkableGraph.new(seed, skeleton)` takes a tuned `Skeleton` as the second
-argument; its grammar's `sector_size` sets `cells_per_sector()` (48 m / 2 m =
-24, at least 4).
+`WalkableGraph.new(seed, skeleton, scheme, void_walls_last)` takes a tuned
+`Skeleton` as the second argument; its grammar's `sector_size` sets
+`cells_per_sector()` (48 m / 2 m = 24, at least 4). The last two set the
+properties below; changing either drops the graph's face cache.
+
+| Property | Default | Meaning |
+| --- | --- | --- |
+| `boundary_scheme` | `PER_FACE` | `BoundaryScheme`: which region faces get their lightest pair. `PER_REGION_PAIR` and `SKIP_SOLID_FACES` keep faces without an open pair, or solid on both sides, only where a 2³ block tree needs them ([[walkable-graph-connectivity#2. Boundary edges between regions]]). |
+| `void_wall_tunnels_last` | true | Tunnels with a cavity or chasm end weigh more than every other tunnel. |
 
 | Function | Returns |
 | --- | --- |
@@ -73,11 +79,13 @@ argument; its grammar's `sector_size` sets `cells_per_sector()` (48 m / 2 m =
 | `nodes_in_region(min_cell, max_cell)` | The interior nodes of every non-solid sector in the box, bounds inclusive, ordered by x, then y, then z. |
 | `cells_per_sector()` | Fill cells along one sector edge. |
 | `edges_in_region(region)` | The `Edge`s inside a 3³ region: the pruned Kruskal tree and hashed loops, ordered by `a`, then axis. Connects every open sector of the region and every sector a boundary edge lands on. |
-| `boundary_edges(region, axis)` | The `Edge`s across the face between `region` and the region above it along `axis`, keyed on `region`: the lightest pair plus hashed loops, never empty. |
+| `boundary_edges(region, axis)` | The `Edge`s across the face between `region` and the region above it along `axis`, keyed on `region`: the lightest pair when the face is kept, plus hashed loops. Empty only for a skipped face. |
+| `boundary_face_kept(region, axis)` | Whether `boundary_scheme` gives that face its lightest pair; always true for `PER_FACE`. |
 | `edges_for_sector(cell)` | Every edge touching the sector: its region's edges and the boundary edges of that region's faces that land on it. |
 | `region_of(cell)` (static) | The region of a sector, `floor(cell / 3)`. |
 | `edge_kind(type_a, type_b, axis)` (static) | The `EdgeKind` for two sector types and an axis. |
 | `edge_kind_name(kind)` (static) | `"corridor"`, `"stair"`, `"ladder"`, `"bridge"`, `"catwalk"` or `"tunnel"`. |
+| `is_void_wall(type)` (static) | True for cavity and chasm, whose solid neighbours are their walls. |
 
 | `Portal` field | Meaning |
 | --- | --- |
@@ -219,11 +227,16 @@ viewer calls it on a seed or grammar change. Rebuild times are in
   faces, margin, grid, that x and z portals (tunnels included) sit at the
   lower sector's hub level, null results for solid and non-adjacent pairs,
   and the interior nodes, for seeds 0 to 4.
-- `mise run graph-connectivity` (part of `mise run check`, about 25 s)
-  tests edge kinds, portals, determinism and `edges_for_sector` over a 15³
-  sample for seeds 0 to 9, and fails unless every region-aligned 3³ and 6³
-  window has one component of open sectors. It prints the strict 5³ window
-  counts, the tunnel fraction, the edge kinds and the mean vertical run.
+- `mise run graph-connectivity` (part of `mise run check`, about 2 min)
+  tests edge kinds, portals, determinism and `edges_for_sector` for every
+  boundary scheme and tunnel weight variant, over a random 15³ sample and
+  one centred on a chasm wall for seeds 0 to 9, and fails unless every
+  region-aligned 3³, 6³ and 9³ window has one component of open sectors. It
+  prints per variant the tunnel fraction, the tunnels with a chasm or cavity
+  end, the skipped faces, the strict 5³ window counts, the edge kinds and
+  the mean vertical run, then a table of all variants.
+  `mise run graph-connectivity --variants=per_face,void_walls_last` runs
+  only those.
 - `mise run raster-check` (part of `mise run check`, about 15 s) rasterises
   1 000 random sectors for seeds 0 to 4 and fails on a difference from a
   fresh graph, a record outside 0..23, a conflict, an edge without its

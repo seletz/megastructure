@@ -266,6 +266,8 @@ func register_params(registry: ParamRegistry) -> void:
 		for kind in WalkableGraph.EdgeKind.size():
 			graph_params[GraphLines.kind_param_name(kind)] = {"value": graph_node.is_kind_visible(kind), "default": true}
 		graph_params["marker_size"] = {"value": graph_node.marker_size, "default": 3.0, "min": 0.0, "max": 12.0, "step": 0.5}
+		graph_params["boundary_scheme"] = {"value": graph_node.boundary_scheme, "default": WalkableGraph.BoundaryScheme.PER_FACE, "min": 0, "max": WalkableGraph.BoundaryScheme.size() - 1, "step": 1}
+		graph_params["void_wall_tunnels_last"] = {"value": graph_node.void_wall_tunnels_last, "default": true}
 		registry.add_script_params("graph", graph_params, func(param_name: String, value: Variant) -> void:
 			if param_name.begins_with("show_") and param_name != "show_graph":
 				graph_node.set_kind_visible(WalkableGraph.EDGE_KIND_NAMES.find(param_name.trim_prefix("show_")), value)
