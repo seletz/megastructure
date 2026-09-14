@@ -34,6 +34,10 @@ status: current
 - Tunnels that open a chasm or cavity wall now come after every other tunnel, cutting chasm-end tunnels from 83 to 63 and cavity-end from 96 to 9 in chasm samples, and `mise run graph-connectivity` measures this and the per region pair and skip solid faces boundary schemes behind new graph parameters. (#151)
 - Portals on side faces sit at the floor level of the lower sector's hub, so every corridor is level on one side and mean stair cells per sector drop from 10.5 to 6.2, and the viewer draws graph edges as level runs with vertical segments in the stair colour. (#145)
 
+### Fixed
+
+- Every sampled real stratum sector reaches a solve attempt and 18 of 20 solve at seed 0: the placeholder tileset gains open floors and stairs, a free-standing portal frame and parapet and catwalk end pieces, the edge rasteriser keeps records out of the cells above and below stairs, and `mise run solver-real` explains sectors that fail before an attempt. (#174)
+
 ### Docs
 
 - The connectivity note shows renders of the walkable graph from outside and inside. (#130)
