@@ -3,7 +3,7 @@ tags:
   - algorithm
   - wfc
   - milestone/0.2.0
-  - planned
+  - implemented
 status: current
 ---
 
@@ -16,11 +16,12 @@ status: current
 > commits it to one tile, and removes from the neighbouring cells every tile
 > that no longer fits, which may ripple further. If some cell runs out of
 > options, the attempt failed and is restarted with a different random
-> stream. The fill layer of milestone 0.2.0 will use the simple-tiled variant
+> stream. The fill layer of milestone 0.2.0 uses the simple-tiled variant
 > to place hand-made meshes inside each 48 m sector, with every random choice
 > taken from the [[integer-hash]] so the same seed always builds the same
-> world. Nothing is implemented yet; this note explains the algorithm and the
-> choices recommended in [[RESEARCH_WFC]].
+> world. This note explains the algorithm and the choices recommended in
+> [[RESEARCH_WFC]]; the solver core is implemented in [[sector-solver]]
+> (restarts and pre-collapsed cells follow).
 
 ## The idea in one paragraph
 
@@ -174,18 +175,38 @@ sector and the attempt number:
 Because the draws are keyed by world cell coordinates, the result does not
 depend on the order sectors are generated in, or on which thread solves them.
 
+## Implementation
+
+`SectorSolver` ([[sector-solver]], code in [[solver]]) follows this note
+with these concrete choices:
+
+- **Wave and propagation:** one `PackedInt64Array` of bitset words, bitset
+  AC-3 with the union of a domain's allowed sets read from byte-sliced
+  tables; AC-4 costs more in GDScript because an observation removes almost
+  every tile of a cell at once.
+- **Cell choice:** minimum remaining values in an indexed heap, ties broken
+  by a hashed priority per cell per attempt; Shannon entropy behind
+  `use_entropy`.
+- **Tile choice:** integer weights (weight × 1000) and the draw
+  `hash3_u(attempt seed, cell, 9300 + step) * total >> 32`, which answers
+  the modulo bias question: a multiply-shift has no modulo, and its bias is
+  below `total / 2³²`. The step counter in the salt is the running counter
+  [[RESEARCH_WFC]] sketches; the draws depend on the observation order, which
+  is itself deterministic.
+- **Contradictions:** the solve stops and reports the cell; restarts, the
+  all-solid degradation and pre-collapsed cells are the next step (#91).
+
+`mise run solver-check` solves 8³ grids with the placeholder tileset,
+compares two solver instances and a recorded reference
+([[solver_reference_seed0]]), and times a 24³ sector (about 0.63 s).
+
 ## Open questions
 
-- **Modulo bias.** Indexing prefix sums with `hash3_u % total_weight` is
-  very slightly biased when the total is not a power of two. Probably
-  irrelevant, but worth deciding before the reference outputs are recorded.
-- **Tie-break keys.** Keying draws by cell and attempt is simplest; a running
-  counter in the salt, as [[RESEARCH_WFC]] sketches, is equivalent for one
-  attempt but makes draws depend on the observation order.
 - **How universal solid is.** A fully universal solid makes contradictions
   impossible but lets stairs run into walls. The research recommends a few
   sockets that refuse solid, and accepts rare restarts.
-- **Entropy or MRV.** To be decided with benchmark data from the solver epic.
+- **Entropy or MRV.** To be decided with benchmark data from the solver epic
+  (#137); first numbers are in [[sector-solver#Measurements]].
 
 ## References
 
@@ -201,9 +222,8 @@ Sources:
   Collapse Algorithm
 - DeBroglie (repository)
 
-Related notes: [[model-synthesis-and-sectors]], [[socket-adjacency]],
+Related notes: [[sector-solver]], [[model-synthesis-and-sectors]], [[socket-adjacency]],
 [[sector-skeleton-and-walkable-graph]], [[integer-hash]], [[RESEARCH_WFC]],
 [[MEGASTRUCTURE_CONCEPT]] (fill layer).
 
-Code: none yet. The solver will build on
-[hash.gd](../../scripts/hash.gd).
+Code: [[solver]], built on the [[hash]].

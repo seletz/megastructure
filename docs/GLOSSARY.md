@@ -22,10 +22,11 @@ A classic way to enforce arc consistency: whenever a cell's domain shrinks,
 recheck its neighbours and remove options they can no longer support, repeating
 until nothing changes. It needs no bookkeeping beyond the domains themselves.
 
-In this project: the recommended propagator for the WFC solver, with domains
-stored as bitsets.
+In this project: the propagator of `SectorSolver`, with domains stored as
+bitsets and the union of a domain's allowed sets read from byte-sliced
+tables.
 
-See also: [[RESEARCH_WFC]], Propagation, AC-4.
+See also: [[sector-solver]], [[RESEARCH_WFC]], Propagation, AC-4.
 
 ### AC-4
 
@@ -33,10 +34,12 @@ A faster variant of AC-3 that keeps a count of how many supporting options
 each option has in each direction, so a removal only touches the affected
 counters. It is quicker per step but needs a large table of counters.
 
-In this project: considered and set aside for GDScript because of memory; a
-candidate for a native port.
+In this project: considered and set aside for GDScript: an observation
+removes almost every tile of a cell at once, and AC-4 pays for each removed
+tile. A candidate for a native port.
 
-See also: [[RESEARCH_WFC]], AC-3.
+See also: [[sector-solver#Propagation design: AC-3, not AC-4]],
+[[RESEARCH_WFC]], AC-3.
 
 ### Adjacency table
 
@@ -164,6 +167,19 @@ In this project: `chasm_bridges` in
 [chasm.gdshaderinc](../shaders/include/chasm.gdshaderinc).
 
 See also: [[MEGASTRUCTURE_CONCEPT]].
+
+### Byte-sliced table
+
+A lookup table indexed by one byte of a bitset word at a time: for every
+byte position and each of its 256 values it holds a precomputed result for
+the items in that byte, such as the OR of their sets or their summed
+weight. A whole word then costs one lookup per non-zero byte instead of one
+step per set bit.
+
+In this project: `SectorSolver` reads the union of a domain's allowed sets,
+its tile count and its summed weight this way.
+
+See also: [[sector-solver]], Bitset.
 
 ## C
 
@@ -378,8 +394,8 @@ In WFC, a measure of how undecided a cell is, based on how many tiles remain
 and their weights (Shannon entropy). Picking the lowest-entropy cell first is
 Gumin's original heuristic.
 
-In this project: replaced by minimum remaining values, with Shannon kept
-behind a flag.
+In this project: `SectorSolver.use_entropy`; minimum remaining values is the
+default until decision #137.
 
 See also: [[RESEARCH_WFC]], Minimum remaining values.
 
@@ -624,6 +640,17 @@ box with the rough silhouette of a sector.
 
 See also: [[MEGASTRUCTURE_CONCEPT]], LOD.
 
+### Indexed heap
+
+A binary min-heap that also records where each item sits, so an item whose
+key changes can be moved up or down in place instead of being inserted
+again.
+
+In this project: `SectorSolver` keeps its open cells in one, keyed by tile
+count (or entropy) and tie-break priority.
+
+See also: [[sector-solver#Cell choice]], Minimum remaining values.
+
 ## K
 
 ### Key light
@@ -699,10 +726,11 @@ See also: [[PLAN_0.1.0]], Epic.
 A heuristic that solves next the cell with the fewest options left (MRV).
 It needs only integer counts, so it is exactly reproducible everywhere.
 
-In this project: the recommended cell choice, with a hashed tie-break. A fixed
-row-by-row (scanline) order is the simpler alternative.
+In this project: the default cell choice of `SectorSolver`, with a hashed
+tie-break priority. A fixed row-by-row (scanline) order is the simpler
+alternative.
 
-See also: [[RESEARCH_WFC]], Entropy.
+See also: [[sector-solver]], [[RESEARCH_WFC]], Entropy, Tie-break priority.
 
 ### mise task
 
@@ -1148,6 +1176,16 @@ See also: [[RESEARCH_WFC]], Socket.
 
 ## T
 
+### Tie-break priority
+
+A hashed number per cell that decides between cells the heuristic rates
+equally, so the choice is arbitrary yet reproducible.
+
+In this project: `hash3_u(attempt seed, cell, 9200)` in `SectorSolver`, drawn
+once per cell per attempt.
+
+See also: [[sector-solver#Cell choice]], Minimum remaining values.
+
 ### Tile
 
 One hand-authored building module (floor slab, wall, stair) that fills one
@@ -1306,7 +1344,8 @@ See also: [[sector-skeleton-and-walkable-graph]],
 
 In WFC, the full state of the grid: the domain of every cell at once.
 
-In this project: planned as one `PackedInt64Array` of bitsets.
+In this project: one `PackedInt64Array` of `cells × words` bitset words in
+`SectorSolver`.
 
 See also: [[RESEARCH_WFC]], Domain.
 
@@ -1319,6 +1358,17 @@ out for its neighbours.
 In this project: the fill layer's solver, in the simple-tiled form.
 
 See also: [[RESEARCH_WFC]], Model synthesis.
+
+### Weighted draw
+
+Picking one item from a set so that each is chosen in proportion to its
+weight: sum the weights, draw a number below the sum, and walk the items
+subtracting weights until the number falls inside one.
+
+In this project: `SectorSolver` uses integer weights (weight × 1000) and
+`hash3_u(...) * total >> 32` as the number, so the draw needs no floats.
+
+See also: [[sector-solver]], Tile weight.
 
 ### WorkerThreadPool
 
