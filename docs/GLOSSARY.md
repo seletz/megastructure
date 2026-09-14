@@ -259,6 +259,16 @@ See also: [[RESEARCH_WFC]], Restart.
 
 ## D
 
+### Dead socket
+
+A socket on some face that no tile in the set can match on the opposite
+face, so a tile showing it can never have a neighbour on that side.
+
+In this project: reported by `mise run tiles-check`; usually a typo in an
+id or a missing `f` partner.
+
+See also: [[socket-adjacency#Validation]], Socket.
+
 ### Debug view
 
 An alternate shader output that shows internal data (step counts, depth,
@@ -407,6 +417,16 @@ In this project: `ledge_*`, `deck_*`, `buttress_*` and `terrace_*` uniforms in
 [chasm.gdshaderinc](../shaders/include/chasm.gdshaderinc).
 
 See also: [[MEGASTRUCTURE_CONCEPT]], Chasm.
+
+### Face profile
+
+The cross-section a tile's mesh shows on one face: its vertices lying on
+that face plane, seen from outside the tile.
+
+In this project: `mise run tiles-check` mirrors the profile of every face
+tagged symmetric (`Ns`) and fails when it does not match itself.
+
+See also: [[socket-adjacency#Validation]], Symmetry tag.
 
 ### Face-first boundary solve
 
