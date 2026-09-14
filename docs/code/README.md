@@ -27,6 +27,7 @@ Last verified against commit `3cd3cad`.
 | Hash | [[hash]] | The shared integer hash in the shader and in GDScript, and its reference vectors. |
 | Skeleton | [[skeleton]] | The sector grammar parameters and `sector_type`, the first generator layer, and the sector box viewer scene. |
 | Walkable graph | [[walkable-graph]] | Portals on the faces between open sectors and interior nodes, the second generator layer. |
+| Tileset | [[tileset]] | Tile prototypes with sockets, weights, families and rotations, the tileset resource and its validator. |
 | Tweak UI | [[tweak-ui]] | World seed, parameter registry, tweak panel, seed control, presets, HUD and their keys. |
 | Tools and tasks | [[tools-and-tasks]] | Every mise task and every check script in `scripts/tools/`. |
 | CI and export | [[ci-and-export]] | The GitHub check and release workflows, branch protection, the Linux and macOS export presets and templates. |
