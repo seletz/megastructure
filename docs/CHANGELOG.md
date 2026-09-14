@@ -24,6 +24,10 @@ status: current
 - Open sectors are joined by walkable graph edges (corridors, stairs, ladders, bridges, catwalks and tunnels through solid) from a hashed spanning tree per 3³ region with loops, and `mise run graph-connectivity` checks that every region-aligned window is connected. (#127)
 - Adjacent open sectors share a hashed portal on their face and every open sector gets an interior node, all on the 2 m cell grid at floor heights, checked for symmetry by `mise run graph-check`. (#124)
 
+### Changed
+
+- Portals on side faces sit at the floor level of the lower sector's hub, so every corridor is level on one side and mean stair cells per sector drop from 10.5 to 6.2, and the viewer draws graph edges as level runs with vertical segments in the stair colour. (#145)
+
 ### Docs
 
 - The connectivity note shows renders of the walkable graph from outside and inside. (#130)

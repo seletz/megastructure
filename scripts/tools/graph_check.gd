@@ -3,8 +3,11 @@ extends SceneTree
 ## For 100 random adjacent pairs of non-solid sectors per seed, along all
 ## three axes: `portal(a, b)` equals `portal(b, a)` exactly and on a fresh
 ## graph, the portal lies on the shared face at least MARGIN_CELLS inside its
-## edges, on the 2 m grid and, on a vertical face, at a floor level. Pairs
-## with a solid sector and non-adjacent pairs return null. Interior nodes lie
+## edges, on the 2 m grid and, on a vertical face, at the floor level of the
+## lower sector's interior node. Pairs with a solid sector and non-adjacent
+## pairs return null. The edges around EDGE_SECTORS sectors per seed, tunnels
+## included, have their x and z portals at `hub_level` of the lower sector,
+## which is `centre_level` for a solid one. Interior nodes lie
 ## inside their sector on the grid at a floor level, carry the sector type,
 ## are null for solid sectors, and `nodes_in_region` returns one per
 ## non-solid sector of a 3^3 region.
@@ -13,6 +16,8 @@ extends SceneTree
 const SEEDS: Array[int] = [0, 1, 2, 3, 4]
 const OPEN_PAIRS := 100
 const SOLID_PAIRS := 20
+## Sample sectors per seed whose edges are checked against the level rule.
+const EDGE_SECTORS := 20
 ## Upper bound of random pairs tried per seed before giving up.
 const MAX_TRIES := 2000
 ## Random sectors lie within +-RANGE on each axis, where metres stay exact.
@@ -80,7 +85,7 @@ func _check_seed(seed_value: int) -> void:
 			bad.face += 1
 		if not _on_grid(forward.position):
 			bad.grid += 1
-		if forward.axis != Vector3i.AXIS_Y and _face_height(forward) % WalkableGraph.STRATUM_PITCH_CELLS != 0:
+		if forward.axis != Vector3i.AXIS_Y and _face_height(forward) != graph.interior_node(forward.a).local_cell.y:
 			bad.level += 1
 		for cell in [a, b]:
 			if not _node_ok(graph, cell, n):
@@ -90,11 +95,33 @@ func _check_seed(seed_value: int) -> void:
 	_expect(open == OPEN_PAIRS and bad.symmetry == 0, "%s portal(a, b) == portal(b, a) for %d open pairs (x %d, y %d, z %d), %d mismatches" % [label, open, per_axis[0], per_axis[1], per_axis[2], bad.symmetry])
 	_expect(bad.face == 0, "%s portals on the shared face inside a %d cell margin, %d outside" % [label, WalkableGraph.MARGIN_CELLS, bad.face])
 	_expect(bad.grid == 0, "%s portal positions on the %.0f m grid, %d off it" % [label, WalkableGraph.CELL_SIZE, bad.grid])
-	_expect(bad.level == 0, "%s portals on vertical faces at a floor level, %d not" % [label, bad.level])
+	_expect(bad.level == 0, "%s portals on vertical faces at the floor level of the lower sector's interior node, %d not" % [label, bad.level])
 	_expect(solid == SOLID_PAIRS and bad.solid == 0, "%s %d pairs with a solid sector return null, %d did not" % [label, solid, bad.solid])
 	_expect(bad.adjacent == 0, "%s %d non-adjacent pairs return null, %d did not" % [label, not_adjacent, bad.adjacent])
 	_expect(bad.node == 0, "%s interior nodes of %d open sectors inside the sector on the grid at a floor level, %d not" % [label, open * 2, bad.node])
 	_check_region(graph, seed_value, label)
+	_check_edge_levels(graph, seed_value, label)
+
+
+## Every x and z edge portal around EDGE_SECTORS sample sectors, tunnels
+## included, lies at the hub level of the edge's lower sector.
+func _check_edge_levels(graph: WalkableGraph, seed_value: int, label: String) -> void:
+	var edges := 0
+	var tunnels := 0
+	var mismatches := 0
+	for i in EDGE_SECTORS:
+		for edge in graph.edges_for_sector(_random_cell(seed_value, MAX_TRIES + 1 + i)):
+			if edge.axis == Vector3i.AXIS_Y:
+				continue
+			edges += 1
+			var expected := graph.hub_level(edge.a)
+			if _solid(graph, edge.a):
+				tunnels += 1
+				if expected != graph.centre_level():
+					mismatches += 1
+			if _face_height(edge.portal) != expected:
+				mismatches += 1
+	_expect(mismatches == 0, "%s %d horizontal edges (%d from a solid sector) have their portal at the lower sector's hub level, %d not" % [label, edges, tunnels, mismatches])
 
 
 ## nodes_in_region returns exactly the non-solid sectors of a 3^3 region, in

@@ -13,8 +13,10 @@ extends RefCounted
 ## a portal is keyed on the lower sector of its pair and the face axis, with
 ## one salt per axis and face coordinate. Points are snapped to the 2 m cell
 ## grid of the fill layer and kept at least MARGIN_CELLS cells inside the
-## face or sector; on vertical faces and for interior nodes the height is a
-## floor level on the 6 m stratum pitch. Salts and rules are in
+## face or sector. Heights are floor levels on the 6 m stratum pitch: an
+## interior node hashes its own, and a portal on an x or z face takes the hub
+## level of the lower sector of its pair, so that side of the edge stays
+## level and only the other side climbs. Salts and rules are in
 ## docs/algorithms/sector-skeleton-and-walkable-graph.md.
 ##
 ## Edges are decided per region of REGION_SECTORS^3 sectors: Kruskal over all
@@ -65,6 +67,8 @@ const WEIGHT_TUNNEL_VERTICAL := 5
 const WEIGHT_TUNNEL_VERTICAL_SOLID := 6
 
 ## Portal salts: the first and second face coordinate of an x, y and z face.
+## The height salts 140 (x face) and 145 (z face) are no longer drawn: those
+## heights are the hub level of the lower sector.
 const SALT_PORTAL_X_U := 140
 const SALT_PORTAL_X_V := 141
 const SALT_PORTAL_Y_U := 142
@@ -212,7 +216,20 @@ func portal(a: Vector3i, b: Vector3i) -> Portal:
 	if _is_solid(a) or _is_solid(b):
 		return null
 	var axis := Vector3i.AXIS_X if d.x != 0 else (Vector3i.AXIS_Y if d.y != 0 else Vector3i.AXIS_Z)
-	return _face_point(a if d[axis] > 0 else b, axis)
+	var lower := a if d[axis] > 0 else b
+	return _face_point(lower, axis, skeleton.sector_type(world_seed, lower))
+
+
+## The floor level of a sector's hub in cells: the level of its interior
+## node, or for a solid sector `centre_level()`.
+func hub_level(cell: Vector3i) -> int:
+	return _hub_level(cell, skeleton.sector_type(world_seed, cell), cells_per_sector())
+
+
+## The floor level at or below the centre of a sector in cells, where the hub
+## of a solid sector sits.
+func centre_level() -> int:
+	return (cells_per_sector() / 2) / STRATUM_PITCH_CELLS * STRATUM_PITCH_CELLS
 
 
 ## The interior node of a sector; null when it is solid.
@@ -226,7 +243,7 @@ func interior_node(cell: Vector3i) -> InteriorNode:
 	node.type = type
 	node.local_cell = Vector3i(
 		_pick(cell, SALT_NODE_X, MARGIN_CELLS, n - MARGIN_CELLS),
-		_pick_level(cell, SALT_NODE_LEVEL, n),
+		_node_level(cell, n),
 		_pick(cell, SALT_NODE_Z, MARGIN_CELLS, n - MARGIN_CELLS),
 	)
 	node.position = Vector3(
@@ -396,8 +413,9 @@ func _is_solid(cell: Vector3i) -> bool:
 	return skeleton.sector_type(world_seed, cell) == Skeleton.SectorType.SOLID
 
 
-## The point on the face between `lower` and `lower` plus one along `axis`.
-func _face_point(lower: Vector3i, axis: int) -> Portal:
+## The point on the face between `lower` and `lower` plus one along `axis`;
+## `lower_type` is the sector type of `lower`.
+func _face_point(lower: Vector3i, axis: int, lower_type: Skeleton.SectorType) -> Portal:
 	var n := cells_per_sector()
 	var salts := _PORTAL_SALTS[axis]
 	var others := _other_axes(axis)
@@ -410,9 +428,10 @@ func _face_point(lower: Vector3i, axis: int) -> Portal:
 	result.axis = axis
 	var face := Vector2i.ZERO
 	for i in 2:
-		# The height on a vertical face is a floor level, like interior nodes.
+		# The height on a vertical face is the lower sector's hub level, so
+		# the edge runs level on that side.
 		if others[i] == Vector3i.AXIS_Y:
-			face[i] = _pick_level(lower, salts[i], n)
+			face[i] = _hub_level(lower, lower_type, n)
 		else:
 			face[i] = _pick(lower, salts[i], MARGIN_CELLS, n - MARGIN_CELLS)
 	result.face_cell = face
@@ -432,7 +451,7 @@ func _make_edge(lower: Vector3i, axis: int, type_a: Skeleton.SectorType, type_b:
 	edge.b = lower + _UNITS[axis]
 	edge.axis = axis
 	edge.kind = edge_kind(type_a, type_b, axis)
-	edge.portal = _face_point(lower, axis)
+	edge.portal = _face_point(lower, axis, type_a)
 	return edge
 
 
@@ -462,6 +481,18 @@ func _is_loop(lower: Vector3i, type_a: Skeleton.SectorType, type_b: Skeleton.Sec
 		return false
 	var chance := LOOP_PROBABILITY_VERTICAL if axis == Vector3i.AXIS_Y else LOOP_PROBABILITY_HORIZONTAL
 	return Hash.hash3(world_seed, lower, _LOOP_SALTS[axis]) < chance
+
+
+## The level of `hub_level` for a sector of the given type.
+func _hub_level(cell: Vector3i, type: Skeleton.SectorType, n: int) -> int:
+	if type == Skeleton.SectorType.SOLID:
+		return centre_level()
+	return _node_level(cell, n)
+
+
+## The hashed floor level of a sector's interior node, in cells.
+func _node_level(cell: Vector3i, n: int) -> int:
+	return _pick_level(cell, SALT_NODE_LEVEL, n)
 
 
 ## A floor level in cells: a multiple of STRATUM_PITCH_CELLS inside the margin.

@@ -250,11 +250,17 @@ covering cells `i n` to `(i + 1) n` on each axis.
 - The point is two coordinates on the face, in cells from the face's lower
   corner along the other two axes in xyz order. A horizontal coordinate is
   hashed into `1` to `n - 1`, so the point stays at least one 2 m cell from
-  the face's edges. On vertical faces (x and z) the height is a **floor
-  level**, a hashed multiple of 3 cells (the 6 m stratum pitch) in the same
-  margin, 6 to 42 m above the sector floor, so corridors meet floors.
+  the face's edges. On vertical faces (x and z) the height is the **floor
+  level of the lower sector's hub**: the level of its interior node, or for
+  a solid lower sector (a tunnel edge) the centre level, 12 cells. So every
+  horizontal edge is level on its lower side and changes height, if at all,
+  only on its upper side, where the rasteriser puts an explicit stair run
+  (#132). The portal is still keyed on the lower sector alone: its height
+  reads that sector's type and node hash, never another portal or edge.
 - One **interior node** per non-solid sector: hashed `x` and `z` inside the
-  margin and a hashed floor level, like the portals. Stratum sectors are the
+  margin and a hashed **floor level**, a multiple of 3 cells (the 6 m
+  stratum pitch) in the same margin, 6 to 42 m above the sector floor, so
+  corridors meet floors. Stratum sectors are the
   walking nodes; shaft, cavity and chasm sectors get a node too, marked with
   their type, so the edge rules (#81) can route vertical travel and bridges
   differently.
@@ -262,9 +268,11 @@ covering cells `i n` to `(i + 1) n` on each axis.
   grid and the path cells of the rasteriser (#83) line up with the tiles.
 
 **Example.** Sectors `(0, 0, 0)` and `(1, 0, 0)`: the face is the plane
-`x = 48 m`; the portal draws its height from salt 140 and its `z` from salt
-141, both keyed on `(0, 0, 0)`. Asking from `(1, 0, 0)` finds the same lower
-sector and the same salts, hence the same point.
+`x = 48 m`; the portal takes its height from the interior node of `(0, 0, 0)`
+(salt 151) and draws its `z` from salt 141 keyed on `(0, 0, 0)`. Asking from
+`(1, 0, 0)` finds the same lower sector, hence the same point. The corridor
+is level in `(0, 0, 0)`; in `(1, 0, 0)` it climbs or descends to that
+sector's own node level.
 
 #### Salts
 
@@ -272,21 +280,21 @@ Salts 140 to 159 belong to the walkable graph.
 
 | Salt | Key | Decides |
 | ---: | --- | --- |
-| 140 | lower sector of an x pair | portal height on the x face (floor level) |
+| 140 | lower sector of an x pair | unused since #132 (was the portal height on the x face) |
 | 141 | same | portal z on the x face |
 | 142 | lower sector of a y pair | portal x on the y face |
 | 143 | same | portal z on the y face |
 | 144 | lower sector of a z pair | portal x on the z face |
-| 145 | same | portal height on the z face (floor level) |
+| 145 | same | unused since #132 (was the portal height on the z face) |
 | 150 | sector | interior node x |
-| 151 | same | interior node floor level |
+| 151 | same | interior node floor level, and the height of the x and z portals the sector is the lower side of |
 | 152 | same | interior node z |
 | 153 | lower sector of an x pair | x edge weight |
 | 154 | `(x, floor(y / 9), z)` of the lower sector | y edge weight, shared by the column run |
 | 155 | lower sector of a z pair | z edge weight |
 | 156, 157, 158 | lower sector of an x, y, z pair | loop edge on that axis |
 
-Salt 159 is free. Salt 902 is used only by the graph check to pick random
+Salts 140 and 145 (the portal heights before #132) and 159 are free. Salt 902 is used only by the graph check to pick random
 pairs, salt 903 only by the connectivity check to place its samples.
 
 ### Edges: spanning tree, tunnels and loops
@@ -354,9 +362,11 @@ level change, and the merge rule that keeps records from conflicting.
 - `mise run graph-check` (part of `mise run check`) takes 100 random adjacent
   pairs of open sectors per seed 0 to 4 and checks that `portal(a, b)` equals
   `portal(b, a)` exactly, that the portal lies on the shared face inside the
-  margin, on the 2 m grid and on vertical faces at a floor level, that pairs
-  with a solid sector and non-adjacent pairs have no portal, and that the
-  interior nodes lie inside their sectors on the grid.
+  margin, on the 2 m grid and on vertical faces at the floor level of the
+  lower sector's interior node, that pairs with a solid sector and
+  non-adjacent pairs have no portal, that the x and z edge portals around 20
+  sample sectors per seed, tunnels included, lie at the lower sector's hub
+  level, and that the interior nodes lie inside their sectors on the grid.
 
 - `mise run raster-check` (part of `mise run check`) rasterises 1 000
   random sectors for seeds 0 to 4 and fails on a conflict between records,

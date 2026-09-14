@@ -62,10 +62,13 @@ sideways.
 
 ## The level rule
 
-Portals and interior nodes draw their floor levels from independent hashes,
-so the two ends of most paths sit at different heights. Drawn as straight
-lines (the viewer's debug lines), corridors and tunnels look steep. The
-rasteriser never interpolates. For every edge kind the walk is:
+Interior nodes draw their floor levels from independent hashes. A portal on
+an x or z face sits at the hub level of the lower sector of its pair
+([[sector-skeleton-and-walkable-graph#Nodes and portals]]), so the walk in
+the lower sector is level and only the upper sector's walk may change
+height; on a y face the portal is at the top or bottom of the sector, so
+both halves climb. The rasteriser never interpolates. For every edge kind
+the walk is:
 
 1. **flat** at the start level (the hub's), in the sector's surface family;
 2. a **stair run**, oriented, 3 cells of run per stratum, or a **ladder** in
@@ -192,50 +195,53 @@ shows another edge's cell.
 
 ## Worked example
 
-Seed 0, stratum sector `(1, 0, 51)`, hub `(11, 15, 10)`, two edges:
+Seed 0, stratum sector `(3, 0, 59)`, hub `(22, 15, 14)`, two edges:
 
 | Edge | `edge_ref` | Portal cell | Portal level − hub level |
 | --- | --- | --- | ---: |
-| corridor to `(2, 0, 51)` | `(1, 0, 51, 0)` | `(23, 12, 17)` | −3 |
-| bridge to `(1, 0, 52)` | `(1, 0, 51, 2)` | `(17, 12, 23)` | −3 |
+| corridor from `(3, 0, 58)` | `(3, 0, 58, 2)` | `(7, 18, 0)` | +3 |
+| corridor to `(4, 0, 59)` | `(3, 0, 59, 0)` | `(23, 15, 13)` | 0 |
 
-1. Portal openings at `(23, 12, 17)` with yaw 0 (+x out) and
-   `(17, 12, 23)` with yaw 3 (+z out).
-2. The x edge goes first. The portal is 3 cells below the hub, so a stair
-   run leaves it inwards along −x: one flight of 3 steps facing −x (yaw 2,
-   the way up) at `(22, 12, 17)`, `(21, 13, 17)`, `(20, 14, 17)`, landing at
-   `(19, 15, 17)`. The hub is not between that landing and the portal, so
-   the walk goes across the stair line first: floor `(11, 15, 10…17)`, then
-   `(12…19, 15, 17)`. Walking it: flat at 15, down three steps, flat into
-   the portal at 12.
-3. The z edge: a flight along −z facing −z (yaw 1) at `(17, 12, 22)`,
-   `(17, 13, 21)`, `(17, 14, 20)`, landing `(17, 15, 19)`; the walk along x
-   first: `(12…17, 15, 10)`, then `(17, 15, 11…19)`. Its floor at
-   `(17, 15, 17)` meets the first edge's floor and merges, keeping
-   `edge_ref (1, 0, 51, 0)`. The bridge edge is floor here because this is
-   a stratum sector; in the cavity `(1, 0, 52)` it is bridge.
+The first edge's lower sector is `(3, 0, 58)`, so its portal has that
+sector's hub level, 18, and the stair is on this side. This sector is the
+lower one of the second edge, so that portal has the hub's level, 15.
+
+1. Portal openings at `(7, 18, 0)` with yaw 1 (−z out) and
+   `(23, 15, 13)` with yaw 0 (+x out).
+2. The z edge goes first (smaller `edge_ref`). The portal is 3 cells above
+   the hub, so a stair run leaves it inwards along +z: one flight of 3 steps
+   facing −z (yaw 1, the way up) at `(7, 17, 1)`, `(7, 16, 2)`, `(7, 15, 3)`,
+   landing at `(7, 15, 4)`. The hub is not between that landing and the
+   portal, so the walk goes across the stair line first: floor
+   `(22…7, 15, 14)`, then `(7, 15, 13…4)`. Walking it: flat at 15, up three
+   steps, flat into the portal at 18.
+3. The x edge is level: an L across the face, along z first, `(22, 15, 14)`,
+   `(22, 15, 13)`, then the portal. Its floor at the hub merges with the
+   first edge's, keeping `edge_ref (3, 0, 58, 2)`.
 
 ```
-plan view (x right, z up): H hub, # floor at y = 15, S stair, P portal at y = 12
-z=23  . . . . . . P . . . . . .
-z=22  . . . . . . S . . . . . .
-z=21  . . . . . . S . . . . . .
-z=20  . . . . . . S . . . . . .
-z=19  . . . . . . # . . . . . .
-z=18  . . . . . . # . . . . . .
-z=17  # # # # # # # # # S S S P
-z=16  # . . . . . # . . . . . .
-z=15  # . . . . . # . . . . . .
-z=14  # . . . . . # . . . . . .
-z=13  # . . . . . # . . . . . .
-z=12  # . . . . . # . . . . . .
-z=11  # . . . . . # . . . . . .
-z=10  H # # # # # # . . . . . .
-     x=11        x=17        x=23
+plan view (x right, z up): H hub, # floor at y = 15, S stair, P portal
+z=14  # # # # # # # # # # # # # # # H .
+z=13  # . . . . . . . . . . . . . . # P
+z=12  # . . . . . . . . . . . . . . . .
+z=11  # . . . . . . . . . . . . . . . .
+z=10  # . . . . . . . . . . . . . . . .
+z=9   # . . . . . . . . . . . . . . . .
+z=8   # . . . . . . . . . . . . . . . .
+z=7   # . . . . . . . . . . . . . . . .
+z=6   # . . . . . . . . . . . . . . . .
+z=5   # . . . . . . . . . . . . . . . .
+z=4   # . . . . . . . . . . . . . . . .
+z=3   S . . . . . . . . . . . . . . . .
+z=2   S . . . . . . . . . . . . . . . .
+z=1   S . . . . . . . . . . . . . . . .
+z=0   P . . . . . . . . . . . . . . . .
+     x=7                             x=23
 ```
 
-The sector gets 38 records: 2 portal openings, 6 stair cells and 30 floor
-cells, one 26-connected group.
+The sector gets 32 records: 2 portal openings, 3 stair cells and 27 floor
+cells, one 26-connected group. In `(3, 0, 58)` the same corridor reaches its
+portal at `(7, 18, 23)` without a stair.
 
 A turning run: a vertical stair edge whose hub is at `y = 3` in the lower
 sector needs 20 steps to the top portal, a flight of 2 and six of 3. From a
@@ -269,30 +275,45 @@ every sample sector against a rasteriser on a fresh graph.
 ## Measured shape
 
 `mise run raster-check`, 1 000 random sectors within ±100 000 sectors, 200
-per seed 0 to 4: 689 have edges (1 593 edges), 52.4 records per sector with
-edges (0.4 % of its cells), 36.1 over all sampled sectors. One edge takes a
+per seed 0 to 4: 689 have edges (1 593 edges), 47.2 records per sector with
+edges (0.3 % of its cells), 32.5 over all sampled sectors. One edge takes a
 fallback routing, none is rejected, every walk passes the level rule and
 every sector's records are one 26-connected group. The check runs in about
-15 s.
+17 s.
 
 | Family | Records |
 | --- | ---: |
-| floor | 16 192 |
-| stair | 10 526 |
+| floor | 17 152 |
+| stair | 6 191 |
 | bridge | 2 424 |
-| catwalk | 2 419 |
+| catwalk | 2 468 |
+| tunnel | 1 589 |
 | portal opening | 1 588 |
-| ladder | 1 560 |
-| tunnel | 1 403 |
+| ladder | 1 124 |
 
-Level changes: 1 148 horizontal edge ends change level. They produce 8 313
-stair cells; vertical edges add 2 213 stair cells, ladders 1 579 cells
-(counted along the walks, before merging) and turning runs 134 landing
+Level changes: 578 horizontal edge ends change level. They produce 3 978
+stair cells; vertical edges add 2 213 stair cells, ladders 1 124 cells
+(counted along the walks, before merging) and turning runs 100 landing
 cells.
 
+**Portal level rule (#132).** Before portals on x and z faces took the lower
+sector's hub level, their heights were hashed on their own and both ends of
+a horizontal edge usually climbed. The same 1 000 sectors then had 1 148
+horizontal edge ends changing level and 8 313 stair cells on them:
+
+| Mean stair cells | Per sector | Per sector with edges |
+| --- | ---: | ---: |
+| hashed portal heights | 10.53 | 15.28 |
+| lower sector's hub level | 6.19 | 8.99 |
+
+Vertical edges are unchanged (2 213 stair cells), so the saving is all on
+horizontal edges, which now climb on one side only: 52 % fewer stair cells
+there. Biasing the node levels further is an open decision (#143).
+
 A scratch run over 10 000 sectors (2 000 per seed) passed every check too:
-16 396 edges, 7 on a fallback routing, none rejected, 105 327 stair cells
-(83 706 on horizontal edges changing level) and 1 362 landings.
+16 396 edges, 11 on a fallback routing, none rejected, 62 299 stair cells
+(40 713 on horizontal edges changing level, 6.23 per sector) and 971
+landings; with hashed portal heights it had 105 327 stair cells.
 
 ## Open questions
 
@@ -304,6 +325,12 @@ A scratch run over 10 000 sectors (2 000 per seed) passed every check too:
   path.
 - A stair edge's two halves are not aligned across the face; the vertical
   opening pair bridges them.
+- Node levels are still independent hashes, so a horizontal edge between
+  two open sectors climbs in its upper sector unless both nodes drew the
+  same of the 7 levels. Whether to correlate node
+  levels to cut stairs further is decision #143; biasing a node towards its
+  neighbours' portal levels would make it read their node levels and break
+  the rule that every point is a function of its own sector.
 - Rejected edges keep only their portal cell and would break walking. None
   appears in the samples; if one does, the check fails.
 

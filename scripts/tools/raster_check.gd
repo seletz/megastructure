@@ -13,7 +13,7 @@ extends SceneTree
 ## the hub to its portal cell in which flat cells never change level and
 ## every level change is a stair run or a ladder. `merge` is also checked to be
 ## commutative over every pair of families and orientations.
-## Prints the family counts, the mean records per sector and the stair,
+## Prints the family counts, the mean records and stair cells per sector and the stair,
 ## ladder and landing cells that level changes produce.
 ## Run headless with `mise run raster-check`.
 
@@ -56,6 +56,8 @@ func _init() -> void:
 	print("  families: %s" % ", ".join(parts))
 	print("  level changes: %d horizontal edge ends change level; %d stair cells on horizontal edges, %d on vertical edges, %d ladder cells, %d landing cells" % [totals.level_edges, totals.horizontal_stairs, totals.vertical_stairs, totals.ladders, totals.landings])
 	print("  mean records per sector %.1f (%.1f per sector with edges)" % [float(totals.records) / maxi(totals.sectors, 1), float(totals.records) / maxi(totals.with_edges, 1)])
+	var stairs := families[EdgeRasteriser.TileFamily.STAIR]
+	print("  mean stair cells per sector %.2f (%.2f per sector with edges)" % [float(stairs) / maxi(totals.sectors, 1), float(stairs) / maxi(totals.with_edges, 1)])
 	print("raster check: %s" % ("ok" if _failures == 0 else "%d failure(s)" % _failures))
 	quit(0 if _failures == 0 else 1)
 
