@@ -5,9 +5,11 @@ extends SceneTree
 ## with `SolverSectorRun.real_sector` until `--count` stratum sectors with
 ## records are found, the world seed and the solve seed both equal to the seed.
 ## With `--solid N` the first N solid sectors with records (tunnels) of the
-## same sample follow, built with the solid fill, and count separately.
+## same sample follow, built with the solid fill, and with `--shaft N` the
+## first N shaft sectors with records (catwalks and ladders), each type
+## counted separately.
 ##
-##     godot --headless --path . --script res://scripts/tools/solver_real.gd -- --seeds 0,1,2,3,4 --count 20 --solid 10
+##     godot --headless --path . --script res://scripts/tools/solver_real.gd -- --seeds 0,1,2,3,4 --count 20 --solid 10 --shaft 10
 ##
 ## For a sector rejected by the record checks it prints the record pair
 ## `SectorDomains` names. For one whose starting domains propagate to an empty
@@ -16,11 +18,13 @@ extends SceneTree
 ## records relative to the first. With `--no-solve` it only builds and
 ## propagates the starting domains, which is enough to count failures before
 ## an attempt. Every solved sector is checked for walk faces its floor,
-## bridge, tunnel or portal tiles block (`SolverSectorRun.count_blocked_walk_faces`).
+## bridge, catwalk, tunnel or portal tiles block (`SolverSectorRun.count_blocked_walk_faces`).
 ## Exits 1 when any sector fails before an attempt or blocks a walk face, or when
 ## `--min-solved N` is given and fewer than N sectors of some seed solve.
 ## Run with `mise run solver-real [--seeds S] [--count N] [--solid N]
-## [--no-solve] [--min-solved N]`; `--min-solved` applies to the strata.
+## [--shaft N] [--no-solve] [--min-solved N]`; `--min-solved` applies to the
+## strata. Each type's line also counts the sectors solved at the first
+## attempt.
 
 const TILESET := "res://resources/tilesets/placeholder.tres"
 
@@ -32,6 +36,7 @@ func _init() -> void:
 	var solve := true
 	var min_solved := -1
 	var solid := 0
+	var shaft := 0
 	var i := 0
 	while i < args.size():
 		match args[i]:
@@ -45,6 +50,9 @@ func _init() -> void:
 				i += 1
 			"--solid":
 				solid = int(args[i + 1])
+				i += 1
+			"--shaft":
+				shaft = int(args[i + 1])
 				i += 1
 			"--min-solved":
 				min_solved = int(args[i + 1])
@@ -69,11 +77,12 @@ func _init() -> void:
 	for seed in seeds:
 		var rasteriser := EdgeRasteriser.new(WalkableGraph.new(seed))
 		var solver := SectorSolver.new(library, Vector3i(24, 24, 24))
-		for type: Skeleton.SectorType in [Skeleton.SectorType.STRATUM, Skeleton.SectorType.SOLID]:
-			var sectors := SolverSectorRun.real_sectors(rasteriser, count if type == Skeleton.SectorType.STRATUM else solid, type)
+		var per_type := {Skeleton.SectorType.STRATUM: count, Skeleton.SectorType.SOLID: solid, Skeleton.SectorType.SHAFT: shaft}
+		for type: Skeleton.SectorType in [Skeleton.SectorType.STRATUM, Skeleton.SectorType.SOLID, Skeleton.SectorType.SHAFT]:
+			var sectors := SolverSectorRun.real_sectors(rasteriser, per_type[type], type)
 			if sectors.is_empty():
 				continue
-			var counts := {"solved": 0, "degraded": 0, "failed": 0, "rejected": 0, "propagation": 0, "blocked": 0}
+			var counts := {"solved": 0, "first": 0, "degraded": 0, "failed": 0, "rejected": 0, "propagation": 0, "blocked": 0}
 			for sector in sectors:
 				_run_sector(library, rasteriser, solver, seed, sector, type, solve, counts)
 			var before: int = counts.rejected + counts.propagation
@@ -81,8 +90,8 @@ func _init() -> void:
 			blocked += counts.blocked
 			if type == Skeleton.SectorType.STRATUM and min_solved >= 0 and counts.solved < min_solved:
 				short += 1
-			rows.append("  seed %d, %d %s: %d solved, %d degraded, %d failed in an attempt, %d rejected by the record checks, %d failed on the starting propagation, %d blocked walk faces" % [
-				seed, sectors.size(), Skeleton.type_name(type), counts.solved, counts.degraded, counts.failed, counts.rejected, counts.propagation, counts.blocked,
+			rows.append("  seed %d, %d %s: %d solved (%d at the first attempt), %d degraded, %d failed in an attempt, %d rejected by the record checks, %d failed on the starting propagation, %d blocked walk faces" % [
+				seed, sectors.size(), Skeleton.type_name(type), counts.solved, counts.first, counts.degraded, counts.failed, counts.rejected, counts.propagation, counts.blocked,
 			])
 	for row in rows:
 		print(row)
@@ -116,6 +125,8 @@ func _run_sector(library: TileLibrary, rasteriser: EdgeRasteriser, solver: Secto
 	var outcome: String = SectorSolver.OUTCOME_NAMES[result.outcome]
 	counts[outcome] += 1
 	if result.outcome == SectorSolver.Outcome.SOLVED:
+		if result.attempts == 1:
+			counts.first += 1
 		counts.blocked += SolverSectorRun.count_blocked_walk_faces(library, size, records, result.cells)
 	print("  %s: %d records, %s after %d attempt(s)%s" % [label, records.size(), outcome, result.attempts, "" if result.ok else ": %s" % result.error])
 

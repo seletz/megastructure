@@ -3,7 +3,7 @@ extends SceneTree
 ## once as a `SectorMultiMesh` and once as a `SectorGridMap`, and fails when it
 ## falls, gets stuck or ends away from the goal.
 ##
-## Four modes:
+## Five modes:
 ##
 ## - The course (default): a 24³ grid of placeholder tiles laid by hand the
 ##   way the edge rasteriser lays a walk: a floor run, a three-stair flight up
@@ -22,6 +22,12 @@ extends SceneTree
 ##   `WorkerThreadPool`; each one that solves is walked the same way, one
 ##   after the other. Prints a line per sector and how many walk portal to
 ##   portal on every placement; fails when any solving sector does not.
+## - `--tunnel` (`--seed N`): the nearest solid sector to the origin with a
+##   kept horizontal edge whose records build and that solves, walked from
+##   that edge's portal to the hub (and on to a second portal).
+## - `--catwalk` (`--seed N`): the same for the nearest shaft sector whose
+##   route has only catwalk cells between its portals and turns at least
+##   once, so the walk crosses a catwalk platform (#187).
 ##
 ## `--placement multimesh` or `--placement gridmap` walks only that
 ## placement; by default both walk, MultiMesh first, each in a fresh tree.
@@ -37,9 +43,9 @@ extends SceneTree
 ## tile, frames per cell, steps climbed and the final distance, and on a
 ## failure the tiles around the feet.
 ##
-##     godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- [--sector x,y,z | --all-solving | --tunnel] [--seed N] [--placement multimesh|gridmap]
+##     godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- [--sector x,y,z | --all-solving | --tunnel | --catwalk] [--seed N] [--placement multimesh|gridmap]
 ##
-## Run with `mise run walk-check [--sector x,y,z | --all-solving | --tunnel] [--seed N] [--placement P]`.
+## Run with `mise run walk-check [--sector x,y,z | --all-solving | --tunnel | --catwalk] [--seed N] [--placement P]`.
 
 const TILESET := "res://resources/tilesets/placeholder.tres"
 const REACHED := 0.3
@@ -67,6 +73,7 @@ func _run() -> void:
 	var real := false
 	var all_solving := false
 	var tunnel := false
+	var catwalk := false
 	var seed := 0
 	var placements := PLACEMENTS.duplicate()
 	var args := OS.get_cmdline_user_args()
@@ -94,7 +101,11 @@ func _run() -> void:
 			tunnel = true
 			i += 1
 			continue
-		printerr("walk check: unexpected argument '%s'; usage: [--sector x,y,z | --all-solving | --tunnel] [--seed N] [--placement multimesh|gridmap]" % args[i])
+		if args[i] == "--catwalk":
+			catwalk = true
+			i += 1
+			continue
+		printerr("walk check: unexpected argument '%s'; usage: [--sector x,y,z | --all-solving | --tunnel | --catwalk] [--seed N] [--placement multimesh|gridmap]" % args[i])
 		quit(1)
 		return
 	_library = TileLibrary.build(load(TILESET) as TileSet3D)
@@ -107,8 +118,8 @@ func _run() -> void:
 		await _walk_all_solving(seed, placements)
 		_finish()
 		return
-	if tunnel:
-		await _walk_tunnel(seed, placements)
+	if tunnel or catwalk:
+		await _walk_nearest(seed, placements, Skeleton.SectorType.SOLID if tunnel else Skeleton.SectorType.SHAFT)
 		_finish()
 		return
 
@@ -218,8 +229,10 @@ func _walk_all_solving(seed: int, placements: Array) -> void:
 		_fail("no candidate sector solves at seed %d" % seed)
 
 
-## Walks the first solid sector near the origin that solves along a tunnel edge.
-func _walk_tunnel(seed: int, placements: Array) -> void:
+## Walks the solid (tunnel) or shaft (catwalk) sector nearest the origin
+## that solves along its portal route. A shaft route must keep to catwalk
+## cells and turn.
+func _walk_nearest(seed: int, placements: Array, type: Skeleton.SectorType) -> void:
 	var grammar := SectorGrammar.new()
 	var rasteriser := EdgeRasteriser.new(WalkableGraph.new(seed, Skeleton.new(grammar)))
 	var graph := rasteriser.graph
@@ -229,18 +242,19 @@ func _walk_tunnel(seed: int, placements: Array) -> void:
 		for y in range(-r, r + 1):
 			for x in range(-r, r + 1):
 				var sector := Vector3i(x, y, z)
-				if graph.skeleton.sector_type(seed, sector) == Skeleton.SectorType.SOLID:
+				if graph.skeleton.sector_type(seed, sector) == type:
 					sectors.append(sector)
 	sectors.sort_custom(func(p: Vector3i, q: Vector3i) -> bool: return p.length_squared() < q.length_squared())
 	var tried := 0
+	var shaft := type == Skeleton.SectorType.SHAFT
 	for sector in sectors:
-		var route := _portal_route(rasteriser.rasterise(sector), 1)
-		if route.size() < 2 or not SectorDomains.for_sector(_library, rasteriser, sector).error.is_empty():
+		var route := _portal_route(rasteriser.rasterise(sector), 1, EdgeRasteriser.TileFamily.CATWALK if shaft else -1)
+		if route.size() < 2 or (shaft and not _turns(route)) or not SectorDomains.for_sector(_library, rasteriser, sector).error.is_empty():
 			continue
 		tried += 1
 		var result := SectorJobs.solve_sector(_library, grammar, seed, sector)
-		print("walk check: seed %d, solid sector %s, %s in %d attempt(s), %.0f ms" % [
-			seed, sector, SectorSolver.OUTCOME_NAMES[result.outcome], result.attempts, result.time_usec / 1000.0,
+		print("walk check: seed %d, %s sector %s, %s in %d attempt(s), %.0f ms" % [
+			seed, Skeleton.type_name(type), sector, SectorSolver.OUTCOME_NAMES[result.outcome], result.attempts, result.time_usec / 1000.0,
 		])
 		if result.outcome != SectorSolver.Outcome.SOLVED:
 			continue
@@ -248,7 +262,7 @@ func _walk_tunnel(seed: int, placements: Array) -> void:
 			print("  route %s %s" % [cell, _tile_at(result.cells, cell).label()])
 		await _walk_placements(route, result.cells, sector, placements)
 		return
-	_fail("none of %d solid sectors within %d of the origin with a kept horizontal tunnel edge solves at seed %d" % [tried, r, seed])
+	_fail("none of %d %s sectors within %d of the origin with a kept horizontal %s route solves at seed %d" % [tried, Skeleton.type_name(type), r, "catwalk" if shaft else "tunnel", seed])
 
 
 func _walk(route: Array[Vector3i], cells: PackedInt32Array, sector: Vector3i) -> void:
@@ -299,7 +313,9 @@ func _walk_player(player: Player, route: Array[Vector3i], cells: PackedInt32Arra
 ## Portal of the first kept horizontal edge back to the hub, then the hub to
 ## the portal of the last one; with `min_edges` 1 and a single such edge,
 ## only its portal back to the hub. Empty with fewer than `min_edges` edges.
-static func _portal_route(raster: EdgeRasteriser.SectorRaster, min_edges := 2) -> Array[Vector3i]:
+## With `family` set, only edges whose records before the portal are all of
+## that family count.
+static func _portal_route(raster: EdgeRasteriser.SectorRaster, min_edges := 2, family := -1) -> Array[Vector3i]:
 	var chains: Array = []
 	var refs: Array = raster.edge_records.keys()
 	refs.sort()
@@ -308,7 +324,12 @@ static func _portal_route(raster: EdgeRasteriser.SectorRaster, min_edges := 2) -
 		if ref.w == Vector3i.AXIS_Y or raster.rejected.has(ref) or chain.size() < 2:
 			continue
 		var portal: EdgeRasteriser.Record = chain[-1]
-		if portal.family == EdgeRasteriser.TileFamily.PORTAL_OPENING and portal.orientation < EdgeRasteriser.ORIENTATION_UP:
+		if portal.family != EdgeRasteriser.TileFamily.PORTAL_OPENING or portal.orientation >= EdgeRasteriser.ORIENTATION_UP:
+			continue
+		var flat := true
+		for k in chain.size() - 1:
+			flat = flat and (family < 0 or (chain[k] as EdgeRasteriser.Record).family == family)
+		if flat:
 			chains.append(chain)
 	var route: Array[Vector3i] = []
 	if chains.size() < maxi(min_edges, 1):
@@ -322,6 +343,14 @@ static func _portal_route(raster: EdgeRasteriser.SectorRaster, min_edges := 2) -
 	for k in range(1, last.size()):
 		route.append((last[k] as EdgeRasteriser.Record).cell)
 	return route
+
+
+## Whether `route` changes direction at some cell.
+static func _turns(route: Array[Vector3i]) -> bool:
+	for k in range(2, route.size()):
+		if route[k] - route[k - 1] != route[k - 1] - route[k - 2]:
+			return true
+	return false
 
 
 ## The hand-laid course; appends its route to `route` and returns the cells.
