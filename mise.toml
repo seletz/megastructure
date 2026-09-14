@@ -95,7 +95,7 @@ run = "godot --headless --path . --script res://scripts/tools/graph_connectivity
 
 [tasks.raster-check]
 depends = ["import"]
-description = "Check the edge rasteriser over 1000 random sectors at seeds 0..4: determinism against a fresh graph, no conflicting records, cells inside 0..23, a portal opening in both endpoint sectors of every edge, no rejected edge, one connected group per sector, every routing a walk with explicit stairs or ladders at level changes; print family counts, mean records per sector and the stair, ladder and landing cells level changes produce (headless)"
+description = "Check the edge rasteriser over 1000 random sectors at seeds 0..4: determinism against a fresh graph, no conflicting records, cells inside 0..23, a portal opening in both endpoint sectors of every edge, no rejected edge, one connected group per sector, every routing a walk with explicit stairs or ladders at level changes; print family counts, mean records and stair cells per sector and the stair, ladder and landing cells level changes produce (headless)"
 run = "godot --headless --path . --script res://scripts/tools/raster_check.gd"
 
 [tasks.tileset-check]
