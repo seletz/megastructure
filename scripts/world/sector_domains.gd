@@ -18,9 +18,12 @@ extends RefCounted
 ## rotation. A headroom record takes every tile that leaves a walker's head
 ## room (`TileLibrary.Tile.headroom`: air, and on the placeholder tileset the
 ## wall doorway under its lintel and the vaults and stairwells in rock). A
-## floor, bridge, tunnel or side portal record also drops the tiles that
-## block a side face (`TileLibrary.Tile.blocked_faces`, a parapet or wall)
-## a walker crosses (`steps_to`). Cells without a
+## floor, bridge, catwalk, tunnel or side portal record also drops the tiles
+## that block a side face (`TileLibrary.Tile.blocked_faces`, a parapet or wall)
+## a walker crosses (`steps_to`), and a catwalk record then keeps only the
+## tiles that close every other side face with a railing or rock, when any
+## does, so a catwalk platform stands only where the walk turns, branches
+## or crosses (#187). Cells without a
 ## record take the sector's fill tile, solid in a solid sector and air in
 ## every other (#180), except the support cells: a cell across a face of a
 ## record where no tile of the record allows the fill tile (on the placeholder
@@ -37,9 +40,12 @@ extends RefCounted
 
 ## Families whose records drop the tiles that block a face a walk crosses.
 const FACE_FILTERED: Array[EdgeRasteriser.TileFamily] = [
-	EdgeRasteriser.TileFamily.FLOOR, EdgeRasteriser.TileFamily.BRIDGE, EdgeRasteriser.TileFamily.TUNNEL,
-	EdgeRasteriser.TileFamily.PORTAL_OPENING,
+	EdgeRasteriser.TileFamily.FLOOR, EdgeRasteriser.TileFamily.BRIDGE, EdgeRasteriser.TileFamily.CATWALK,
+	EdgeRasteriser.TileFamily.TUNNEL, EdgeRasteriser.TileFamily.PORTAL_OPENING,
 ]
+## Families whose records also keep the side faces a walk does not cross
+## closed (`_without_open`), when a tile of the record can.
+const CLOSE_FILTERED: Array[EdgeRasteriser.TileFamily] = [EdgeRasteriser.TileFamily.CATWALK]
 ## Grid step of each face index, +x, -x, +y, -y, +z, -z.
 const STEPS: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
@@ -115,11 +121,12 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 		masks[cell] = mask
 		by_cell[cell] = record
 
-	# A floor, bridge, tunnel or side portal keeps its faces towards walkable
-	# neighbours open.
+	# A floor, bridge, catwalk, tunnel or side portal keeps its faces towards
+	# walkable neighbours open.
 	for record in records:
 		if not record.family in FACE_FILTERED:
 			continue
+		var closed := PackedInt64Array()
 		for dir in TilePrototype.FACE_COUNT:
 			if TilePrototype.is_vertical(dir):
 				continue
@@ -128,6 +135,16 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 		if _is_empty(masks[record.cell]):
 			built.error = "%s: every %s tile blocks a face a walk crosses" % [record, EdgeRasteriser.family_name(record.family)]
 			return built
+		# A catwalk closes the faces it is not walked across, so a platform
+		# never stands in a straight run; a dead end, which no tile closes,
+		# keeps what it has.
+		if record.family in CLOSE_FILTERED:
+			closed = masks[record.cell]
+			for dir in TilePrototype.FACE_COUNT:
+				if not TilePrototype.is_vertical(dir) and not steps_to(by_cell, record, dir):
+					closed = _without_open(library, closed, dir, fill, free)
+			if not _is_empty(closed):
+				masks[record.cell] = closed
 
 	# Face-neighbour records must admit at least one allowed tile pair.
 	for record in records:
@@ -318,12 +335,12 @@ static func _fits_in_fill(library: TileLibrary, mask: PackedInt64Array, fill: Pa
 	return false
 
 
-## Whether a walker on the floor, bridge, tunnel or portal opening `record`
-## steps across side face `dir` to a record in `by_cell`. Through a side
-## portal opening: along its passage, into the neighbour sector and the door
-## cell, whatever that holds (a stair one lower climbs into it under a
-## stairwell). From a floor or bridge: to any record but headroom at the
-## same height (#173). From a tunnel, whose closed sides are rock:
+## Whether a walker on the floor, bridge, catwalk, tunnel or portal opening
+## `record` steps across side face `dir` to a record in `by_cell`. Through a
+## side portal opening: along its passage, into the neighbour sector and the
+## door cell, whatever that holds (a stair one lower climbs into it under a
+## stairwell). From a floor, bridge or catwalk: to any record but headroom at
+## the same height (#173, #187). From a tunnel, whose closed sides are rock:
 ## to a tunnel, to a side portal opening whose passage runs along `dir`, or
 ## to a stair climbing away from it. From either: to a stair one lower
 ## climbing into it, whose head room the walker crosses.
@@ -365,6 +382,26 @@ static func _without_blocked(library: TileLibrary, mask: PackedInt64Array, dir: 
 	var result := mask.duplicate()
 	for tile in library.tiles:
 		if tile.blocked_faces & (1 << dir) != 0:
+			result[tile.index >> 6] &= ~(1 << (tile.index & 63))
+	return result
+
+
+## `mask` without the tiles open across side face `dir`. A face is closed
+## when the tile blocks it (a railing) or when it allows no tile of `fill`
+## there but a tile of `free` (rock a backing plate closes); a face that
+## allows fill, or only walk tiles (a catwalk run), is open.
+static func _without_open(library: TileLibrary, mask: PackedInt64Array, dir: int, fill: PackedInt64Array, free: PackedInt64Array) -> PackedInt64Array:
+	var result := mask.duplicate()
+	for tile in library.tiles:
+		if tile.blocked_faces & (1 << dir) != 0:
+			continue
+		var allowed := library.allowed(dir, tile.index)
+		var takes_fill := false
+		var takes_free := false
+		for w in library.word_count:
+			takes_fill = takes_fill or allowed[w] & fill[w] != 0
+			takes_free = takes_free or allowed[w] & free[w] != 0
+		if takes_fill or not takes_free:
 			result[tile.index >> 6] &= ~(1 << (tile.index & 63))
 	return result
 
