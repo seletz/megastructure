@@ -285,10 +285,26 @@ See also: [[PLAN_0.1.0]], mise task.
 A Godot collision shape made of arbitrary triangles (a "trimesh"). Slow to test
 against, but fine for static geometry.
 
-In this project: planned as one merged collision shape per sector, built on a
-worker thread.
+In this project: `SectorMultiMesh` builds a sector's triangles on a worker
+thread; Jolt still builds the shape on the main thread when its body enters
+the world, so streaming adds a sector as many small collision chunks.
 
-See also: [[RESEARCH_WFC]], [[MEGASTRUCTURE_CONCEPT]].
+See also: [[RESEARCH_WFC]], [[MEGASTRUCTURE_CONCEPT]], [[sector-streaming]],
+Collision chunk.
+
+### Collision chunk
+
+A block of 3³ cells of a sector whose collision triangles form a static body
+of their own. A tile's triangles never leave its cell, so a sector's chunks
+together are exactly its merged trimesh.
+
+In this project: `SectorMultiMesh.add_collision_chunk` adds a chunk as a
+shape of one of the sector's 8 bodies; the streamer adds a sector's 512
+chunks a few per frame, those around the player first, because Jolt builds
+a trimesh on the main thread (decision #175).
+
+See also: [[sector-streaming]], [[placement]], ConcavePolygonShape3D, Frame
+budget.
 
 ### Contact sheet
 
@@ -541,6 +557,17 @@ In this project: the renderer the project uses.
 
 See also: [[MEGASTRUCTURE_CONCEPT]].
 
+### Frame budget
+
+The share of a frame that one kind of main-thread work may use before it
+waits for the next frame. At 60 frames per second a whole frame is 16.7 ms.
+
+In this project: `SectorStreamer.frame_budget_usec` (6 ms) bounds freeing,
+placing, adding collision chunks and making impostor boxes per frame, with
+at most one sector freed and one placed per frame.
+
+See also: [[sector-streaming]], Main thread, Collision chunk.
+
 ### Free tile
 
 A tile that belongs to no tile family, so no walkable graph record ever asks
@@ -681,9 +708,11 @@ See also: [[PLAN_0.1.0]].
 Using different thresholds for switching on and off, so a value hovering near
 the limit does not flicker between states.
 
-In this project: sectors load within radius R and unload only beyond R+1.
+In this project: sectors load within radius R and unload only beyond R+1, so
+walking along a sector boundary does not load and free the same sectors
+again and again.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], Streaming.
+See also: [[MEGASTRUCTURE_CONCEPT]], [[sector-streaming]], Streaming.
 
 ## I
 
@@ -692,7 +721,12 @@ See also: [[MEGASTRUCTURE_CONCEPT]], Streaming.
 A cheap stand-in shown instead of detailed geometry at a distance, such as a
 box with the rough silhouette of a sector.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], LOD.
+In this project: a translucent box in the sector's skeleton type colour for
+every sector within R+1 of the player; it stands in for sectors not placed
+yet and, through visibility ranges, for placed sectors seen from far away.
+
+See also: [[MEGASTRUCTURE_CONCEPT]], [[sector-streaming]], LOD, Visibility
+range.
 
 ### Indexed heap
 
@@ -731,10 +765,22 @@ Union-find.
 
 Level of detail: showing simpler versions of objects as they get farther away.
 
-In this project: planned as full tiles near the player, a sector impostor
-beyond ~2 sectors and nothing beyond ~5, using visibility ranges.
+In this project: full tiles for the sectors within the streaming radius and
+an impostor box for the ring just outside it and for placed sectors seen
+from beyond `impostor_distance`; fog does the rest.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], Impostor.
+See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], [[sector-streaming]],
+Impostor.
+
+### LRU cache
+
+A cache of fixed size that, when full, throws out the entry used least
+recently ("least recently used").
+
+In this project: `SectorStreamer` keeps the outcome and solved cells of the
+last 256 sectors, so a sector walked back into is placed without solving.
+
+See also: [[sector-streaming]], Streaming.
 
 ### Lower bound
 
@@ -1287,7 +1333,11 @@ Loading world pieces near the player and unloading distant ones while moving.
 Because generation is deterministic, unloading loses nothing; a small cache of
 solved sectors avoids re-solving when walking back.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], Hysteresis.
+In this project: `SectorStreamer` in the walk scene, radius 1 by default
+(up to 3 in the tweak panel).
+
+See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], [[sector-streaming]],
+Hysteresis, LRU cache.
 
 ### Sub-seed
 
@@ -1468,9 +1518,14 @@ In this project: the `vignette` uniform in
 ### Visibility range
 
 A Godot node setting that shows a node only within a distance band, with
-optional fade margins. It is the basis for manual LOD.
+optional fade margins. It is the basis for manual LOD. A node can name
+another as its visibility parent and is then shown only while that parent
+is hidden by its own range.
 
-See also: [[RESEARCH_WFC]], LOD.
+In this project: impostor boxes hide when the camera is inside them, and a
+placed sector's MultiMeshes use the sector's impostor as visibility parent.
+
+See also: [[RESEARCH_WFC]], [[sector-streaming]], LOD.
 
 ### Voxel
 

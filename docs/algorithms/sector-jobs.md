@@ -60,6 +60,11 @@ jobs.clear()                                      # cancel everything, e.g. afte
   behind.
 - `SectorJobs.solve_sector(library, grammar, seed, sector, boundaries)` is
   the pipeline itself, static and callable from any thread.
+- `request(sector, cells)` with a sector's solved cells skips the pipeline:
+  the task only builds the placement data (`place_solved`, `cached` true).
+  Streaming uses it for sectors in its cache ([[sector-streaming]]).
+- `collision_chunk_cells` keeps the placement data's collision in chunks of
+  that many cells per edge for `SectorMultiMesh.add_collision_chunk`.
 
 ## The pipeline of one job
 
@@ -124,7 +129,8 @@ with another thread:
 | `degraded` | `bool` | Some or all cells are the solid fallback, not a solve. |
 | `error` | `String` | Why it failed, or `""`. |
 | `cancelled` | `bool` | Always false in an emitted result. |
-| `placement` | `Dictionary` | With `build_placement` and a `SOLVED` outcome, `SectorMultiMesh.build` of the cells: `buffers` (one `PackedFloat32Array` per prototype in the `MultiMesh.buffer` layout), `faces` (`PackedVector3Array` collision triangles), `cells_per_sector`, `instances`, `triangles`, `culled_triangles`, `build_usec` (not part of `time_usec`). Otherwise empty. See [[placement]]. |
+| `cached` | `bool` | True when the task only built placement data from cells given to `request`. |
+| `placement` | `Dictionary` | With `build_placement` and a `SOLVED` outcome, `SectorMultiMesh.build` of the cells: `buffers` (one `PackedFloat32Array` per prototype in the `MultiMesh.buffer` layout), `faces` (`PackedVector3Array` collision triangles), `cells_per_sector`, `instances`, `triangles`, `culled_triangles`, `build_usec` (not part of `time_usec`), and with `collision_chunk_cells` `chunks` instead of `faces`. Otherwise empty. See [[placement]]. |
 
 Packed arrays are copy-on-write with an atomic reference count, so handing
 `cells` over costs nothing, and the main thread's copy never changes.
@@ -234,13 +240,14 @@ Two design choices keep the poll short:
   setting.
 - **Sharing boundary pieces between tasks** (#169): cold per task, a locked
   piece cache, boundary pieces as jobs of their own, or pieces from the
-  streaming LRU (#98).
+  streaming LRU (#98, which caches whole sectors' cells).
 - **Interrupting a solve.** A cancelled task finishes the solve it is in.
   A cancel check between solver attempts would free the slot sooner, but it
   would put a callable into `SectorSolver`.
 - **Main-thread collision cost** (#175): the worker builds the collision
   faces (#96), but Jolt builds the sector's trimesh when its body enters
-  the tree, on the main thread, about 1.5 s for a mixed sector.
+  the tree, on the main thread, about 1.5 s for a mixed sector. Streaming
+  adds the faces in chunks over frames instead ([[sector-streaming]]).
 - **Solver cost** dominates: see the native threshold #138.
 
 ## References

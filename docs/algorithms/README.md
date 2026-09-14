@@ -32,6 +32,7 @@ flowchart LR
     V --> F[face-first-boundaries]
     M --> F
     F --> J[sector-jobs]
+    J --> T[sector-streaming]
 ```
 
 Start with the hash: everything else draws its decisions from it. Then
@@ -60,6 +61,7 @@ either follow the renderer (left) or the generator (right).
 | [[face-first-boundaries]] | Order-independent sector borders (implemented): corners, edges and faces owned by the lower sector, each solved from its own key with lower levels as fixed faces, then the interior; the open boundary rule and why the placeholder tileset keeps rock off the borders. |
 | [[edge-rasteriser]] | The fill contract (implemented): each sector's edges as walks of tile family records from the hub to the portals, explicit stair runs and ladders at every level change, and the merge rule that keeps records from conflicting. |
 | [[sector-jobs]] | Solving sectors on worker threads (implemented): one WorkerThreadPool task per sector on objects of its own, a mutex-protected outbox, polling that never blocks, priority by distance, cancellation, and measured poll times and throughput. |
+| [[sector-streaming]] | Streaming sectors around the player (implemented): load within R, free beyond R + 1, an LRU cache of solved cells, collision added in chunks within a frame budget because Jolt builds trimeshes on the main thread, impostor boxes with visibility ranges, determinism of unload and regenerate, and a measured 10-sector walk. |
 
 ## Related
 
