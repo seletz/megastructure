@@ -113,7 +113,7 @@ var use_boundaries := false
 ## Most tasks running at once, cancelled ones included. The default is half
 ## the logical CPUs: with one task per logical CPU but one, polls on an
 ## 8-core, 16-thread CPU blocked up to 9 ms instead of under 1 ms at the same
-## throughput (decision issue in docs/algorithms/sector-jobs.md).
+## throughput (decision #168).
 var max_in_flight := default_max_in_flight()
 ## Queued sectors start nearest to this sector first (squared distance in
 ## sector units, then request order).
