@@ -1,54 +1,63 @@
 class_name WorldWalker
 extends Node3D
-## The walkable world view: solves the sectors around the origin on worker
-## threads, places each as a `SectorMultiMesh` as its result arrives, and
-## puts a `Player` capsule into the first one that solved.
+## The walkable world view: streams the sectors around the player (or the
+## free-fly camera) through a `SectorStreamer` and puts a `Player` capsule
+## into the first one that solved.
 ##
-## On start (and after every seed change) it configures the `SectorJobs` at
-## `jobs` with the placeholder tileset and the world seed and requests the
-## (2 `block_radius` + 1)³ sectors around sector (0, 0, 0), nearest first.
-## The jobs build the MultiMesh buffers and collision faces on their worker
-## threads; each `sector_ready` result that SOLVED becomes a SectorMultiMesh
-## child of `sectors`, offset to `sector * 48` m, or with `use_gridmap` (a
-## debugging path kept while #139 is open) a SectorGridMap; a FAILED or DEGRADED sector gets a
-## translucent red box filling its 48 m instead, so the gap is visible (a
-## degraded result is all solid and would hide it).
+## On start (and after every seed change) it starts the `SectorStreamer` at
+## `streamer` with the `SectorJobs` at `jobs`, the placeholder tileset and the
+## world seed. Each frame it hands the streamer the focus: the camera while
+## flying or before the spawn, the capsule's feet while walking. The streamer
+## loads the sectors within `radius` of the focus sector, frees them beyond
+## `radius` + 1, caches solved cells, places at most one sector per frame and
+## adds its collision in chunks within a frame budget; solved sectors become
+## SectorMultiMeshes (with `use_gridmap`, a debugging path kept while #139 is
+## open, SectorGridMaps), failed or degraded ones translucent red boxes, and
+## sectors not placed yet translucent boxes in their skeleton type's colour.
+## See docs/algorithms/sector-streaming.md.
 ##
 ## The player at `player` is frozen until the first solved sector with
-## records arrives; then, unless `free_fly` is on, its feet are put on that
+## records is placed; then, unless `free_fly` is on, its feet are put on that
 ## sector's hub cell (the interior node every walk of the sector meets at) and
-## it starts walking. F toggles `free_fly`: on, the capsule freezes and the
+## it starts walking. While the collision around its feet is not added yet
+## (it walked faster than sectors load) the capsule holds still: its physics
+## stops until the chunks are there, so it never falls through a sector that
+## is still loading. F toggles `free_fly`: on, the capsule freezes and the
 ## camera flies with its own WASD, QE and Shift; off, the capsule is put at
 ## the camera (feet `eye_height` below it) and walks. V toggles first and
 ## third person. Both keys follow UiKeys.
 ##
 ## `--seed N` after `--` on the command line sets the world seed on start.
-## The legend under the HUD label lists the sectors placed, failed, queued
-## and running, the placement path with the frame's draw calls and the mean
-## worker build time, the mode and the feet position.
+## The legend under the HUD label lists the sectors placed, failed, queued,
+## running and cached, the streaming radius, pending unloads and collision
+## and the streamer's frame time, the placement path with the frame's draw
+## calls and the mean worker build time, the mode and the feet position.
 
 const TILESET := "res://resources/tilesets/placeholder.tres"
-const MAX_BLOCK_RADIUS := 2
-const FAILED_COLOUR := Color(0.95, 0.15, 0.1, 0.18)
-## Failed boxes are inset this much from the sector edge, in metres.
-const FAILED_INSET := 0.5
 const TOGGLE_FLY_KEYS: Array[Key] = [KEY_F]
 const TOGGLE_VIEW_KEYS: Array[Key] = [KEY_V]
 
 @export var camera: NodePath
 @export var player: NodePath
 @export var jobs: NodePath
-## Parent of the placed sectors and failure boxes.
-@export var sectors: NodePath
+## The SectorStreamer that places the sectors.
+@export var streamer: NodePath
 ## Hud whose label the legend is attached to (optional).
 @export var hud: NodePath
 @export var tileset: TileSet3D
-## Sectors requested around the origin: (2 block_radius + 1)³.
-@export_range(0, MAX_BLOCK_RADIUS) var block_radius := 1:
+## Sectors within this Chebyshev distance of the focus sector are loaded:
+## (2 radius + 1)³.
+@export_range(0, SectorStreamer.MAX_RADIUS) var radius := 1:
 	set(value):
-		block_radius = clampi(value, 0, MAX_BLOCK_RADIUS)
-		if is_node_ready():
-			reload()
+		radius = clampi(value, 0, SectorStreamer.MAX_RADIUS)
+		if _streamer != null:
+			_streamer.radius = radius
+## Solved sectors the streamer remembers.
+@export_range(0, 4096) var cache_size := 256:
+	set(value):
+		cache_size = maxi(value, 0)
+		if _streamer != null:
+			_streamer.cache_size = cache_size
 ## Camera flies freely and the capsule is frozen.
 @export var free_fly := false:
 	set(value):
@@ -59,10 +68,16 @@ const TOGGLE_VIEW_KEYS: Array[Key] = [KEY_V]
 @export var show_failed := true:
 	set(value):
 		show_failed = value
-		for box: Node3D in _failed.values():
-			box.visible = show_failed
+		if _streamer != null:
+			_streamer.show_failed = show_failed
+## Draw the impostor boxes of sectors not placed.
+@export var show_impostors := true:
+	set(value):
+		show_impostors = value
+		if _streamer != null:
+			_streamer.show_impostors = show_impostors
 ## Place sectors as GridMaps instead of MultiMeshes, for debugging (#139);
-## changing it places the block again.
+## changing it streams again.
 @export var use_gridmap := false:
 	set(value):
 		if value == use_gridmap:
@@ -72,25 +87,17 @@ const TOGGLE_VIEW_KEYS: Array[Key] = [KEY_V]
 			reload()
 
 var library: TileLibrary
-var mesh_library: MeshLibrary
-## `SectorMultiMesh.build_meshes` of `library`, by prototype index.
-var meshes: Array[Mesh] = []
-## Sector -> SectorMultiMesh or SectorGridMap of the solved sectors placed.
-var placed := {}
-## Sector -> outcome name of every result received since the last reload.
-var outcomes := {}
 
 var _camera: FreeFlyCamera
 var _player: Player
 var _jobs: SectorJobs
-var _sectors: Node3D
+var _streamer: SectorStreamer
 var _rasteriser: EdgeRasteriser
-## Sector -> red box of the failed and degraded sectors.
-var _failed := {}
 var _spawned := false
+## The capsule is waiting for the collision around its feet.
+var _holding := false
 ## `free_fly` as last applied.
 var _flying := false
-var _box_mesh: BoxMesh
 var _legend: Label
 ## Worker build time of the MultiMesh sectors placed since the last reload.
 var _build_usec := 0
@@ -101,25 +108,23 @@ func _ready() -> void:
 	_camera = get_node_or_null(camera) as FreeFlyCamera
 	_player = get_node_or_null(player) as Player
 	_jobs = get_node_or_null(jobs) as SectorJobs
-	_sectors = get_node_or_null(sectors) as Node3D
-	if _sectors == null:
-		_sectors = self
+	_streamer = get_node_or_null(streamer) as SectorStreamer
 	if tileset == null:
 		tileset = load(TILESET) as TileSet3D
 	library = TileLibrary.build(tileset)
 	for error in library.errors:
 		push_error("WorldWalker: %s" % error)
-	mesh_library = SectorGridMap.build_mesh_library(library)
-	meshes = SectorMultiMesh.build_meshes(library)
-	_box_mesh = BoxMesh.new()
-	_box_mesh.material = _failed_material()
 	var args := OS.get_cmdline_user_args()
 	var at := args.find("--seed")
 	if at >= 0 and at + 1 < args.size() and args[at + 1].is_valid_int():
 		WorldState.seed = int(args[at + 1])
 	_build_legend()
-	if _jobs != null:
-		_jobs.sector_ready.connect(_on_sector_ready)
+	if _streamer != null:
+		_streamer.radius = radius
+		_streamer.cache_size = cache_size
+		_streamer.show_failed = show_failed
+		_streamer.show_impostors = show_impostors
+		_streamer.sector_placed.connect(_on_sector_placed)
 	WorldState.seed_changed.connect(func(_seed: int) -> void: reload())
 	reload()
 
@@ -136,31 +141,29 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
+	if _streamer != null:
+		var walking := _spawned and not free_fly and _player != null
+		if walking:
+			_streamer.focus_position = _player.global_position
+			var hold := not _streamer.is_collision_ready_at(_player.global_position)
+			if hold != _holding:
+				_holding = hold
+				_player.set_physics_process(not hold)
+		elif _camera != null:
+			_streamer.focus_position = _camera.global_position
 	_update_legend()
 
 
-## Removes every placed sector and box and requests the block again for the
-## current seed.
+## Frees every placed sector and streams again for the current seed.
 func reload() -> void:
-	for child: Node in placed.values() + _failed.values():
-		child.queue_free()
-	placed.clear()
-	_failed.clear()
-	outcomes.clear()
 	_build_usec = 0
 	_built = 0
 	_spawned = false
 	_rasteriser = EdgeRasteriser.new(WalkableGraph.new(WorldState.seed))
-	_box_mesh.size = Vector3.ONE * (_rasteriser.graph.cells_per_sector() * WalkableGraph.CELL_SIZE - 2.0 * FAILED_INSET)
-	if _jobs == null or not library.errors.is_empty():
+	if _jobs == null or _streamer == null or not library.errors.is_empty():
 		return
-	_jobs.configure(library, WorldState.seed)
-	_jobs.build_placement = not use_gridmap
-	_jobs.focus = Vector3i.ZERO
-	for x in range(-block_radius, block_radius + 1):
-		for y in range(-block_radius, block_radius + 1):
-			for z in range(-block_radius, block_radius + 1):
-				_jobs.request(Vector3i(x, y, z))
+	_streamer.use_gridmap = use_gridmap
+	_streamer.start(_jobs, library, WorldState.seed)
 	_apply_mode()
 
 
@@ -170,8 +173,10 @@ func register_params(registry: ParamRegistry) -> void:
 	registry.add_script_params("walk", {
 		"free_fly": {"value": free_fly, "default": false},
 		"show_failed": {"value": show_failed, "default": true},
+		"show_impostors": {"value": show_impostors, "default": true},
 		"use_gridmap": {"value": use_gridmap, "default": false},
-		"block_radius": {"value": block_radius, "default": 1, "min": 0, "max": MAX_BLOCK_RADIUS, "step": 1},
+		"radius": {"value": radius, "default": 1, "min": 0, "max": SectorStreamer.MAX_RADIUS, "step": 1},
+		"cache_size": {"value": cache_size, "default": 256, "min": 0, "max": 4096, "step": 1},
 	}, func(param_name: String, value: Variant) -> void: set(param_name, value))
 	if body != null:
 		registry.add_script_params("player", {
@@ -184,43 +189,16 @@ func register_params(registry: ParamRegistry) -> void:
 		}, func(param_name: String, value: Variant) -> void: body.set(param_name, value))
 
 
-func _on_sector_ready(result: Dictionary) -> void:
-	var sector: Vector3i = result.sector
-	var outcome: int = result.outcome
-	outcomes[sector] = SectorSolver.OUTCOME_NAMES[outcome]
-	var n := _rasteriser.graph.cells_per_sector()
-	if outcome != SectorSolver.Outcome.SOLVED:
-		var box := MeshInstance3D.new()
-		box.name = "Failed_%d_%d_%d" % [sector.x, sector.y, sector.z]
-		box.mesh = _box_mesh
-		box.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		box.position = SectorGridMap.sector_origin(sector, n) + Vector3.ONE * n * WalkableGraph.CELL_SIZE * 0.5
-		box.visible = show_failed
-		_sectors.add_child(box)
-		_failed[sector] = box
+func _on_sector_placed(sector: Vector3i, result: Dictionary) -> void:
+	if result.outcome != SectorSolver.Outcome.SOLVED:
 		return
-	var node_name := "Sector_%d_%d_%d" % [sector.x, sector.y, sector.z]
-	if use_gridmap:
-		var grid := SectorGridMap.new()
-		grid.name = node_name
-		grid.mesh_library = mesh_library
-		_sectors.add_child(grid)
-		grid.place(library, sector, result.cells)
-		placed[sector] = grid
-	else:
-		var placement: Dictionary = result.placement
-		if placement.is_empty():
-			# A job started without build_placement; build it here.
-			placement = SectorMultiMesh.build(library, _jobs.faces(), result.cells)
+	var placement: Dictionary = result.placement
+	if not placement.is_empty() and not result.get("cached", false):
 		_build_usec += placement.build_usec
 		_built += 1
-		var node := SectorMultiMesh.new()
-		node.name = node_name
-		_sectors.add_child(node)
-		node.place(meshes, sector, placement)
-		placed[sector] = node
 	if not _spawned and _player != null and not _rasteriser.records_for_sector(sector).is_empty():
 		_spawned = true
+		var n := _rasteriser.graph.cells_per_sector()
 		_player.teleport(SectorGridMap.cell_centre(sector, _rasteriser.hub_cell(sector), n) + Vector3.DOWN * (WalkableGraph.CELL_SIZE * 0.5 - 0.6))
 		_apply_mode()
 
@@ -235,16 +213,6 @@ func _apply_mode() -> void:
 		_player.teleport(_camera.global_position + Vector3.DOWN * _player.eye_height)
 	_flying = free_fly
 	_player.walking = walk
-
-
-func _failed_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = FAILED_COLOUR
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	return material
 
 
 func _build_legend() -> void:
@@ -264,18 +232,23 @@ func _build_legend() -> void:
 
 
 func _update_legend() -> void:
-	if _legend == null or not _legend.is_visible_in_tree():
+	if _legend == null or not _legend.is_visible_in_tree() or _streamer == null:
 		return
 	var failed := 0
 	var degraded := 0
-	for outcome: String in outcomes.values():
-		if outcome == "failed":
+	for outcome: int in _streamer.outcomes.values():
+		if outcome == SectorSolver.Outcome.FAILED:
 			failed += 1
-		elif outcome == "degraded":
+		elif outcome == SectorSolver.Outcome.DEGRADED:
 			degraded += 1
 	var lines := PackedStringArray()
-	lines.append("sectors  %d placed  %d failed  %d degraded  %d queued  %d running" % [
-		placed.size(), failed, degraded, _jobs.pending_count() if _jobs != null else 0, _jobs.running_sectors().size() if _jobs != null else 0,
+	lines.append("sectors  %d placed  %d failed  %d degraded  %d queued  %d running  %d cached" % [
+		_streamer.placed.size() - failed - degraded, failed, degraded, _jobs.pending_count() if _jobs != null else 0,
+		_jobs.running_sectors().size() if _jobs != null else 0, _streamer.cache_count(),
+	])
+	lines.append("stream   R %d  %d to place  %d to free  %d collision pending  update %.1f ms (max %.1f)" % [
+		radius, _streamer.ready_count(), _streamer.unload_count(), _streamer.collision_pending_count(),
+		_streamer.last_update_usec / 1000.0, _streamer.max_update_usec / 1000.0,
 	])
 	lines.append("placing  %s  %d draw calls%s" % [
 		"GridMap" if use_gridmap else "MultiMesh", int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
@@ -284,6 +257,8 @@ func _update_legend() -> void:
 	var mode := "free fly" if free_fly or not _spawned else "walk, %s person" % ("first" if _player.first_person else "third")
 	if not _spawned and not free_fly:
 		mode += " (waiting for a solved sector)"
+	elif _holding and not free_fly:
+		mode += " (holding: collision loading)"
 	lines.append("mode     %s   F fly  V view  Space jump" % mode)
 	if _player != null:
 		var feet := _player.global_position
