@@ -6,7 +6,7 @@ extends SceneTree
 ## docs/solver_reference_seed0.md. Also checks the Shannon entropy flag the
 ## same way, that a `domains` restriction holds in the result and that an
 ## unsatisfiable one fails, then prints the tile histogram, steps and time
-## per seed and the time of one 24³ solve.
+## per seed and the time of the first 24³ solve that succeeds.
 ## Run headless with `mise run solver-check`; pass `--update` to rewrite the
 ## reference file instead of comparing against it.
 
@@ -62,16 +62,25 @@ func _init() -> void:
 		else:
 			_compare_reference(reference_digest)
 
-	var large := SectorSolver.new(library, LARGE)
-	var result := large.solve(0, SECTOR)
-	print("  24³ seed 0: %s, %d steps, %d propagations, %.1f ms" % [
-		"ok" if result.ok else result.error, result.steps, result.propagations, result.time_usec / 1000.0,
-	])
-	if result.ok:
-		_expect(_bad_adjacencies(library, large, result.cells) == 0, "24³ seed 0: every adjacency allowed")
+	_time_large(library)
 
 	print("solver check: %s" % ("ok" if _failures == 0 else "%d failure(s)" % _failures))
 	quit(0 if _failures == 0 else 1)
+
+
+## Solves 24³ grids from seed 0 until one succeeds (at most `SEEDS.size()`
+## seeds, since there are no restarts yet) and prints each time. Only
+## reports: a contradiction is not a failure of the check.
+func _time_large(library: TileLibrary) -> void:
+	var large := SectorSolver.new(library, LARGE)
+	for seed in SEEDS:
+		var result := large.solve(seed, SECTOR)
+		print("  24³ seed %d: %s, %d steps, %d propagations, %.1f ms" % [
+			seed, "ok" if result.ok else result.error, result.steps, result.propagations, result.time_usec / 1000.0,
+		])
+		if result.ok:
+			_expect(_bad_adjacencies(library, large, result.cells) == 0, "24³ seed %d: every adjacency allowed" % seed)
+			return
 
 
 ## The entropy heuristic also solves, repeats across instances and gives
@@ -90,8 +99,8 @@ func _check_entropy(library: TileLibrary) -> void:
 		print("  entropy seed 0: %d steps, %.1f ms" % [result.steps, result.time_usec / 1000.0])
 
 
-## A cell restricted to solid holds solid, and a cell restricted to solid
-## under a cell restricted to floor's upside-down partner fails.
+## A cell restricted to solid holds solid, and a floor restricted to sit
+## directly on air (a floor needs solid below) fails.
 func _check_domains(library: TileLibrary) -> void:
 	var solver := SectorSolver.new(library, SMALL)
 	var solid := _tile_named(library, "solid")
@@ -106,7 +115,6 @@ func _check_domains(library: TileLibrary) -> void:
 	var result := solver.solve(0, SECTOR, domains)
 	_expect(result.ok and result.cells[centre] == solid, "domains: a cell restricted to solid holds solid")
 
-	# Air never sits directly on a floor's underside partner: floor needs solid below.
 	_restrict(domains, words, solver.index(Vector3i(4, 3, 4)), air)
 	_restrict(domains, words, centre, floor)
 	result = solver.solve(0, SECTOR, domains)
