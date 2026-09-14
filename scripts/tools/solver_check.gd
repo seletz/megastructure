@@ -6,7 +6,19 @@ extends SceneTree
 ## docs/solver_reference_seed0.md. Also checks the Shannon entropy flag the
 ## same way, that a `domains` restriction holds in the result and that an
 ## unsatisfiable one fails, then prints the tile histogram, steps and time
-## per seed and the time of the first 24³ solve that succeeds.
+## per seed and the time of a 24³ solve with restarts.
+##
+## Restarts and pre-collapse: seed 14 fails its first two 8³ attempts, so it
+## degrades to all solid with one or two attempts allowed and solves on the
+## third by default, the same on a second instance. Records that cannot hold
+## fail fast with a clear error, in `SectorDomains` (two records, a bad
+## orientation, a record outside the grid, face-neighbour records with no
+## allowed pair) and in the solver (records whose propagation empties a cell
+## between them). Consistent records on an 8³ stratum grid hold in every
+## solved result over seeds 0 to 9, and fixed faces restrict the boundary
+## cells. Last, `REAL_SECTORS` real stratum sectors at seed 0 run through the
+## whole pipeline; every solved one must keep its records and adjacencies, and
+## the solved, degraded and inconsistent counts and mean attempts are printed.
 ## Run headless with `mise run solver-check`; pass `--update` to rewrite the
 ## reference file instead of comparing against it.
 
@@ -16,12 +28,13 @@ const SMALL := Vector3i(8, 8, 8)
 const LARGE := Vector3i(24, 24, 24)
 const SEEDS: Array[int] = [0, 1, 2, 3, 4]
 const SECTOR := Vector3i.ZERO
-
-## Grid step of each face index, +x, -x, +y, -y, +z, -z.
-const STEPS: Array[Vector3i] = [
-	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
-	Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
-]
+## An 8³ seed whose first two attempts hit a contradiction.
+const RESTART_SEED := 14
+## Real stratum sectors the pipeline runs at seed 0.
+const REAL_SECTORS := 20
+const REAL_RANGE := 1000
+## Salt for picking the real sectors; outside the grammar's salt range.
+const SALT_TEST_SOLVER := 905
 
 var _failures := 0
 
@@ -41,8 +54,9 @@ func _init() -> void:
 	for seed in SEEDS:
 		var result := first.solve(seed, SECTOR)
 		var again := second.solve(seed, SECTOR)
-		_expect(result.ok, "seed %d: 8³ solved%s" % [seed, "" if result.ok else " (%s)" % result.error])
-		if not result.ok:
+		var solved := result.outcome == SectorSolver.Outcome.SOLVED
+		_expect(solved and result.attempts == 1, "seed %d: 8³ solved at the first attempt%s" % [seed, "" if solved else " (%s)" % SectorSolver.OUTCOME_NAMES[result.outcome]])
+		if not solved:
 			continue
 		_expect(result.cells == again.cells and result.steps == again.steps, "seed %d: second solver instance identical" % seed)
 		_expect(_bad_adjacencies(library, first, result.cells) == 0, "seed %d: every adjacency allowed" % seed)
@@ -55,6 +69,10 @@ func _init() -> void:
 
 	_check_entropy(library)
 	_check_domains(library)
+	_check_restarts(library)
+	_check_inconsistent(library)
+	_check_consistent(library)
+	_check_faces(library)
 
 	if not reference_digest.is_empty():
 		if update:
@@ -63,24 +81,22 @@ func _init() -> void:
 			_compare_reference(reference_digest)
 
 	_time_large(library)
+	_run_real_sectors(library)
 
 	print("solver check: %s" % ("ok" if _failures == 0 else "%d failure(s)" % _failures))
 	quit(0 if _failures == 0 else 1)
 
 
-## Solves 24³ grids from seed 0 until one succeeds (at most `SEEDS.size()`
-## seeds, since there are no restarts yet) and prints each time. Only
-## reports: a contradiction is not a failure of the check.
+## Solves a 24³ grid at seed 0 with restarts and prints attempts and time.
+## Only reports the outcome; a solved result must allow every adjacency.
 func _time_large(library: TileLibrary) -> void:
 	var large := SectorSolver.new(library, LARGE)
-	for seed in SEEDS:
-		var result := large.solve(seed, SECTOR)
-		print("  24³ seed %d: %s, %d steps, %d propagations, %.1f ms" % [
-			seed, "ok" if result.ok else result.error, result.steps, result.propagations, result.time_usec / 1000.0,
-		])
-		if result.ok:
-			_expect(_bad_adjacencies(library, large, result.cells) == 0, "24³ seed %d: every adjacency allowed" % seed)
-			return
+	var result := large.solve(0, SECTOR)
+	print("  24³ seed 0: %s after %d attempt(s), %d steps, %d propagations, %.1f ms" % [
+		SectorSolver.OUTCOME_NAMES[result.outcome], result.attempts, result.steps, result.propagations, result.time_usec / 1000.0,
+	])
+	if result.outcome == SectorSolver.Outcome.SOLVED:
+		_expect(_bad_adjacencies(library, large, result.cells) == 0, "24³ seed 0: every adjacency allowed")
 
 
 ## The entropy heuristic also solves, repeats across instances and gives
@@ -114,11 +130,186 @@ func _check_domains(library: TileLibrary) -> void:
 	_restrict(domains, words, centre, solid)
 	var result := solver.solve(0, SECTOR, domains)
 	_expect(result.ok and result.cells[centre] == solid, "domains: a cell restricted to solid holds solid")
+	_expect(result.precollapsed == PackedInt32Array([centre]), "domains: the restricted cell is reported pre-collapsed")
 
 	_restrict(domains, words, solver.index(Vector3i(4, 3, 4)), air)
 	_restrict(domains, words, centre, floor)
 	result = solver.solve(0, SECTOR, domains)
-	_expect(not result.ok and result.contradiction_cell >= 0, "domains: floor above air fails (%s)" % result.error)
+	_expect(not result.ok and result.outcome == SectorSolver.Outcome.FAILED and result.attempts == 0 and result.contradiction_cell >= 0, "domains: floor above air fails without an attempt (%s)" % result.error)
+
+
+## Seed RESTART_SEED degrades with one or two attempts and solves on the
+## third; a second instance repeats every outcome.
+func _check_restarts(library: TileLibrary) -> void:
+	var solver := SectorSolver.new(library, SMALL)
+	var twin := SectorSolver.new(library, SMALL)
+	for limit in [1, 2]:
+		solver.max_attempts = limit
+		twin.max_attempts = limit
+		var result := solver.solve(RESTART_SEED, SECTOR)
+		var all_solid := result.cells.size() == solver.cell_count()
+		for tile in result.cells:
+			all_solid = all_solid and tile == library.solid_tile
+		_expect(
+			result.ok and result.degraded and result.outcome == SectorSolver.Outcome.DEGRADED
+			and result.attempts == limit and result.restarts == limit and all_solid and result.error.is_empty(),
+			"restarts: seed %d with %d attempt(s) degrades to all solid after %d restart(s)" % [RESTART_SEED, limit, result.restarts],
+		)
+		_expect(twin.solve(RESTART_SEED, SECTOR).cells == result.cells, "restarts: degraded result repeats on a second instance")
+	solver.max_attempts = SectorSolver.DEFAULT_MAX_ATTEMPTS
+	twin.max_attempts = SectorSolver.DEFAULT_MAX_ATTEMPTS
+	var result := solver.solve(RESTART_SEED, SECTOR)
+	var again := twin.solve(RESTART_SEED, SECTOR)
+	_expect(
+		result.outcome == SectorSolver.Outcome.SOLVED and not result.degraded and result.attempts == 3 and result.restarts == 2,
+		"restarts: seed %d solves at attempt %d of %d" % [RESTART_SEED, result.attempts, solver.max_attempts],
+	)
+	_expect(result.cells == again.cells and result.steps == again.steps, "restarts: restarted solve repeats on a second instance")
+	_expect(_bad_adjacencies(library, solver, result.cells) == 0, "restarts: every adjacency allowed after restarts")
+
+
+## Records that cannot hold fail fast with an error naming the problem.
+func _check_inconsistent(library: TileLibrary) -> void:
+	var family := EdgeRasteriser.TileFamily
+	var cases := [
+		["two records at one cell", [_record(Vector3i(1, 1, 1), family.FLOOR, 0), _record(Vector3i(1, 1, 1), family.FLOOR, 0)], "a second record at the same cell"],
+		["a record outside the grid", [_record(Vector3i(8, 1, 1), family.FLOOR, 0)], "cell outside the"],
+		["a stair without a yaw", [_record(Vector3i(1, 1, 1), family.STAIR, EdgeRasteriser.ORIENTATION_UP)], "a stair needs a yaw"],
+		["a floor directly under a stair", [_record(Vector3i(2, 2, 2), family.FLOOR, 0), _record(Vector3i(2, 3, 2), family.STAIR, 0)], "cannot touch across +y"],
+	]
+	for case in cases:
+		var records: Array[EdgeRasteriser.Record] = []
+		records.assign(case[1])
+		var started := Time.get_ticks_usec()
+		var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, records)
+		var usec := Time.get_ticks_usec() - started
+		_expect(built.error.contains(case[2]) and built.words.is_empty(), "inconsistent: %s is rejected in %.1f ms: %s" % [case[0], usec / 1000.0, built.error])
+
+	# A floor needs rock below and a bridge open space above: a cell of that
+	# column is empty once the records propagate, before any attempt.
+	var records: Array[EdgeRasteriser.Record] = [_record(Vector3i(4, 2, 4), family.BRIDGE, 0), _record(Vector3i(4, 4, 4), family.FLOOR, 0)]
+	var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, records)
+	_expect(built.error.is_empty(), "inconsistent: a bridge two cells under a floor passes the record checks")
+	var solver := SectorSolver.new(library, SMALL)
+	var result := solver.solve(0, SECTOR, built.words)
+	_expect(
+		result.outcome == SectorSolver.Outcome.FAILED and result.attempts == 0 and result.cells.is_empty()
+		and solver.position(result.contradiction_cell) in [Vector3i(4, 2, 4), Vector3i(4, 3, 4), Vector3i(4, 4, 4)]
+		and result.error.begins_with("inconsistent starting domains"),
+		"inconsistent: the solver fails without an attempt in %.1f ms: %s" % [result.time_usec / 1000.0, result.error],
+	)
+
+
+## A floor walk, a stair run climbing +x and a portal opening on the +x face,
+## consistent on the placeholder tileset, hold in every solved 8³ result.
+func _check_consistent(library: TileLibrary) -> void:
+	var family := EdgeRasteriser.TileFamily
+	var records: Array[EdgeRasteriser.Record] = []
+	for x in range(1, 4):
+		records.append(_record(Vector3i(x, 2, 4), family.FLOOR, 0))
+	for k in 3:
+		records.append(_record(Vector3i(4 + k, 2 + k, 4), family.STAIR, 0))
+	records.append(_record(Vector3i(7, 5, 4), family.PORTAL_OPENING, 0))
+	var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, records)
+	_expect(built.error.is_empty(), "consistent: records build%s" % ("" if built.error.is_empty() else " (%s)" % built.error))
+	if not built.error.is_empty():
+		return
+	_expect(built.record_cells.size() == records.size(), "consistent: %d record cells" % built.record_cells.size())
+	var solver := SectorSolver.new(library, SMALL)
+	var outcomes := PackedInt32Array([0, 0, 0])
+	var broken := 0
+	var bad := 0
+	for seed in 10:
+		var result := solver.solve(seed, SECTOR, built.words)
+		outcomes[result.outcome] += 1
+		if result.outcome != SectorSolver.Outcome.SOLVED:
+			continue
+		for record in records:
+			if not SectorDomains.tile_matches(library.tiles[result.cells[solver.index(record.cell)]], record.family, record.orientation):
+				broken += 1
+		bad += _bad_adjacencies(library, solver, result.cells)
+	_expect(outcomes[SectorSolver.Outcome.FAILED] == 0, "consistent: no solve fails (%d solved, %d degraded)" % [outcomes[0], outcomes[1]])
+	_expect(outcomes[SectorSolver.Outcome.SOLVED] > 0, "consistent: at least one of seeds 0..9 solves")
+	_expect(broken == 0 and bad == 0, "consistent: every solved result keeps all %d records and its adjacencies, %d broken, %d forbidden" % [records.size(), broken, bad])
+
+
+## A +y face of solid neighbours leaves only tiles with rock on top in the top
+## layer; -1 entries stay free; a face of the wrong size is an error.
+func _check_faces(library: TileLibrary) -> void:
+	var faces: Array[PackedInt32Array] = []
+	for dir in TilePrototype.FACE_COUNT:
+		faces.append(PackedInt32Array())
+	var top := PackedInt32Array()
+	top.resize(SMALL.x * SMALL.z)
+	top.fill(library.solid_tile)
+	top[0] = -1
+	faces[TilePrototype.FACE_POS_Y] = top
+	var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, [], faces)
+	_expect(built.error.is_empty(), "faces: a solid +y face builds")
+	var solver := SectorSolver.new(library, SMALL)
+	var result := solver.solve(0, SECTOR, built.words)
+	var rock_on_top := result.outcome == SectorSolver.Outcome.SOLVED
+	for x in SMALL.x:
+		for z in SMALL.z:
+			if x == 0 and z == 0:
+				continue
+			var tile := result.cells[solver.index(Vector3i(x, SMALL.y - 1, z))] if rock_on_top else -1
+			rock_on_top = rock_on_top and library.is_allowed(TilePrototype.FACE_POS_Y, tile, library.solid_tile)
+	_expect(rock_on_top, "faces: every top cell but the free one allows solid above (%s)" % SectorSolver.OUTCOME_NAMES[result.outcome])
+	_expect(result.precollapsed.size() == SMALL.x * SMALL.z - 1, "faces: %d fixed boundary cells pre-collapsed" % result.precollapsed.size())
+
+	faces[TilePrototype.FACE_POS_Y] = PackedInt32Array([library.solid_tile])
+	built = SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, [], faces)
+	_expect(built.error.contains("expected 64"), "faces: a face of the wrong size is an error: %s" % built.error)
+
+
+## Runs REAL_SECTORS stratum sectors with records through the pipeline at
+## seed 0 and prints the outcome counts; solved ones must keep their records.
+func _run_real_sectors(library: TileLibrary) -> void:
+	var rasteriser := EdgeRasteriser.new(WalkableGraph.new(0))
+	var solver := SectorSolver.new(library, LARGE)
+	var counts := {"solved": 0, "degraded": 0, "failed": 0, "rejected": 0}
+	var attempts := 0
+	var ran := 0
+	var broken := 0
+	var usec := 0
+	var i := 0
+	while ran < REAL_SECTORS and i < 10000:
+		var sector := Vector3i(_sample(i, 0), _sample(i, 1), _sample(i, 2))
+		i += 1
+		if rasteriser.graph.skeleton.sector_type(0, sector) != Skeleton.SectorType.STRATUM:
+			continue
+		if rasteriser.records_for_sector(sector).is_empty():
+			continue
+		ran += 1
+		var run := SolverSectorRun.run(library, rasteriser, sector, 0, solver)
+		var outcome := "rejected"
+		if run.error.is_empty():
+			outcome = SectorSolver.OUTCOME_NAMES[run.result.outcome]
+			usec += run.result.time_usec
+			if run.result.outcome != SectorSolver.Outcome.FAILED:
+				attempts += run.result.attempts
+			if run.result.outcome == SectorSolver.Outcome.SOLVED:
+				broken += run.broken_records(library) + SolverSectorRun.bad_adjacencies(library, LARGE, run.result.cells)
+		counts[outcome] += 1
+		print("  real %s: %d records, %s%s" % [
+			sector, run.records.size(), outcome,
+			" after %d attempt(s), %.0f ms" % [run.result.attempts, run.result.time_usec / 1000.0] if run.result != null and run.result.outcome != SectorSolver.Outcome.FAILED else ": %s" % (run.error if not run.error.is_empty() else run.result.error),
+		])
+	_expect(ran == REAL_SECTORS, "real sectors: %d stratum sectors with records at seed 0" % ran)
+	_expect(broken == 0, "real sectors: every solved sector keeps its records and adjacencies, %d broken" % broken)
+	var searched: int = counts.solved + counts.degraded
+	print("  real sectors: %d solved, %d degraded, %d inconsistent in the solver, %d rejected by the record checks; mean attempts %.2f over %d searched, %.0f ms total solve time" % [
+		counts.solved, counts.degraded, counts.failed, counts.rejected, float(attempts) / maxi(searched, 1), searched, usec / 1000.0,
+	])
+
+
+static func _sample(i: int, axis: int) -> int:
+	return Hash.hash3_u(0, Vector3i(i, axis, 0), SALT_TEST_SOLVER) % (2 * REAL_RANGE + 1) - REAL_RANGE
+
+
+static func _record(cell: Vector3i, family: EdgeRasteriser.TileFamily, orientation: int) -> EdgeRasteriser.Record:
+	return EdgeRasteriser.Record.make(cell, family, orientation, Vector4i.ZERO)
 
 
 static func _restrict(domains: PackedInt64Array, words: int, cell: int, tile: int) -> void:
@@ -136,16 +327,7 @@ static func _tile_named(library: TileLibrary, tile_name: String) -> int:
 
 ## Face-neighbour pairs of the result that the adjacency table forbids.
 static func _bad_adjacencies(library: TileLibrary, solver: SectorSolver, cells: PackedInt32Array) -> int:
-	var bad := 0
-	for cell in cells.size():
-		var position := solver.position(cell)
-		for dir in TilePrototype.FACE_COUNT:
-			var next := position + STEPS[dir]
-			if next.x < 0 or next.y < 0 or next.z < 0 or next.x >= solver.size.x or next.y >= solver.size.y or next.z >= solver.size.z:
-				continue
-			if not library.is_allowed(dir, cells[cell], cells[solver.index(next)]):
-				bad += 1
-	return bad
+	return SolverSectorRun.bad_adjacencies(library, solver.size, cells)
 
 
 static func _digest(cells: PackedInt32Array) -> String:

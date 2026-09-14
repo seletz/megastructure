@@ -166,6 +166,17 @@ usage = '''
 flag "--update" help="Rewrite docs/solver_reference_seed0.md from the current solver instead of comparing"
 '''
 
+[tasks.solver-sector]
+depends = ["import"]
+description = "Run the fill pipeline for one real sector on the placeholder tileset (skeleton type, walkable graph, edge rasteriser, domains, solve with restarts) and print the outcome, attempts, time and a family histogram of the result; fail when a solved result breaks a record or an adjacency. Usage: mise run solver-sector <x> <y> <z> [--seed N] (headless)"
+run = 'godot --headless --path . --script res://scripts/tools/solver_sector.gd -- "${usage_x}" "${usage_y}" "${usage_z}" --seed "${usage_seed:-0}"'
+usage = '''
+arg "<x>" help="Sector x"
+arg "<y>" help="Sector y"
+arg "<z>" help="Sector z"
+flag "--seed <n>" default="0" help="World seed and solve seed"
+'''
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
