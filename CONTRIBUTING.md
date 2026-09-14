@@ -66,7 +66,18 @@ tasks in `mise.toml`. Before pushing, run:
 mise run check
 ```
 
-It must pass. CI runs the same task as the required `check` status.
+It must pass and takes under 2 minutes: the statistical checks run on a
+reduced `--quick` sample. CI runs the same task as the required `check`
+status on every pull request. Before pushing a change to the sector grammar,
+the walkable graph, the edge rasteriser, the tileset or the solver, also run
+
+```sh
+mise run check-full
+```
+
+which runs every check at full size (about 10 minutes). CI runs `check-full`
+on every push to `develop` and nightly, so a failure there means a merged
+change broke a full-size check.
 
 GDScript files use tabs for indentation.
 
