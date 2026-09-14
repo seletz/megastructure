@@ -131,6 +131,8 @@ var _cells_per_sector := 24
 var _sector_size := 48.0
 var _started := false
 var _refresh_pending := true
+## `radius` at the last refresh.
+var _refreshed_radius := -1
 ## Sector -> true for sectors requested from the jobs and not yet returned.
 var _requested := {}
 ## Sector -> result received and waiting to be placed.
@@ -216,6 +218,7 @@ func clear() -> void:
 		box.queue_free()
 	_impostors.clear()
 	_impostors_to_add.clear()
+	_refreshed_radius = -1
 	_requested.clear()
 	_results_ready.clear()
 	_unload.clear()
@@ -340,6 +343,10 @@ func cached(sector: Vector3i) -> Dictionary:
 func _refresh() -> void:
 	jobs.focus = focus_sector
 	var keep := radius + 1
+	if radius != _refreshed_radius:
+		_refreshed_radius = radius
+		for sector: Vector3i in placed:
+			_link_impostor(sector)
 	for sector: Vector3i in _requested.keys():
 		if distance(sector, focus_sector) > keep:
 			jobs.cancel(sector)
