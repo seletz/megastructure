@@ -1173,10 +1173,18 @@ resolution="${usage_resolution:-1280x720}"
 out="$(realpath -m -- "${usage_out}")"
 # Keep Godot from importing shots written into a folder inside the project
 # (never the project root itself, which a .gdignore would hide entirely).
+# Skip the marker when the folder or an ancestor below the root already has
+# one, as docs/ does, so no redundant untracked .gdignore is left behind.
 out_dir="$(dirname "$out")"
 if [[ "$out_dir" == "$PWD"/* ]]; then
 	mkdir -p "$out_dir"
-	touch "$out_dir/.gdignore"
+	marked=false
+	dir="$out_dir"
+	while [[ "$dir" != "$PWD" ]]; do
+		[[ -e "$dir/.gdignore" ]] && { marked=true; break; }
+		dir="$(dirname "$dir")"
+	done
+	[[ "$marked" == "true" ]] || touch "$out_dir/.gdignore"
 fi
 
 args=(-- "${usage_scene}" "$out" --resolution "$resolution" --frames "${usage_frames:-40}")
