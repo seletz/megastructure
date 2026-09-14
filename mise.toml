@@ -271,14 +271,22 @@ description = "Click every kind of script-backed widget in the skeleton viewer's
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "The pull request tier (under 2 minutes): import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check, with graph-connectivity, raster-check, tiles-check-placeholder, solver-check, boundary-check and jobs-check on their --quick sample, and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity --quick", "raster-check --quick", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder --quick", "solver-check --quick", "boundary-check --quick", "jobs-check --quick"]
-run = "godot --headless --editor --path . --quit"
+description = "The pull request tier (under 2 minutes): import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check, with graph-connectivity, raster-check, tiles-check-placeholder, solver-check, boundary-check on their --quick sample, then jobs-check --quick alone (it times the main thread), and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity --quick", "raster-check --quick", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder --quick", "solver-check --quick", "boundary-check --quick"]
+# jobs-check times the main thread, so it runs alone after the parallel tasks.
+run = [
+	"mise run --skip-deps jobs-check --quick",
+	"godot --headless --editor --path . --quit",
+]
 
 [tasks.check-full]
-description = "The full tier, run by CI on pushes to develop and nightly: the tasks of mise run check with every statistical task at full size, and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check", "boundary-check", "jobs-check"]
-run = "godot --headless --editor --path . --quit"
+description = "The full tier, run by CI on pushes to develop and nightly: the tasks of mise run check with every statistical task at full size, then jobs-check alone, and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check", "boundary-check"]
+# jobs-check times the main thread, so it runs alone after the parallel tasks.
+run = [
+	"mise run --skip-deps jobs-check",
+	"godot --headless --editor --path . --quit",
+]
 
 [tasks.templates]
 description = "Download export templates for the pinned Godot version (skips if installed)"
