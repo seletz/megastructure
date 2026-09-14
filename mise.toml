@@ -23,7 +23,7 @@ depends = ["import"]
 run = "godot --path . scenes/skeleton_viewer.tscn"
 
 [tasks.run-walk]
-description = "Run the world walk scene at seed 0: the 3^3 sectors around the origin solved on worker threads, their MultiMesh buffers and collision built there and placed as they arrive (GridMaps with the use_gridmap panel toggle), a capsule to walk them (F free fly, V view); imports first"
+description = "Run the world walk scene at seed 0: the sectors within radius 1 of the player streamed (solved on worker threads, placed as MultiMeshes one per frame with their collision added in chunks within a frame budget, freed beyond radius 2, solved cells cached; GridMaps with the use_gridmap panel toggle; radius up to 3 in the panel), impostor boxes around them, a capsule to walk them (F free fly, V view); imports first"
 depends = ["import"]
 run = "godot --path . scenes/world_walk.tscn -- --seed 0"
 
@@ -336,26 +336,69 @@ else
 fi
 '''
 
+[tasks.streaming-check]
+depends = ["import"]
+description = "Walk a frozen Player capsule in a straight line through --sectors sectors of the streamed world at seed 0 (SectorJobs and SectorStreamer, radius 1) and back, 4 m per step, and fail when a frame after the first placements lacks the player's sector or the collision around its feet, a step lacks the player's sector, its 6 face neighbours or any sector within radius, a sector beyond radius + 1 stays placed, walking back solves instead of hitting the cache, static memory or the object count after walking back is more than 10 % off the warmed-up baseline, the node count differs, a frame exceeds 33 ms, or the log shows an error or warning; print the loaded-sector timeline, the longest frame and the streamer's longest update, refresh, placement and unload (headless). --quick walks 2 sectors instead of 10"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+args=(--sectors 10)
+[[ "${usage_quick:-false}" == "true" ]] && args=(--sectors 2)
+[[ -n "${usage_radius:-}" ]] && args+=(--radius "${usage_radius}")
+status=0
+godot --headless --path . --script res://scripts/tools/streaming_check.gd -- "${args[@]}" 2>&1 | tee "$log" || status=$?
+if grep -E -e 'SCRIPT ERROR' -e 'ERROR:' -e 'WARNING:' "$log" >&2; then
+	echo "streaming-check: errors or warnings in the run log" >&2
+	exit 1
+fi
+exit "$status"
+'''
+usage = '''
+flag "--quick" help="Walk 2 sectors out and back instead of 10 (the check tier)"
+flag "--radius <r>" help="Streaming radius, 1 to 3 (default 1)"
+'''
+
+[tasks.collision-cook-bench]
+depends = ["import"]
+description = "Measure the main-thread cost of adding one real sector's trimesh collision (decision #175): merged through nodes and through PhysicsServer3D, the shape created on a worker thread, one body per collision chunk, and the chunks as shapes of one body added one per frame (what streaming uses); fail when a strategy's rays hit other heights than the merged shape; print a markdown table of placing time, longest frame, freeing time and bodies. Usage: mise run collision-cook-bench [--sector x,y,z] [--seed N] [--chunk-cells N] (headless, not part of check)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=(--sector "${usage_sector:--1,1,-1}" --seed "${usage_seed:-0}" --chunk-cells "${usage_chunk_cells:-3}")
+godot --headless --path . --script res://scripts/tools/collision_cook_bench.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--sector <x,y,z>" default="-1,1,-1" help="A sector that solves at the seed"
+flag "--seed <n>" default="0" help="World seed and solve seed"
+flag "--chunk-cells <n>" default="3" help="Cells per collision chunk edge"
+'''
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "The pull request tier (under 2 minutes): import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check (GridMap and MultiMesh placement and the capsule walk course on both included), with graph-connectivity, raster-check, tiles-check-placeholder, solver-check, boundary-check on their --quick sample, then jobs-check --quick alone (it times the main thread), and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
+description = "The pull request tier: import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check (GridMap and MultiMesh placement and the capsule walk course on both included), with graph-connectivity, raster-check, tiles-check-placeholder, solver-check, boundary-check on their --quick sample, then jobs-check --quick and streaming-check --quick alone, one after the other (they time the main thread), and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
 depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity --quick", "raster-check --quick", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder --quick", "solver-check --quick", "boundary-check --quick", "gridmap-check", "multimesh-check", "walk-check"]
-# jobs-check times the main thread, so it runs alone after the parallel tasks.
+# jobs-check and streaming-check time the main thread, so they run alone after
+# the parallel tasks.
 run = [
 	"mise run --skip-deps jobs-check --quick",
+	"mise run --skip-deps streaming-check --quick",
 	"godot --headless --editor --path . --quit",
 ]
 
 [tasks.check-full]
-description = "The full tier, run by CI on pushes to develop and nightly: the tasks of mise run check with every statistical task at full size, then jobs-check alone, and verify the project loads headlessly"
+description = "The full tier, run by CI on pushes to develop and nightly: the tasks of mise run check with every statistical task at full size, then jobs-check and streaming-check alone, and verify the project loads headlessly"
 depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check", "boundary-check", "gridmap-check", "multimesh-check", "walk-check"]
-# jobs-check times the main thread, so it runs alone after the parallel tasks.
+# jobs-check and streaming-check time the main thread, so they run alone after
+# the parallel tasks.
 run = [
 	"mise run --skip-deps jobs-check",
+	"mise run --skip-deps streaming-check",
 	"godot --headless --editor --path . --quit",
 ]
 
