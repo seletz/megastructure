@@ -48,8 +48,8 @@ status: current
   [[chasm-distance-field]] behind the current prototype, and
   [[wave-function-collapse]], [[model-synthesis-and-sectors]],
   [[socket-adjacency]], [[sector-skeleton-and-walkable-graph]],
-  [[walkable-graph-connectivity]] and [[edge-rasteriser]] for the
-  generative world to come.
+  [[walkable-graph-connectivity]], [[edge-rasteriser]] and
+  [[sector-solver]] for the generative world to come.
 - [[hash_vectors]]: reference vectors for the shared integer hash.
 
 ## Papers and references
