@@ -309,7 +309,8 @@ the connectivity argument, complexity and measurements, is
 - **Weights.** A 64-bit integer: a class in the top bits, a hash below.
   Classes, lightest first: horizontal open-open; vertical between two
   shafts or chasms; other vertical open-open; horizontal with one solid, two
-  solid; vertical with one solid, two solid. Vertical weights are keyed on
+  solid; vertical with one solid, two solid; then, by default, tunnels that
+  open a cavity or chasm wall. Vertical weights are keyed on
   the column and a run of 9 sectors (salt 154), so stacked vertical pairs
   weigh the same and one column carries the climb.
 - **Kruskal** with [[GLOSSARY#Union-find|union-find]] takes candidates from
@@ -320,7 +321,9 @@ the connectivity argument, complexity and measurements, is
   boundary edges land on.
 - **Boundary edges.** Each face between two regions, keyed on the lower
   region, gets its lightest pair (open-open if the face has one, else a
-  tunnel) plus hashed loops, so the trees join up.
+  tunnel) plus hashed loops, so the trees join up. `boundary_scheme` can
+  skip faces without open pairs where a 2³ block of regions is joined
+  anyway ([[walkable-graph-connectivity#2. Boundary edges between regions]]).
 - **Loops.** Open-open pairs outside the tree get an edge with probability
   0.08 horizontally, 0.02 vertically (salts 156 to 158).
 - **Kinds.** Tunnel if either sector is solid; along y a ladder between two
@@ -328,7 +331,7 @@ the connectivity argument, complexity and measurements, is
   chasm, a catwalk next to a shaft, else a corridor.
 
 Every window of whole regions has one component of open sectors. Measured
-over seeds 0 to 9: 13 % of edges are tunnels and vertical runs are 2.04
+over seeds 0 to 9: 14 % of edges are tunnels and vertical runs are 2.04
 sectors long on average.
 
 ### Output: the fill contract

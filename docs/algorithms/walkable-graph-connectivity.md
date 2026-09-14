@@ -22,7 +22,8 @@ sources:
 > expensive stairs later, and only when nothing else works a
 > [[GLOSSARY#Tunnel edge|tunnel edge]] that carves through solid rock.
 > Between two neighbouring regions a few [[GLOSSARY#Boundary edge|boundary
-> edges]] stitch the trees together. A few hashed loop edges keep the maze
+> edges]] stitch the trees together. Tunnels that open a chasm or cavity
+> wall come after every other tunnel, so the chasms stay mostly sheer. A few hashed loop edges keep the maze
 > from being a pure tree. Every choice is a hash of the seed and
 > coordinates, so any sector gets the same edges no matter where you start
 > generating.
@@ -80,7 +81,15 @@ decides first and the 32-bit hash only orders edges inside a class:
 | 4 | horizontal, both solid |
 | 5 | vertical, one solid |
 | 6 | vertical, both solid |
+| 7 | horizontal, one solid, the other a cavity or chasm |
+| 8 | vertical, one solid, the other a cavity or chasm |
 
+Classes 7 and 8 apply when `void_wall_tunnels_last` is on, the default;
+with it off such pairs stay in class 3 or 5. A tunnel from a chasm or cavity
+into solid is a hole in its wall, a facade opening, so the tree drills from
+strata and shafts first and opens a void's wall only where the void has no
+other way out. Open pairs keep their classes, so this changes which tunnels
+are built, never whether an open path is preferred.
 A horizontal hash is keyed on `a` (salt 153 for x, 155 for z). A vertical
 hash is keyed on the **column run** `(a.x, floor(a.y / 9), a.z)` with salt
 154. All stacked vertical pairs of a column within 9 sectors weigh the same,
@@ -92,13 +101,36 @@ makes vertical edges stack into ladders and stairwells instead of scattering.
 For regions `R` and `R + axis`, the face holds 3 × 3 = 9 sector pairs.
 `boundary_edges(R, axis)`, keyed on the lower region, keeps:
 
-- the **lightest** pair by the weight above. Open-open pairs come first,
-  then one-solid, then both-solid, so every face gets exactly one edge and
-  it tunnels only when the face has no open-open pair;
+- the **lightest** pair by the weight above, when the boundary scheme keeps
+  the face. Open-open pairs come first, then one-solid, then both-solid, so
+  a kept face gets exactly one such edge and it tunnels only when the face
+  has no open-open pair;
 - every other open-open pair whose loop hash passes (step 5).
 
+Each face has a **class**: *open* (some pair is open on both sides), *wall*
+(no open-open pair, but some of its 18 sectors is non-solid) or *solid*
+(all 18 solid). `boundary_scheme` decides which faces are kept:
+
+| Scheme | Kept unconditionally | Kept when a block tree needs it |
+| --- | --- | --- |
+| `PER_FACE` (default) | every face | none |
+| `PER_REGION_PAIR` | open faces | wall and solid faces |
+| `SKIP_SOLID_FACES` | open and wall faces | solid faces |
+
+A **block** is 2 × 2 × 2 regions. A face between `R` and `R + axis` lies in
+four blocks, one per choice of offset −1 or 0 along the two other axes. The
+**block tree** of a block is Kruskal over its 8 regions and 12 faces: the
+unconditional faces join first, the others follow by the weight of their
+lightest pair, then by region index and axis. The tree spans all 8 regions,
+solid ones included, and is not pruned. A conditional face is kept when the
+tree of any of its four blocks takes it. This is the
+region-level spanning structure: a wall or solid face tunnels only when the
+open faces around it do not already join the two regions inside every block
+they share.
+
 Only sector types are read, never another region's edges, so both regions
-get the same answer.
+get the same answer. A conditional face reads the face classes of the 33
+faces of its four blocks; the graph memoises face classes per instance.
 
 ### 3. Terminals
 
@@ -185,20 +217,29 @@ instead, `#₀` would be a terminal and #₀–F would stay.
 
 ## Connectivity guarantee
 
-**Claim.** For any set of regions that is connected through shared faces,
-the edges inside those regions plus the boundary edges between them connect
-all non-solid sectors of the set.
+**Claim.** With `PER_FACE`, for any set of regions that is connected through
+shared faces, the edges inside those regions plus the boundary edges between
+them connect all non-solid sectors of the set. With `PER_REGION_PAIR` and
+`SKIP_SOLID_FACES` the same holds for a single region and for every box of
+regions at least 2 regions long on each axis.
 
 **Argument.** Each region's pruned tree connects all its terminals, and all
-its edges lie inside the region. Each shared face has at least one boundary
-edge, and both of its ends are terminals of their regions (step 3). Walking
-region to region along faces therefore reaches every terminal, and all open
-sectors are terminals.
+its edges lie inside the region. Each kept face has a boundary edge, and
+both of its ends are terminals of their regions (step 3). With `PER_FACE`
+every shared face is kept, so walking region to region along faces reaches
+every terminal, and all open sectors are terminals. With the other schemes,
+take a box of regions at least 2 long on each axis: every 2³ block inside
+it has a block tree that joins all 8 of its regions with kept faces, and
+neighbouring blocks inside the box share 4 regions, so every region of the
+box is reached. A slab or line one region thick can lose a face no block
+inside it supplies. Pruning solid regions out of the block trees would save
+a few tunnels but break this: two blocks overlapping only in solid regions
+would no longer join.
 
-Hence every window made of whole regions, such as 3³ sectors (one region)
-or 6³ sectors (2 × 2 × 2 regions), has exactly one component of non-solid
+Hence every window made of whole regions, such as 3³ sectors (one region),
+6³ sectors (2 × 2 × 2 regions) or 9³ sectors (3 × 3 × 3), has exactly one component of non-solid
 sectors when only edges with both ends in the window count.
-`mise run graph-connectivity` checks exactly this.
+`mise run graph-connectivity` checks exactly this, for every variant.
 
 **Windows that cut regions** have no such guarantee. An open sector near a
 window edge may reach the rest only through a tree path that leaves the
@@ -207,7 +248,9 @@ to 9 (13 310 windows):
 
 | Edge set | Windows with one component |
 | --- | ---: |
-| this graph | 481 (3.6 %) |
+| this graph (default) | 470 (3.5 %) |
+| `PER_FACE` without `void_wall_tunnels_last` | 481 (3.6 %) |
+| `PER_REGION_PAIR` | 352 (2.6 %) |
 | every open-open adjacency, no tunnels | 3 441 (25.9 %) |
 
 Even the densest graph without tunnels joins only a quarter of the windows,
@@ -217,32 +260,77 @@ everywhere.
 
 ## Measured shape
 
-Seeds 0 to 9, the same 15³ samples, 26 151 edges (region edges plus the
-boundary edges between the sample's regions):
+Seeds 0 to 9, the same 15³ samples, 26 434 edges (region edges plus the
+boundary edges between the sample's regions), default graph:
 
 | Kind | Share |
 | --- | ---: |
-| corridor | 52.2 % |
-| catwalk | 15.0 % |
-| tunnel | 13.0 % |
-| bridge | 10.4 % |
+| corridor | 51.6 % |
+| catwalk | 14.8 % |
+| tunnel | 14.0 % |
+| bridge | 10.3 % |
 | stair | 5.4 % |
-| ladder | 4.0 % |
+| ladder | 3.9 % |
 
 Stair and ladder edges form 1 206 vertical runs, 2.04 sectors (about 98 m)
 long on average.
 
+## Boundary schemes and tunnel weights, measured
+
+Issue #129: chasm sectors showed many tunnels into their walls. Chasms are
+rare (a 2 % chance per 32 × 96 sector band), so none of the random samples
+holds one; `mise run graph-connectivity` also takes, per seed, a 15³ sample
+centred on the lower x wall of the first chasm along +x. The variants,
+seeds 0 to 9, 125 regions per sample:
+
+| Variant | Sample | Edges | Tunnels | Chasm-end tunnels | Cavity-end tunnels | Faces skipped | Split aligned windows (3³, 6³, 9³) | Vertical run |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `PER_FACE` (before) | random | 26 151 | 13.0 % | 0 | 324 | 0 | 0 of 2 160 | 2.04 |
+| | chasm | 30 944 | 6.1 % | 83 | 96 | 0 | 0 of 2 160 | 2.64 |
+| `PER_REGION_PAIR` | random | 25 021 | 9.1 % | 0 | 225 | 396 of 3 000 | 0 | 2.04 |
+| | chasm | 30 299 | 4.1 % | 72 | 64 | 186 | 0 | 2.64 |
+| `SKIP_SOLID_FACES` | random | 26 055 | 12.7 % | 0 | 319 | 13 | 0 | 2.04 |
+| | chasm | 30 922 | 6.0 % | 83 | 95 | 3 | 0 | 2.64 |
+| `PER_FACE` + void walls last (**default**) | random | 26 434 | 14.0 % | 0 | 42 | 0 | 0 | 2.04 |
+| | chasm | 31 091 | 6.6 % | 63 | 9 | 0 | 0 | 2.64 |
+| `PER_REGION_PAIR` + void walls last | random | 25 176 | 9.7 % | 0 | 32 | 394 | 0 | 2.04 |
+| | chasm | 30 394 | 4.4 % | 50 | 7 | 189 | 0 | 2.64 |
+
+What the numbers say:
+
+- **Most void-wall tunnels are inside regions, not on faces.** Of the 179
+  chasm or cavity tunnels in the chasm samples under `PER_FACE`, 37 lie on
+  boundary faces. A chasm column cut off from the rest of its region by
+  solid needs a tunnel for the 3³ guarantee whatever the boundary scheme.
+- **`PER_REGION_PAIR`** removes the most tunnels (13.0 → 9.1 %) but only
+  11 of 83 chasm tunnels, skips 13 % of faces, narrows the guarantee to
+  boxes at least 2 regions thick and joins fewer strict 5³ windows.
+- **`SKIP_SOLID_FACES`** hardly changes anything: faces solid on both sides
+  are rare (13 of 3 000).
+- **Void walls last** keeps every face and the guarantee, and moves tunnels
+  off void walls: chasm-end tunnels 83 → 63, cavity-end 96 → 9, on boundary
+  faces 37 → 4. The price is 1 point more tunnels, as the tree now drills
+  around a void through more solid.
+
+Vertical runs are identical everywhere: no variant changes open edges.
+Owner decision on the scheme: issue #135.
+
 ## Complexity
 
-- `boundary_edges`: 18 `sector_type` calls and 9 weights, constant.
+- `boundary_edges`: 18 `sector_type` calls and 9 weights, constant. A
+  conditional face under `PER_REGION_PAIR` or `SKIP_SOLID_FACES` adds four
+  block trees over 12 faces each: up to 33 face classes, memoised per
+  graph (dropped past 100 000 faces).
 - `edges_in_region`: 27 sector types, six boundary faces (108 types), 54
   candidates sorted, near-constant union-find and a pruning pass over at
   most 26 tree edges. Constant per region, about 250 `sector_type` calls.
 - `edges_for_sector`: one region plus up to three faces.
-- The check (10 seeds, 125 regions each, 13 310 + 1 890 windows) runs in
-  about 25 s headless.
+- The check (5 variants, 10 seeds, two samples of 125 regions each, 13 310
+  strict and 2 160 aligned windows per random sample) runs in about 2 min
+  headless on a caching skeleton; `--variants=` picks some.
 
-Nothing is cached, so a caller that streams sectors should cache per region.
+Only face classes are memoised, so a caller that
+streams sectors should cache edges per region.
 
 ## Determinism
 
@@ -265,6 +353,12 @@ Constants in [walkable_graph.gd](../../scripts/world/walkable_graph.gd):
 | `VERTICAL_RUN_SECTORS` | 9 | height of a column run sharing one vertical weight |
 | `LOOP_PROBABILITY_HORIZONTAL` | 0.08 | chance of a horizontal loop edge |
 | `LOOP_PROBABILITY_VERTICAL` | 0.02 | chance of a vertical loop edge |
+| `boundary_scheme` | `PER_FACE` | which region faces get their lightest pair (step 2) |
+| `void_wall_tunnels_last` | true | tunnels with a cavity or chasm end take classes 7 and 8 |
+
+`boundary_scheme` and `void_wall_tunnels_last` are properties of a
+`WalkableGraph` and arguments 3 and 4 of `WalkableGraph.new`; the skeleton
+viewer's `graph` panel section sets them for the drawn graph.
 
 | Salt | Key | Decides |
 | ---: | --- | --- |
@@ -282,9 +376,12 @@ used only by the connectivity check to place its samples.
 ## Open questions
 
 - Tunnels are decided per region, so two open sectors joined through a
-  neighbouring region may still get a tunnel inside their own region.
-  Tunnels are 13 % of edges; a later pass could share this with the
-  rasteriser's cost.
+  neighbouring region may still get a tunnel inside their own region. This
+  is where most chasm tunnels come from; no boundary scheme removes them
+  without giving up the 3³ window guarantee. Tunnels are 14 % of edges; a
+  later pass could share this with the rasteriser's cost.
+- The boundary scheme is the owner's call (#135); the measured variants are
+  above.
 - Vertical runs average 2 sectors. Longer runs would need the boundary
   choice to follow the column run across regions more strongly.
 
@@ -309,7 +406,8 @@ used only by the connectivity check to place its samples.
 
 ![The graph around the camera inside the world at seed 0](../images/walkable-graph-inside.png)
 
-Corridors are white, stairs and ladders yellow, bridges cyan, catwalks green
+Both show the default graph (`PER_FACE`, void walls last). Corridors are
+white, stairs and ladders yellow, bridges cyan, catwalks green
 and tunnels magenta. Each half of an edge is drawn level at its node's floor
 level to the point above or below the portal, and a yellow vertical segment
 on the portal's side marks the height change, the end where the edge
