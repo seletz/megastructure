@@ -42,4 +42,5 @@ into nodes.
 
 - [[RESEARCH_WFC]], section 4 (threads) and issue E3 in section 7.
 - Related: [[godot-docs-thread-safe-apis]].
-- No code yet; worker-thread sector jobs are planned for milestone 0.2.0.
+- [[sector-jobs]]: `SectorJobs` adds one task per sector, polls
+  `is_task_completed` only for tasks that pushed a result and waits on every id.

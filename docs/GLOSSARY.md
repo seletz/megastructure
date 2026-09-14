@@ -736,6 +736,17 @@ See also: Signed distance field.
 
 ## M
 
+### Main thread
+
+The thread that runs the game loop: input, `_process`, the scene tree and
+the calls into the rendering and physics servers. A frame waits for
+everything the main thread does, so long work must run on another thread.
+
+In this project: `SectorJobs.poll` runs on it once per frame and may block
+it for at most 4 ms; the solves run on the WorkerThreadPool.
+
+See also: [[sector-jobs]], [[godot-docs-thread-safe-apis]], Sector job.
+
 ### Merge rule
 
 What happens when two records of the edge rasteriser land on the same cell:
@@ -808,6 +819,18 @@ built on a worker thread.
 See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]].
 
 ## N
+
+### Mutex
+
+A lock that only one thread can hold at a time. Threads take it before
+touching shared data and release it after, so no two threads change the data
+at once.
+
+In this project: the outbox of `SectorJobs`, which carries results from the
+workers to the main thread and cancellations the other way, is behind one
+`Mutex`.
+
+See also: [[sector-jobs]], Thread safety.
 
 ### Near and far plane
 
@@ -1102,6 +1125,17 @@ In this project: indexed by `Vector3i`; the type comes from
 
 See also: [[MEGASTRUCTURE_CONCEPT]], Skeleton.
 
+### Sector job
+
+One sector solved on a worker thread: a WorkerThreadPool task that runs the
+whole fill pipeline on objects of its own and hands back a plain dictionary
+of tile indices.
+
+In this project: queued with `SectorJobs.request`, started nearest to the
+focus first, cancellable, and emitted as `sector_ready` on the main thread.
+
+See also: [[sector-jobs]], [[solver]], WorkerThreadPool.
+
 ### Seed
 
 The one number that determines the entire world. Change it and everything
@@ -1268,6 +1302,17 @@ In this project: the suffix of a socket string, `3s`, `3f`, `5_2` or `5i`.
 See also: [[RESEARCH_WFC]], Socket.
 
 ## T
+
+### Thread safety
+
+Whether code gives correct results when several threads run it at once. It
+holds when threads share only data nobody writes, or data behind a lock.
+
+In this project: sector jobs share only the tile library and a copy of the
+grammar, both read-only; graphs, solvers and boundary caches are built per
+task because they write to themselves.
+
+See also: [[sector-jobs]], [[godot-docs-thread-safe-apis]], Mutex.
 
 ### Tie-break priority
 
@@ -1466,12 +1511,15 @@ See also: [[sector-solver]], Tile weight.
 ### WorkerThreadPool
 
 Godot's shared pool of background threads for running tasks off the main
-thread.
+thread. Every task must be waited on with `wait_for_task_completion`, or its
+resources are never freed.
 
-In this project: one task per sector, producing plain data that the main
-thread turns into nodes.
+In this project: `SectorJobs` runs one task per sector, producing plain data
+that the main thread turns into nodes, and waits on every task id once it
+has completed.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]].
+See also: [[sector-jobs]], [[godot-docs-workerthreadpool]],
+[[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], Sector job.
 
 ### Worktree
 
