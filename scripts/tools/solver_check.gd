@@ -14,9 +14,10 @@ extends SceneTree
 ## fail fast with a clear error, in `SectorDomains` (two records, a bad
 ## orientation, a record outside the grid, face-neighbour records with no
 ## allowed pair) and in the solver (records whose propagation empties a cell
-## between them). Consistent records on an 8³ stratum grid hold in every
-## solved result over seeds 0 to 9, and fixed faces restrict the boundary
-## cells. Last, `REAL_SECTORS` real stratum sectors at seed 0 run through the
+## between them). Consistent records on an 8³ stratum grid, with headroom
+## above the walk, hold in every solved result over seeds 0 to 9, the
+## placeholder's headroom tiles are air and the wall doorway, and fixed faces
+## restrict the boundary cells. Last, `REAL_SECTORS` real stratum sectors at seed 0 run through the
 ## whole pipeline; every solved one must keep its records and adjacencies, and
 ## the solved, degraded and inconsistent counts and mean attempts are printed.
 ## Run headless with `mise run solver-check`; pass `--update` to rewrite the
@@ -210,15 +211,26 @@ func _check_inconsistent(library: TileLibrary) -> void:
 
 
 ## A floor walk, a stair run climbing +x and a portal opening on the +x face,
-## consistent on the placeholder tileset, hold in every solved 8³ result.
+## with the headroom the rasteriser gives them (one cell over floor and
+## portal, two over a stair), consistent on the placeholder tileset, hold in
+## every solved 8³ result.
 func _check_consistent(library: TileLibrary) -> void:
 	var family := EdgeRasteriser.TileFamily
+	var headroom := PackedStringArray()
+	for tile in library.tiles:
+		if tile.headroom:
+			headroom.append(tile.label())
+	_expect(headroom == PackedStringArray(["air@0", "wall_doorway@0", "wall_doorway@1"]), "consistent: the headroom tiles are air and the wall doorway: %s" % ", ".join(headroom))
 	var records: Array[EdgeRasteriser.Record] = []
 	for x in range(1, 4):
 		records.append(_record(Vector3i(x, 2, 4), family.FLOOR, 0))
+		records.append(_record(Vector3i(x, 3, 4), family.HEADROOM, 0))
 	for k in 3:
 		records.append(_record(Vector3i(4 + k, 2 + k, 4), family.STAIR, 0))
+		records.append(_record(Vector3i(4 + k, 3 + k, 4), family.HEADROOM, 0))
+		records.append(_record(Vector3i(4 + k, 4 + k, 4), family.HEADROOM, 0))
 	records.append(_record(Vector3i(7, 5, 4), family.PORTAL_OPENING, 0))
+	records.append(_record(Vector3i(7, 6, 4), family.HEADROOM, 0))
 	var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, records)
 	_expect(built.error.is_empty(), "consistent: records build%s" % ("" if built.error.is_empty() else " (%s)" % built.error))
 	if not built.error.is_empty():

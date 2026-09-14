@@ -80,7 +80,7 @@ func _check_sockets() -> void:
 
 func _check_families() -> void:
 	var families: Array[int] = [TilePrototype.FAMILY_NONE]
-	for family in EdgeRasteriser.TileFamily.size():
+	for family in EdgeRasteriser.PROTOTYPE_FAMILIES:
 		families.append(family)
 	for family in families:
 		var prototype := TilePrototype.new()
@@ -90,7 +90,8 @@ func _check_families() -> void:
 		var errors := prototype.validate()
 		if not errors.is_empty():
 			_fail("a prototype of family %d does not validate: %s" % [family, errors])
-	for family in [TilePrototype.FAMILY_NONE - 1, EdgeRasteriser.TileFamily.size()]:
+	# HEADROOM, the first value past the tile families, belongs to no prototype.
+	for family in [TilePrototype.FAMILY_NONE - 1, EdgeRasteriser.PROTOTYPE_FAMILIES]:
 		var prototype := TilePrototype.new()
 		prototype.name = "tile"
 		prototype.family = family
@@ -128,7 +129,7 @@ func _check_fixture() -> void:
 		_fail("%s: wall sockets parsed wrong" % FIXTURE)
 	var missing := tileset.missing_families()
 	var expected: Array[int] = []
-	for family in EdgeRasteriser.TileFamily.size():
+	for family in EdgeRasteriser.PROTOTYPE_FAMILIES:
 		if family != EdgeRasteriser.TileFamily.FLOOR:
 			expected.append(family)
 	if missing != expected or tileset.validate(true).size() != expected.size():

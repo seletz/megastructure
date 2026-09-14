@@ -116,7 +116,7 @@ match result.outcome:
 | `record_cells` | Cell index of every record, ascending. |
 | `error` | The first record, pair or face that cannot hold, or "". |
 | `apply_faces(library, size, domains, faces)` (static) | ANDs fixed faces into existing words; returns an error or "". |
-| `tile_matches(tile, family, orientation)` (static) | Whether a tile may stand in a record's cell: same family, and for a stair or side portal opening the matching rotation. |
+| `tile_matches(tile, family, orientation)` (static) | Whether a tile may stand in a record's cell: same family, and for a stair or side portal opening the matching rotation; for `HEADROOM` any tile whose `headroom` is set. |
 | `family_mask(library, family, orientation)` (static) | The tiles `tile_matches` accepts, as words. |
 | `orientation_error(family, orientation)` (static) | Why an orientation does not suit a family, or "". |
 | `SUPPORT_RADIUS`, `AUTHORED_YAW` | 1; stair 0 and portal opening 3. |

@@ -73,7 +73,8 @@ class Socket:
 @export var mesh: Mesh
 ## How strongly the solver prefers the tile; greater than 0.
 @export_range(0.001, 100.0, 0.001, "or_greater") var weight := 1.0
-## `EdgeRasteriser.TileFamily` the tile belongs to, or FAMILY_NONE.
+## `EdgeRasteriser.TileFamily` the tile belongs to, or FAMILY_NONE. Never
+## HEADROOM: headroom records ask for tiles by geometry, not family.
 @export var family := FAMILY_NONE
 ## Socket strings in face order +x, -x, +y, -y, +z, -z.
 @export var sockets := PackedStringArray(["0s", "0s", "0i", "0i", "0s", "0s"])
@@ -87,7 +88,7 @@ class Socket:
 func _validate_property(property: Dictionary) -> void:
 	if property.name == "family":
 		var names := PackedStringArray(["None:%d" % FAMILY_NONE])
-		for i in EdgeRasteriser.FAMILY_NAMES.size():
+		for i in EdgeRasteriser.PROTOTYPE_FAMILIES:
 			names.append("%s:%d" % [EdgeRasteriser.FAMILY_NAMES[i].capitalize(), i])
 		property.hint = PROPERTY_HINT_ENUM
 		property.hint_string = ",".join(names)
@@ -149,7 +150,7 @@ func validate() -> Array[String]:
 		errors.append("%s: empty name" % label)
 	if weight <= 0.0:
 		errors.append("%s: weight %s is not greater than 0" % [label, weight])
-	if family != FAMILY_NONE and (family < 0 or family >= EdgeRasteriser.TileFamily.size()):
+	if family != FAMILY_NONE and (family < 0 or family >= EdgeRasteriser.PROTOTYPE_FAMILIES):
 		errors.append("%s: family %d is not FAMILY_NONE or an EdgeRasteriser.TileFamily" % [label, family])
 	if rotations not in ROTATION_COUNTS:
 		errors.append("%s: rotations %d is not 1, 2 or 4" % [label, rotations])

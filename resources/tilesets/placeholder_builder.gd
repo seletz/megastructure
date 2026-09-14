@@ -143,11 +143,12 @@ static func build() -> TileSet3D:
 		_prototype("stair_open", _mesh(_open_stair_boxes()), 0.5, FAMILY.STAIR, ["0s", "0s", "0i", "0i", "0s", "0s"], 4),
 		_prototype("catwalk_end", _mesh(_catwalk_end_boxes(1.0)), 0.25, FAMILY.CATWALK, ["4", "0s", "0i", "0i", "1s", "0s"], 4),
 		_prototype("catwalk_end_f", _mesh(_catwalk_end_boxes(-1.0)), 0.25, FAMILY.CATWALK, ["0s", "4f", "0i", "0i", "1s", "0s"], 4),
+		# No lintel: over the 0.6 m slab one cell leaves 1.4 m, so the frame is
+		# open at the top and the headroom above it keeps the passage (#173).
 		_prototype("portal_frame", _mesh([
 			slab,
 			_box(Vector3(-H, SLAB_TOP, -WALL_HALF), Vector3(-H + JAMB, H, WALL_HALF)),
 			_box(Vector3(H - JAMB, SLAB_TOP, -WALL_HALF), Vector3(H, H, WALL_HALF)),
-			_box(Vector3(-H + JAMB, LINTEL_BOTTOM, -WALL_HALF), Vector3(H - JAMB, H, WALL_HALF)),
 		]), 0.5, FAMILY.PORTAL_OPENING, ["0s", "0s", "0i", "0i", "0s", "0s"], 2),
 	]
 	return tileset

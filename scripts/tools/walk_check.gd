@@ -3,7 +3,7 @@ extends SceneTree
 ## once as a `SectorMultiMesh` and once as a `SectorGridMap`, and fails when it
 ## falls, gets stuck or ends away from the goal.
 ##
-## Two routes:
+## Three modes:
 ##
 ## - The course (default): a 24³ grid of placeholder tiles laid by hand the
 ##   way the edge rasteriser lays a walk: a floor run, a three-stair flight up
@@ -16,6 +16,12 @@ extends SceneTree
 ##   route runs from the portal of the first kept horizontal edge (edge_ref
 ##   order) back along its records to the hub, then along the last such
 ##   edge's records to its portal.
+## - `--all-solving` (`--seed N`): every stratum sector within
+##   `ALL_SOLVING_RADIUS` sectors (Chebyshev) of the origin with two kept
+##   horizontal portals and records that build domains is solved on the
+##   `WorkerThreadPool`; each one that solves is walked the same way, one
+##   after the other. Prints a line per sector and how many walk portal to
+##   portal on every placement; fails when any solving sector does not.
 ##
 ## `--placement multimesh` or `--placement gridmap` walks only that
 ## placement; by default both walk, MultiMesh first, each in a fresh tree.
@@ -31,9 +37,9 @@ extends SceneTree
 ## tile, frames per cell, steps climbed and the final distance, and on a
 ## failure the tiles around the feet.
 ##
-##     godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- [--sector x,y,z] [--seed N] [--placement multimesh|gridmap]
+##     godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- [--sector x,y,z | --all-solving] [--seed N] [--placement multimesh|gridmap]
 ##
-## Run with `mise run walk-check [--sector x,y,z] [--seed N] [--placement P]`.
+## Run with `mise run walk-check [--sector x,y,z | --all-solving] [--seed N] [--placement P]`.
 
 const TILESET := "res://resources/tilesets/placeholder.tres"
 const REACHED := 0.3
@@ -45,6 +51,8 @@ const SETTLE_FRAMES := 30
 const SLAB_TOP := 0.6
 const CELLS := 24
 const PLACEMENTS: Array[String] = ["multimesh", "gridmap"]
+## Chebyshev radius in sectors of the block `--all-solving` searches.
+const ALL_SOLVING_RADIUS := 3
 
 var _failures := 0
 var _library: TileLibrary
@@ -57,6 +65,7 @@ func _initialize() -> void:
 func _run() -> void:
 	var sector := Vector3i.ZERO
 	var real := false
+	var all_solving := false
 	var seed := 0
 	var placements := PLACEMENTS.duplicate()
 	var args := OS.get_cmdline_user_args()
@@ -76,13 +85,22 @@ func _run() -> void:
 			placements = [args[i + 1]]
 			i += 2
 			continue
-		printerr("walk check: unexpected argument '%s'; usage: [--sector x,y,z] [--seed N] [--placement multimesh|gridmap]" % args[i])
+		if args[i] == "--all-solving":
+			all_solving = true
+			i += 1
+			continue
+		printerr("walk check: unexpected argument '%s'; usage: [--sector x,y,z | --all-solving] [--seed N] [--placement multimesh|gridmap]" % args[i])
 		quit(1)
 		return
 	_library = TileLibrary.build(load(TILESET) as TileSet3D)
 	if not _library.errors.is_empty():
 		_fail("%s: %s" % [TILESET, _library.errors])
 		quit(1)
+		return
+
+	if all_solving:
+		await _walk_all_solving(seed, placements)
+		_finish()
 		return
 
 	var cells := PackedInt32Array()
@@ -111,7 +129,13 @@ func _run() -> void:
 
 	for cell in route:
 		print("  route %s %s" % [cell, _tile_at(cells, cell).label()])
-	for placement in placements:
+	await _walk_placements(route, cells, sector, placements)
+	_finish()
+
+
+## Places `cells` once per placement, walks `route` through it and frees it.
+func _walk_placements(route: Array[Vector3i], cells: PackedInt32Array, sector: Vector3i, placements: Array) -> void:
+	for placement: String in placements:
 		var failures := _failures
 		var node: Node3D
 		if placement == "gridmap":
@@ -133,7 +157,56 @@ func _run() -> void:
 		print("  %s walk: %s" % [placement, "ok" if _failures == failures else "failed"])
 		node.queue_free()
 		await physics_frame
-	_finish()
+
+
+## Solves every candidate sector around the origin on the WorkerThreadPool
+## and walks each one that solves.
+func _walk_all_solving(seed: int, placements: Array) -> void:
+	var grammar := SectorGrammar.new()
+	var rasteriser := EdgeRasteriser.new(WalkableGraph.new(seed, Skeleton.new(grammar)))
+	var graph := rasteriser.graph
+	var sectors: Array[Vector3i] = []
+	var routes: Array = []
+	var r := ALL_SOLVING_RADIUS
+	for z in range(-r, r + 1):
+		for y in range(-r, r + 1):
+			for x in range(-r, r + 1):
+				var sector := Vector3i(x, y, z)
+				if graph.skeleton.sector_type(seed, sector) != Skeleton.SectorType.STRATUM:
+					continue
+				var route := _portal_route(rasteriser.rasterise(sector))
+				if route.size() < 2 or not SectorDomains.for_sector(_library, rasteriser, sector).error.is_empty():
+					continue
+				sectors.append(sector)
+				routes.append(route)
+	print("walk check: seed %d, %d stratum sectors within %d of the origin with two kept horizontal portals and records that build" % [seed, sectors.size(), r])
+	var results: Array[Dictionary] = []
+	results.resize(sectors.size())
+	var solve := func(k: int) -> void:
+		results[k] = SectorJobs.solve_sector(_library, grammar, seed, sectors[k])
+	var task := WorkerThreadPool.add_group_task(solve, sectors.size())
+	while not WorkerThreadPool.is_group_task_completed(task):
+		await process_frame
+	WorkerThreadPool.wait_for_group_task_completion(task)
+
+	var solving := 0
+	var walked := 0
+	for k in sectors.size():
+		var result := results[k]
+		if result.outcome != SectorSolver.Outcome.SOLVED:
+			print("  %s %s in %d attempt(s), not walked" % [sectors[k], SectorSolver.OUTCOME_NAMES[result.outcome], result.attempts])
+			continue
+		solving += 1
+		var route: Array[Vector3i] = []
+		route.assign(routes[k])
+		print("  %s solved in %d attempt(s), walking %d cells from %s to %s" % [sectors[k], result.attempts, route.size(), route[0], route[-1]])
+		var before := _failures
+		await _walk_placements(route, result.cells, sectors[k], placements)
+		if _failures == before:
+			walked += 1
+	print("walk check: %d of %d solving sectors walk portal to portal" % [walked, solving])
+	if solving == 0:
+		_fail("no candidate sector solves at seed %d" % seed)
 
 
 func _walk(route: Array[Vector3i], cells: PackedInt32Array, sector: Vector3i) -> void:

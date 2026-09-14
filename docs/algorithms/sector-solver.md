@@ -39,7 +39,7 @@ sources:
 > placeholder tileset an 8³ grid takes about 19 ms and a 24³ attempt about
 > 0.63 s in typed GDScript; every unconstrained 24³ sector of seeds 0 to 19
 > solves within 2 attempts, and every real stratum sector sampled reaches an
-> attempt, 18 of the 20 at seed 0 solving (#161).
+> attempt, 17 of the 20 at seed 0 solving with headroom records (#173).
 
 This is milestone 0.2.0 items D1 (the core) and D2 (pre-collapse and the
 restart policy) of [[RESEARCH_WFC]] section 7, following sections 3 and 4 of
@@ -102,6 +102,15 @@ turns one sector's inputs into the `domains` words:
    (authored yaw 3), so on a side face its rotation is `yaw + 1` modulo its
    2 rotations. Floor, bridge, catwalk, ladder and tunnel records, and portal
    openings in the floor or ceiling, take every rotation of their family.
+   A headroom record ([[edge-rasteriser#8. Headroom records]]) takes every
+   tile, of any family, whose `TileLibrary.Tile.headroom` is set: no mesh,
+   or a mesh whose bounds start at least `HEADROOM_CLEAR` = 1.8 m above
+   the cell bottom. A floor record then drops every tile that blocks a side
+   face (`TileLibrary.Tile.blocked_faces`: a parapet in the walker's strip
+   to that face) towards a record a walker steps to: any record but headroom
+   in the face neighbour, or a stair under it climbing into the floor
+   (#173). Floor records are unoriented, so this is how a parapet ends up
+   beside a walk and not across it.
 3. **Record pairs.** For every two records that are face neighbours, some
    tile of the first must allow some tile of the second in that direction
    (the byte union of step 6 below, done once per pair). Otherwise the
@@ -232,7 +241,15 @@ portal opening on the +x face has yaw 0: `(r − (0 − 3)) mod 2 = (r + 3) mod
 2 = 0` holds for `r = 1`, so it matches `portal_opening@1` and
 `portal_frame@1`, bits 29 and 52, with their passage along x. On the −z
 face (yaw 1) it matches bits 28 and 51. A floor record matches bits 2 to 6
-and 30 to 38: floor, open floor and every slab edge and slab edge end.
+and 30 to 38: floor, open floor and every slab edge and slab edge end. A
+headroom record matches bits 0, 10 and 11: air and both rotations of the
+wall doorway, whose lintel starts 1.8 m up.
+
+**Floor faces a walk crosses.** A floor record at (5, 3, 5) with a floor
+record at (5, 3, 6) drops every tile whose `blocked_faces` has `+z` (bit 4):
+`slab_edge@0`, `slab_edge_end@0` and `slab_edge_end_f@0`, bits 3, 31 and 35,
+whose parapet runs along `+z`. Floor and open floor block no face, so the
+mask is never empty.
 
 **Record pair.** A bridge at (2, 2, 2) under a tunnel at (2, 3, 2): the
 bridge tiles' `+y` sockets are `0i`, so their union in `+y` holds only
@@ -344,6 +361,7 @@ With restarts (default 8 attempts, MRV):
 | 8³ unconstrained, 53 tiles, seeds 0–19 | 20 | 0 | 0 | all at the first |
 | 24³ unconstrained, 53 tiles, seeds 0–19 | 20 | 0 | 0 | 16 × 1, 4 × 2; mean 1.2 |
 | 20 real stratum sectors with records, 53 tiles, seed 0 | 18 | 2 | 0 | mean 3.10 over the 20 searched |
+| the same with headroom and walkable floor faces (#173) | 17 | 3 | 0 | mean 3.25 over the 20 searched |
 
 **Real sectors (#161).** On the 30-tile set, 14 of the 20 real sectors of
 seed 0, and 71 of the 100 of seeds 0 to 4, failed before an attempt. `mise
@@ -354,7 +372,7 @@ or a minimal record set whose propagation empties a cell:
 | --- | ---: | ---: | --- |
 | Two side portal openings, or a portal and a floor, in crossing wall planes: a portal opening pulls a wall stack to the grid top and wall ends along the face to the grid edge | 9 | 39 | `portal_frame` |
 | A floor or stair beside a portal opening's wall side (the walk reaches the portal along the face) | 3 | 15 | `portal_frame` |
-| A floor directly over or under a stair cell, or beside a stair's high end, which is the cell under the next step | 1 | 8 | headroom rule in the rasteriser |
+| A floor directly over or under a stair cell, or beside a stair's high end, which is the cell under the next step | 1 | 8 | stair rule in the rasteriser |
 | A floor or stair above an open-topped record in its column: rock only rests on rock, so every floor and stair needs rock down to the grid bottom | 1 | 9 | `floor_open`, `stair_open` |
 
 With the portal frame and a soffit tile alone, 16 of the 100 still failed:
@@ -368,6 +386,23 @@ solved at seed 0, and adding end pieces for parapets and catwalks raised
 the single-attempt success from 12 % to 56 %
 ([[socket-adjacency#Worked example: the placeholder tileset]]). Over seeds 0
 to 4, 18, 19, 19, 20 and 19 of the 20 sectors solve; the rest degrade.
+
+**Headroom and walkable floors (#173).** `mise run solver-real` over seeds
+0 to 4, 20 sectors each, every sector reaching an attempt in every run:
+
+| Records and domains | Solved | At the first attempt | Mean attempts |
+| --- | ---: | ---: | ---: |
+| before #173 | 95 | 58 | 2.15 |
+| headroom records only | 97 | 55 | – |
+| headroom, door cells, walkable routings first, floor faces (this) | 90 | 37 | 2.97 |
+| the same without the floor face filter | 97 | 56 | – |
+| floor faces free of parapets entirely, no headroom | 77 | 41 | – |
+
+Headroom does not cost solves: air above a walk is easy to tile. What does
+is keeping parapets off the faces a walk crosses, since a parapet line
+along a walk has to run on and end with end pieces. It is also what makes
+the sectors walkable: `mise run walk-check --all-solving` at seed 0 walks
+66 of 66 solving sectors with it and 37 of 78 without ([[placement]]).
 Solid, shaft, cavity and chasm sectors are not sampled yet. `mise run
 solver-check` prints the seed 0 table and checks that seeds 1 to 4 reach an
 attempt; `mise run solver-sector <x> <y> <z>` reproduces one sector.
