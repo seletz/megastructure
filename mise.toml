@@ -90,8 +90,8 @@ run = "godot --headless --path . --script res://scripts/tools/graph_check.gd"
 
 [tasks.graph-connectivity]
 depends = ["import"]
-description = "Check the walkable graph edges for seeds 0..9 over a 15^3 sample: kinds, portals, determinism, edges_for_sector; fail unless every region-aligned 3^3 and 6^3 window has one non-solid component; report strict 5^3 windows, tunnel fraction and mean vertical run (headless)"
-run = "godot --headless --path . --script res://scripts/tools/graph_connectivity_check.gd"
+description = "Check the walkable graph edges for every boundary scheme and tunnel weight variant, seeds 0..9, over a random 15^3 sample and one centred on a chasm wall: kinds, portals, determinism, edges_for_sector; fail unless every region-aligned 3^3 and 6^3 window has one non-solid component; report tunnel fraction, tunnels with a chasm or cavity end, strict 5^3 windows and mean vertical run per variant. Pass --variants=per_face,void_walls_last to run only some (headless)"
+run = "godot --headless --path . --script res://scripts/tools/graph_connectivity_check.gd --"
 
 [tasks.raster-check]
 depends = ["import"]
