@@ -275,14 +275,29 @@ depends = ["import"]
 description = "Check SectorGridMap: the GridMap orientation index of each yaw quarter turn, an asymmetric mesh placed at each whose geometry and collision end up in the hand-computed corner, the placeholder MeshLibrary (one item and trimesh shape per prototype with a mesh) and each placed stair rotation high on the face TileLibrary gives its rock socket (headless)"
 run = "godot --headless --path . --script res://scripts/tools/gridmap_check.gd"
 
+[tasks.walk-check]
+depends = ["import"]
+description = "Walk the Player capsule through a SectorGridMap with move_and_slide, one physics step per frame, and fail when it falls below the floor, gets stuck or ends over 1 m from the goal. Default: a hand-laid course of placeholder tiles (floor, a flight up onto a landing, a turn, a flight down). --sector x,y,z [--seed N] solves a real sector and walks from one portal to another along the edge rasteriser's records (headless)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+[[ -n "${usage_sector:-}" ]] && args+=(--sector "${usage_sector}" --seed "${usage_seed:-0}")
+godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--sector <x,y,z>" help="Walk this real sector portal to portal instead of the hand-laid course, e.g. -1,1,-1"
+flag "--seed <n>" default="0" help="World seed and solve seed of --sector"
+'''
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "The pull request tier (under 2 minutes): import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check, with graph-connectivity, raster-check, tiles-check-placeholder, solver-check, boundary-check on their --quick sample, then jobs-check --quick alone (it times the main thread), and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity --quick", "raster-check --quick", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder --quick", "solver-check --quick", "boundary-check --quick", "gridmap-check"]
+description = "The pull request tier (under 2 minutes): import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check (GridMap placement and the capsule walk course included), with graph-connectivity, raster-check, tiles-check-placeholder, solver-check, boundary-check on their --quick sample, then jobs-check --quick alone (it times the main thread), and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity --quick", "raster-check --quick", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder --quick", "solver-check --quick", "boundary-check --quick", "gridmap-check", "walk-check"]
 # jobs-check times the main thread, so it runs alone after the parallel tasks.
 run = [
 	"mise run --skip-deps jobs-check --quick",
@@ -291,7 +306,7 @@ run = [
 
 [tasks.check-full]
 description = "The full tier, run by CI on pushes to develop and nightly: the tasks of mise run check with every statistical task at full size, then jobs-check alone, and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check", "boundary-check", "gridmap-check"]
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check", "boundary-check", "gridmap-check", "walk-check"]
 # jobs-check times the main thread, so it runs alone after the parallel tasks.
 run = [
 	"mise run --skip-deps jobs-check",
