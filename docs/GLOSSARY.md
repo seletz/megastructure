@@ -365,6 +365,16 @@ normal.
 In this project: `hit_epsilon` and `normal_epsilon` in
 [raymarch_world.gdshader](../shaders/raymarch_world.gdshader).
 
+### Exclusion list
+
+A list on a tile prototype naming tiles that may never sit next to it, even
+when their sockets match. A last resort for pairs that fit but look wrong.
+
+In this project: `TilePrototype.exclusions`, prototype names that apply in
+every direction; usually empty.
+
+See also: [[socket-adjacency]], [[tileset]].
+
 ### Exposure
 
 A brightness multiplier applied before tone mapping, like a camera's exposure
@@ -427,6 +437,16 @@ One of Godot 4's renderers, needed for volumetric fog and SDFGI.
 In this project: the renderer the project uses.
 
 See also: [[MEGASTRUCTURE_CONCEPT]].
+
+### Free tile
+
+A tile that belongs to no tile family, so no walkable graph record ever asks
+for it; the solver places it only where sockets allow. Solid, air and walls
+are free tiles.
+
+In this project: a `TilePrototype` whose `family` is `FAMILY_NONE`.
+
+See also: [[tileset]], Tile family.
 
 ### Free-fly camera
 
@@ -806,9 +826,10 @@ See also: [[RESEARCH_WFC]], AC-3.
 
 In this project, one of the two HTML pages (`megastructure.html` interior,
 `megastructure-chasm.html` exterior) that define the look. In the tileset
-sense, a hand-authored tile before its rotations are generated.
+sense, a hand-authored tile before its rotations are generated
+(`TilePrototype`).
 
-See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]].
+See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], [[tileset]].
 
 ## R
 
@@ -864,6 +885,15 @@ Generating the rotated copies of each hand-authored tile automatically,
 turning its sockets along with it.
 
 See also: [[RESEARCH_WFC]], Symmetry tag.
+
+### Rotation index
+
+The suffix `_0` to `_3` of a vertical socket: how many quarter turns the
+profile on a top or bottom face is turned. A top face matches the bottom face
+above only at the same index; `i` instead marks a profile that looks the same
+at every turn.
+
+See also: [[socket-adjacency]], Symmetry tag.
 
 ## S
 
@@ -954,7 +984,21 @@ See also: [[MEGASTRUCTURE_CONCEPT]], Fill, Walkable graph.
 A label on each face of a tile. Two tiles may be neighbours when the sockets on
 their touching faces match, so no pair rules are written by hand.
 
-See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], Symmetry tag.
+In this project: stored per face in `TilePrototype.sockets`.
+
+See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], Symmetry tag, Socket
+string.
+
+### Socket string
+
+How one socket is written in a tile prototype: a decimal profile id with a
+suffix, `N`, `Ns` or `Nf` on side faces and `N_0` to `N_3` or `Ni` on top
+and bottom faces. Anything else fails validation.
+
+In this project: parsed by `TilePrototype.parse_socket`; the grammar is in
+[[socket-adjacency]].
+
+See also: [[tileset]], Symmetry tag, Rotation index.
 
 ### Soft shadow
 
@@ -1021,6 +1065,8 @@ See also: [[MEGASTRUCTURE_CONCEPT]], Restart.
 A marker on a socket saying whether its face profile is mirror-symmetric (`s`)
 or a flipped counterpart (`f`), plus a rotation index on vertical sockets.
 
+In this project: the suffix of a socket string, `3s`, `3f`, `5_2` or `5i`.
+
 See also: [[RESEARCH_WFC]], Socket.
 
 ## T
@@ -1061,11 +1107,12 @@ See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]].
 
 The complete collection of tiles, with their sockets, weights and rotations.
 
-In this project: planned as a Godot `Resource`, checked by a
-`tiles-check` mise task (validation of sockets, reachability and placement
-counts).
+In this project: `TileSet3D`, a Godot `Resource` holding `TilePrototype`s
+and the names of its solid and air tiles; `mise run tileset-check` checks
+the format, and a planned `tiles-check` task will check sockets,
+reachability and placement counts.
 
-See also: [[RESEARCH_WFC]].
+See also: [[RESEARCH_WFC]], [[tileset]].
 
 ### Tone mapping
 
