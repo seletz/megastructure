@@ -52,11 +52,18 @@ class Job:
 	var boundaries := false
 	## `SectorMultiMesh.prototype_faces`, or an empty Array for no placement.
 	var faces := []
+	var chunk_cells := 0
+	## Solved cells to build placement data from instead of solving, or empty.
+	var cells := PackedInt32Array()
 	var outbox: Outbox
 
 	## Runs on a worker thread.
 	func run() -> void:
-		var result := SectorJobs.solve_sector(library, grammar, seed, sector, boundaries, outbox.is_cancelled.bind(id), faces)
+		var result: Dictionary
+		if cells.is_empty():
+			result = SectorJobs.solve_sector(library, grammar, seed, sector, boundaries, outbox.is_cancelled.bind(id), faces, chunk_cells)
+		else:
+			result = SectorJobs.place_solved(library, sector, cells, faces, chunk_cells)
 		outbox.push(id, result)
 
 
@@ -118,6 +125,10 @@ var use_boundaries := false
 ## Tasks that solve also build `SectorMultiMesh` placement data into the
 ## result's `placement`; applies to tasks started from now on.
 var build_placement := false
+## With `build_placement`, placement data keeps its collision in blocks of
+## this many cells per edge (`SectorMultiMesh.build`), 0 merges it; applies to
+## tasks started from now on.
+var collision_chunk_cells := 0
 ## Most tasks running at once, cancelled ones included. The default is half
 ## the logical CPUs: with one task per logical CPU but one, polls on an
 ## 8-core, 16-thread CPU blocked up to 9 ms instead of under 1 ms at the same
@@ -182,8 +193,10 @@ func configure(tile_library: TileLibrary, seed := 0, grammar: SectorGrammar = nu
 
 
 ## Queues `sector`. Returns false when it is already queued or running (and
-## not cancelled) or when `configure` was never called.
-func request(sector: Vector3i) -> bool:
+## not cancelled) or when `configure` was never called. With `cells`, the
+## sector's solved cells from an earlier result, the task skips the solve and
+## only builds the placement data (`place_solved`).
+func request(sector: Vector3i, cells := PackedInt32Array()) -> bool:
 	if library == null or _grammar == null:
 		push_error("SectorJobs: request(%s) before configure()" % sector)
 		return false
@@ -193,6 +206,7 @@ func request(sector: Vector3i) -> bool:
 	job.id = _next_id
 	_next_id += 1
 	job.sector = sector
+	job.cells = cells
 	_pending.append(job)
 	_by_sector[sector] = job
 	return true
@@ -322,11 +336,14 @@ func wait_all() -> void:
 ## - `degraded` (bool): some or all cells are the solid fallback, not a solve.
 ## - `error` (String): why it failed, or "".
 ## - `cancelled` (bool).
+## - `cached` (bool): false here; true from `place_solved`.
 ## - `placement` (Dictionary): with `faces` (from
 ##   `SectorMultiMesh.prototype_faces`) and a SOLVED outcome,
 ##   `SectorMultiMesh.build` of the cells, built on this thread; else empty.
 ##   Its `build_usec` is not part of `time_usec`.
-static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed: int, sector: Vector3i, boundaries := false, cancelled := Callable(), faces := []) -> Dictionary:
+##
+## `chunk_cells` is passed to `SectorMultiMesh.build`.
+static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed: int, sector: Vector3i, boundaries := false, cancelled := Callable(), faces := [], chunk_cells := 0) -> Dictionary:
 	var started := Time.get_ticks_usec()
 	var result := {
 		"sector": sector,
@@ -337,6 +354,7 @@ static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed
 		"degraded": false,
 		"error": "",
 		"cancelled": false,
+		"cached": false,
 		"placement": {},
 	}
 	if cancelled.is_valid() and cancelled.call():
@@ -370,7 +388,28 @@ static func solve_sector(tile_library: TileLibrary, grammar: SectorGrammar, seed
 			result.error = solved.error
 	result.time_usec = Time.get_ticks_usec() - started
 	if not faces.is_empty() and result.outcome == SectorSolver.Outcome.SOLVED:
-		result.placement = SectorMultiMesh.build(tile_library, faces, result.cells)
+		result.placement = SectorMultiMesh.build(tile_library, faces, result.cells, chunk_cells)
+	return result
+
+
+## A result for `cells` already solved (a cache hit when streaming) without
+## running the pipeline: outcome SOLVED, `cached` true, and with `faces` the
+## placement data. Safe on any thread.
+static func place_solved(tile_library: TileLibrary, sector: Vector3i, cells: PackedInt32Array, faces := [], chunk_cells := 0) -> Dictionary:
+	var result := {
+		"sector": sector,
+		"outcome": SectorSolver.Outcome.SOLVED,
+		"cells": cells,
+		"attempts": 0,
+		"time_usec": 0,
+		"degraded": false,
+		"error": "",
+		"cancelled": false,
+		"cached": true,
+		"placement": {},
+	}
+	if not faces.is_empty():
+		result.placement = SectorMultiMesh.build(tile_library, faces, cells, chunk_cells)
 	return result
 
 
@@ -412,6 +451,7 @@ func _start_pending(poll_started: int) -> void:
 		job.seed = world_seed
 		job.boundaries = use_boundaries
 		job.faces = _faces if build_placement else []
+		job.chunk_cells = collision_chunk_cells
 		job.outbox = _outbox
 		job.task_id = WorkerThreadPool.add_task(job.run, high_priority, "SectorJobs %s" % job.sector)
 		tasks_started += 1

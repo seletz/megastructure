@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/world_walker.gd" id="1_walker"]
 [ext_resource type="Script" path="res://scripts/free_fly_camera.gd" id="2_camera"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/tweak_panel.tscn" id="5_tweak_panel"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="6_hud"]
 [ext_resource type="Resource" path="res://resources/tilesets/placeholder.tres" id="7_tileset"]
+[ext_resource type="Script" path="res://scripts/world/sector_streamer.gd" id="8_streamer"]
 
 [sub_resource type="Environment" id="Environment_dark"]
 background_mode = 1
@@ -35,7 +36,7 @@ script = ExtResource("1_walker")
 camera = NodePath("Camera")
 player = NodePath("Player")
 jobs = NodePath("SectorJobs")
-sectors = NodePath("Sectors")
+streamer = NodePath("Streamer")
 hud = NodePath("Hud")
 tileset = ExtResource("7_tileset")
 
@@ -61,7 +62,8 @@ light_energy = 0.35
 [node name="SectorJobs" type="Node" parent="."]
 script = ExtResource("4_jobs")
 
-[node name="Sectors" type="Node3D" parent="."]
+[node name="Streamer" type="Node3D" parent="."]
+script = ExtResource("8_streamer")
 
 [node name="Player" type="CharacterBody3D" parent="."]
 script = ExtResource("3_player")

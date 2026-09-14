@@ -99,6 +99,20 @@ walk-check` walks the capsule over stairs and landings, and `mise run
 walk-check --sector x,y,z` tries a real sector portal to portal. How it
 works is in [`docs/code/placement.md`](docs/code/placement.md).
 
+The world streams as you walk. Only the sectors within one sector of yours
+are loaded (up to three with `radius` in the Tab panel); a sector is freed
+once it is two away, so walking along a boundary does not load and free the
+same sectors again and again. Sectors you walked through are remembered,
+so walking back places them without solving. Each sector's collision is
+added in small pieces over several frames, those under your feet first, so
+the frame rate holds while the world loads; if you outrun the loading, the
+capsule waits at the edge. Translucent boxes in the skeleton viewer's
+colours stand in for the sectors just beyond. `mise run streaming-check`
+walks ten sectors and back and checks there is never a hole underfoot,
+memory returns to where it started and no frame takes over 33 ms; the
+details are in
+[`docs/algorithms/sector-streaming.md`](docs/algorithms/sector-streaming.md).
+
 ## Controls
 
 | Key              | Action                                               |
