@@ -25,12 +25,24 @@ extends RefCounted
 ## is read from byte-sliced tables, so it costs a few lookups per word
 ## whatever the domain size. An empty domain is a contradiction and ends the
 ## solve with `ok` false. Nothing is random but the hash, and no `Dictionary`
-## is iterated. Steps, a worked example, complexity and salts are in
+## is iterated.
+##
+## `solve` first ANDs the optional starting `domains` (from `SectorDomains`)
+## into the wave and propagates them; since that does not depend on the seed,
+## an empty domain there fails at once with `Outcome.FAILED`. Each attempt
+## then starts from that propagated wave with its own attempt seed; a
+## contradiction restarts with the next attempt, up to `max_attempts`, after
+## which the result is the all-solid degradation: every cell the solid tile,
+## `Outcome.DEGRADED`. Steps, a worked example, complexity and salts are in
 ## docs/algorithms/sector-solver.md.
 
 ## Base salt of the per-attempt seed drawn from the solve seed and the
-## sector; the attempt number (below 100) is added.
+## sector; the attempt number (below `ATTEMPT_LIMIT`) is added.
 const ATTEMPT_SALT := 9100
+## Default of `max_attempts`.
+const DEFAULT_MAX_ATTEMPTS := 8
+## Largest `max_attempts`: the attempt salts stay below `TIE_SALT`.
+const ATTEMPT_LIMIT := 100
 ## Salt of the per-cell tie-break priority.
 const TIE_SALT := 9200
 ## Base salt of the weighted tile choice; the observation counter is added.
@@ -46,24 +58,44 @@ const ENTROPY_SCALE := 16777216.0
 const SLICES := 8
 
 
+## How a solve ended.
+enum Outcome {
+	## An attempt filled every cell.
+	SOLVED,
+	## Every attempt hit a contradiction; every cell holds the solid tile.
+	DEGRADED,
+	## Invalid arguments or inconsistent starting domains; no cells.
+	FAILED,
+}
+
+const OUTCOME_NAMES: Array[String] = ["solved", "degraded", "failed"]
+
+
 ## Outcome of one solve.
 class Result:
 	extends RefCounted
-	## Whether every cell holds exactly one tile.
+	## Whether every cell holds exactly one tile: solved or degraded.
 	var ok := false
+	var outcome := Outcome.FAILED
+	## True when the cells are the all-solid degradation.
+	var degraded := false
 	## Tile index per cell, `x + size.x * (y + size.y * z)`; empty unless ok.
 	var cells := PackedInt32Array()
-	## Observations made (cells collapsed by a weighted draw).
-	var steps := 0
-	## Cells taken off the propagation queue.
-	var propagations := 0
-	## Restarts after a contradiction; always 0 until restarts exist.
+	## Attempts run, 1 to `max_attempts`; 0 when the starting domains failed.
+	var attempts := 0
+	## Attempts that ended in a contradiction and were restarted or degraded.
 	var restarts := 0
-	## Wall time of the solve in microseconds.
+	## Cells whose starting domain `domains` narrowed, ascending.
+	var precollapsed := PackedInt32Array()
+	## Observations made over all attempts (cells collapsed by a weighted draw).
+	var steps := 0
+	## Cells taken off the propagation queue over all attempts.
+	var propagations := 0
+	## Wall time of the solve in microseconds, all attempts included.
 	var time_usec := 0
-	## Cell whose domain became empty, or -1.
+	## Cell whose domain became empty in the last contradiction, or -1.
 	var contradiction_cell := -1
-	## Why the solve failed, empty when ok.
+	## Why the solve failed, empty unless the outcome is FAILED.
 	var error := ""
 
 
@@ -71,6 +103,8 @@ class Result:
 var size: Vector3i
 ## Choose cells by Shannon entropy of the tile weights instead of tile count.
 var use_entropy := false
+## Attempts before the all-solid degradation, clamped to 1..ATTEMPT_LIMIT.
+var max_attempts := DEFAULT_MAX_ATTEMPTS
 
 var _library: TileLibrary
 var _tile_count := 0
@@ -111,6 +145,10 @@ var _heap_pos := PackedInt32Array()
 ## False while the starting domains propagate, before the heap exists.
 var _heap_ready := false
 var _mask := PackedInt64Array()
+## Wave, counts and keys after the starting domains propagated.
+var _start_wave := PackedInt64Array()
+var _start_counts := PackedInt32Array()
+var _start_primary := PackedInt64Array()
 
 
 ## A solver for grids of `grid_size` cells over the tiles of `library`, which
@@ -127,51 +165,62 @@ func _init(library: TileLibrary, grid_size := Vector3i(24, 24, 24)) -> void:
 
 
 ## Fills the grid for `seed` and `sector`. `domains`, when not empty, holds
-## `cell_count * word_count` words ANDed into the starting wave (the entry
-## point for pre-collapsed cells and fixed faces); it is propagated before
-## the first observation.
+## `cell_count * word_count` words ANDed into the starting wave (pre-collapsed
+## cells and fixed faces, see `SectorDomains`); it is propagated once before
+## the first attempt, and a contradiction there fails without restarting.
+## Each attempt restarts from the propagated wave; after `max_attempts`
+## contradictions every cell becomes the solid tile.
 func solve(seed: int, sector: Vector3i, domains := PackedInt64Array()) -> Result:
 	var started := Time.get_ticks_usec()
 	var result := Result.new()
 	if _tile_count == 0 or not _library.errors.is_empty():
 		result.error = "tile library is empty or invalid"
-		return result
+		return _finish(result, started)
 	if size.x < 1 or size.y < 1 or size.z < 1:
 		result.error = "grid size %s is not positive" % size
-		return result
+		return _finish(result, started)
 	if not domains.is_empty() and domains.size() != _cell_count * _words:
 		result.error = "domains has %d words, expected %d" % [domains.size(), _cell_count * _words]
-		return result
+		return _finish(result, started)
 
-	var attempt_seed := Hash.hash3_u(seed, sector, ATTEMPT_SALT + result.restarts)
-	_reset(attempt_seed, domains)
+	_reset(domains)
 	if not domains.is_empty():
 		for cell in _cell_count:
+			if _counts[cell] < _tile_count:
+				result.precollapsed.append(cell)
 			if _counts[cell] == 0:
-				return _fail(result, cell, started)
+				return _inconsistent(result, cell, "starts empty", started)
 			if _counts[cell] < _tile_count:
 				_queued[cell] = 1
 				_stack.append(cell)
 		var bad := _propagate(result)
 		if bad >= 0:
-			return _fail(result, bad, started)
-	_build_heap()
+			return _inconsistent(result, bad, "is left empty by propagating them", started)
+	_start_wave = _wave.duplicate()
+	_start_counts = _counts.duplicate()
+	_start_primary = _primary.duplicate()
 
-	while _heap_size > 0:
-		var cell := _heap_cells[0]
-		_heap_remove(0)
-		_observe(cell, attempt_seed, result.steps)
-		result.steps += 1
-		_queued[cell] = 1
-		_stack.append(cell)
-		var bad := _propagate(result)
-		if bad >= 0:
-			return _fail(result, bad, started)
+	var attempts := clampi(max_attempts, 1, ATTEMPT_LIMIT)
+	for attempt in attempts:
+		result.attempts = attempt + 1
+		if attempt > 0:
+			_wave = _start_wave.duplicate()
+			_counts = _start_counts.duplicate()
+			_primary = _start_primary.duplicate()
+		var attempt_seed := Hash.hash3_u(seed, sector, ATTEMPT_SALT + attempt)
+		if _attempt(result, attempt_seed):
+			result.cells = _collapsed_cells()
+			result.ok = true
+			result.outcome = Outcome.SOLVED
+			return _finish(result, started)
+		result.restarts += 1
 
-	result.cells = _collapsed_cells()
+	result.cells.resize(_cell_count)
+	result.cells.fill(_library.solid_tile)
 	result.ok = true
-	result.time_usec = Time.get_ticks_usec() - started
-	return result
+	result.degraded = true
+	result.outcome = Outcome.DEGRADED
+	return _finish(result, started)
 
 
 func cell_count() -> int:
@@ -264,8 +313,8 @@ func _build_tables() -> void:
 						_union[(base + v) * _words + o] = _union[(base + rest) * _words + o] | allowed[dir][tile * _words + o]
 
 
-## The starting wave, counts, keys and priorities of one attempt.
-func _reset(attempt_seed: int, domains: PackedInt64Array) -> void:
+## The starting wave, counts and keys, before any propagation.
+func _reset(domains: PackedInt64Array) -> void:
 	_wave.resize(_cell_count * _words)
 	if _words == 1:
 		_wave.fill(_full[0])
@@ -284,8 +333,33 @@ func _reset(attempt_seed: int, domains: PackedInt64Array) -> void:
 	_stack.clear()
 	_heap_ready = false
 	for cell in _cell_count:
-		_priority[cell] = Hash.hash3_u(attempt_seed, position(cell), TIE_SALT)
 		_update_cell(cell)
+
+
+## One attempt from the propagated starting wave: priorities, heap, then
+## observe and propagate until every cell holds one tile (true) or a
+## contradiction (false, `contradiction_cell` set).
+func _attempt(result: Result, attempt_seed: int) -> bool:
+	_heap_ready = false
+	for cell in _cell_count:
+		_priority[cell] = Hash.hash3_u(attempt_seed, position(cell), TIE_SALT)
+	_build_heap()
+	var step := 0
+	while _heap_size > 0:
+		var cell := _heap_cells[0]
+		_heap_remove(0)
+		_observe(cell, attempt_seed, step)
+		step += 1
+		result.steps += 1
+		_queued[cell] = 1
+		_stack.append(cell)
+		var bad := _propagate(result)
+		if bad >= 0:
+			_queued.fill(0)
+			_stack.clear()
+			result.contradiction_cell = bad
+			return false
+	return true
 
 
 ## Recomputes the tile count and selection key of a cell from its words.
@@ -436,10 +510,14 @@ func _propagate(result: Result) -> int:
 	return -1
 
 
-func _fail(result: Result, cell: int, started: int) -> Result:
-	result.ok = false
+## Fails a solve whose starting domains cannot hold, whatever the seed.
+func _inconsistent(result: Result, cell: int, what: String, started: int) -> Result:
 	result.contradiction_cell = cell
-	result.error = "contradiction at cell %s" % position(cell)
+	result.error = "inconsistent starting domains: cell %s %s; the records or fixed faces contradict each other" % [position(cell), what]
+	return _finish(result, started)
+
+
+func _finish(result: Result, started: int) -> Result:
 	result.time_usec = Time.get_ticks_usec() - started
 	return result
 

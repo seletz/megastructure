@@ -1,0 +1,266 @@
+class_name SectorDomains
+extends RefCounted
+## The starting domains of one sector solve: turns `EdgeRasteriser` records,
+## the sector type and optional fixed boundary faces into the `domains` words
+## `SectorSolver.solve` takes.
+##
+##     var library := TileLibrary.build(load("res://resources/tilesets/placeholder.tres"))
+##     var rasteriser := EdgeRasteriser.new(WalkableGraph.new(seed))
+##     var built := SectorDomains.for_sector(library, rasteriser, sector)
+##     if built.error.is_empty():
+##         var result := SectorSolver.new(library).solve(seed, sector, built.words)
+##
+## Each record restricts its cell to the tiles whose prototype family is the
+## record's family and whose rotation matches its orientation
+## (`tile_matches`): a stair's rotation is the yaw of the way up, a portal
+## opening on a side face is turned so its passage points out of the sector,
+## every other family (and a portal opening in the floor or ceiling) takes any
+## rotation. Cells without a record take the sector type's default: free in a
+## stratum, solid only in a solid sector, air only in a shaft, cavity or chasm,
+## except in the support columns, the full-height columns within
+## `support_radius` (Chebyshev, in x and z) of a record's column, which stay
+## free so stairs, ladders and catwalks can find rock and headroom. A fixed
+## face lists, per boundary cell, the tile of the neighbour sector across the
+## face or -1; the boundary cell keeps only the tiles allowed next to it.
+## Records that cannot hold (outside the grid, two at one cell, an orientation
+## the family does not take, no tile of the family, two face-neighbour records
+## with no allowed tile pair, nothing left next to a fixed face tile) set
+## `error` instead. Steps and a worked example are in
+## docs/algorithms/sector-solver.md.
+
+## Columns within this Chebyshev distance of a record's column stay free in
+## solid and void sectors.
+const SUPPORT_RADIUS := 1
+## Grid step of each face index, +x, -x, +y, -y, +z, -z.
+const STEPS: Array[Vector3i] = [
+	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
+	Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
+]
+## Yaw of the forward direction of a prototype at rotation 0, per family
+## whose rotation follows the record's orientation: a stair climbs towards
+## +x (yaw 0), a portal opening's passage runs along z (yaw 3).
+const AUTHORED_YAW := {
+	EdgeRasteriser.TileFamily.STAIR: 0,
+	EdgeRasteriser.TileFamily.PORTAL_OPENING: 3,
+}
+
+## `cell_count * word_count` words, bit t of a cell's words set while tile t
+## may start there; empty when `error` is set.
+var words := PackedInt64Array()
+## Cell index of every record, ascending.
+var record_cells := PackedInt32Array()
+## Why the domains could not be built, empty when they could.
+var error := ""
+
+
+## The domains of a real sector: its type from the graph's skeleton and its
+## records from the rasteriser, on a 24³ grid (the graph's cells per sector).
+static func for_sector(library: TileLibrary, rasteriser: EdgeRasteriser, sector: Vector3i, faces: Array[PackedInt32Array] = [], support_radius := SUPPORT_RADIUS) -> SectorDomains:
+	var graph := rasteriser.graph
+	var n := graph.cells_per_sector()
+	var type := graph.skeleton.sector_type(graph.world_seed, sector)
+	return build(library, Vector3i(n, n, n), type, rasteriser.records_for_sector(sector), faces, support_radius)
+
+
+## The domains of a grid of `size` cells of sector type `type` holding
+## `records`. `faces` is empty (every face free) or six arrays in face order
+## +x, -x, +y, -y, +z, -z, each empty (free) or one entry per boundary cell,
+## indexed `u + size_u * v` with u and v the two other axes in xyz order: the
+## tile index of the neighbour cell across the face, or -1 for free.
+static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorType, records: Array[EdgeRasteriser.Record], faces: Array[PackedInt32Array] = [], support_radius := SUPPORT_RADIUS) -> SectorDomains:
+	var built := SectorDomains.new()
+	var tile_count := library.tile_count()
+	if tile_count == 0 or not library.errors.is_empty():
+		built.error = "tile library is empty or invalid"
+		return built
+	var word_count := library.word_count
+	var cell_count := size.x * size.y * size.z
+
+	var full := PackedInt64Array()
+	full.resize(word_count)
+	full.fill(0)
+	for tile in tile_count:
+		full[tile >> 6] |= 1 << (tile & 63)
+	var fill := full
+	if type != Skeleton.SectorType.STRATUM:
+		var only := library.solid_tile if type == Skeleton.SectorType.SOLID else library.air_tile
+		fill = _single(word_count, only)
+
+	# Records and their masks by cell, and the support columns.
+	var by_cell := {}
+	var masks := {}
+	var support := PackedByteArray()
+	support.resize(size.x * size.z)
+	support.fill(0)
+	for record in records:
+		var cell := record.cell
+		if cell.x < 0 or cell.y < 0 or cell.z < 0 or cell.x >= size.x or cell.y >= size.y or cell.z >= size.z:
+			built.error = "%s: cell outside the %s grid" % [record, size]
+			return built
+		if masks.has(cell):
+			built.error = "%s: a second record at the same cell" % record
+			return built
+		var problem := orientation_error(record.family, record.orientation)
+		if not problem.is_empty():
+			built.error = "%s: %s" % [record, problem]
+			return built
+		var mask := family_mask(library, record.family, record.orientation)
+		if _is_empty(mask):
+			built.error = "%s: no tile of the library matches the family and orientation" % record
+			return built
+		masks[cell] = mask
+		by_cell[cell] = record
+		for dz in range(-support_radius, support_radius + 1):
+			for dx in range(-support_radius, support_radius + 1):
+				var x := cell.x + dx
+				var z := cell.z + dz
+				if x >= 0 and z >= 0 and x < size.x and z < size.z:
+					support[x + size.x * z] = 1
+
+	# Face-neighbour records must admit at least one allowed tile pair.
+	for record in records:
+		for dir in TilePrototype.FACE_COUNT:
+			var next: Vector3i = record.cell + STEPS[dir]
+			var other: EdgeRasteriser.Record = by_cell.get(next)
+			if other == null or not _before(record.cell, next):
+				continue
+			if not _any_allowed(library, dir, masks[record.cell], masks[next]):
+				built.error = "%s and %s cannot touch across %s: no tile of the first allows a tile of the second there" % [record, other, TilePrototype.FACE_NAMES[dir]]
+				return built
+
+	built.words.resize(cell_count * word_count)
+	for z in size.z:
+		for y in size.y:
+			for x in size.x:
+				var cell := x + size.x * (y + size.y * z)
+				var position := Vector3i(x, y, z)
+				var domain: PackedInt64Array = fill
+				if masks.has(position):
+					domain = masks[position]
+					built.record_cells.append(cell)
+				elif support[x + size.x * z] == 1:
+					domain = full
+				for w in word_count:
+					built.words[cell * word_count + w] = domain[w]
+
+	if not faces.is_empty():
+		built.error = apply_faces(library, size, built.words, faces)
+		if not built.error.is_empty():
+			built.words.clear()
+	return built
+
+
+## ANDs fixed faces into `domains` (see `build`). Returns an error message, or
+## "" when every boundary cell keeps at least one tile.
+static func apply_faces(library: TileLibrary, size: Vector3i, domains: PackedInt64Array, faces: Array[PackedInt32Array]) -> String:
+	var word_count := library.word_count
+	if faces.size() != TilePrototype.FACE_COUNT:
+		return "faces has %d entries, expected %d" % [faces.size(), TilePrototype.FACE_COUNT]
+	for dir in TilePrototype.FACE_COUNT:
+		var face := faces[dir]
+		if face.is_empty():
+			continue
+		var axis := dir >> 1
+		var u_axis := 1 if axis == 0 else 0
+		var v_axis := 1 if axis == 2 else 2
+		var size_u := size[u_axis]
+		var size_v := size[v_axis]
+		if face.size() != size_u * size_v:
+			return "face %s has %d entries, expected %d" % [TilePrototype.FACE_NAMES[dir], face.size(), size_u * size_v]
+		for v in size_v:
+			for u in size_u:
+				var neighbour := face[u + size_u * v]
+				if neighbour < 0:
+					continue
+				if neighbour >= library.tile_count():
+					return "face %s entry (%d, %d): tile %d outside the library" % [TilePrototype.FACE_NAMES[dir], u, v, neighbour]
+				var position := Vector3i.ZERO
+				position[axis] = size[axis] - 1 if dir & 1 == 0 else 0
+				position[u_axis] = u
+				position[v_axis] = v
+				var cell := position.x + size.x * (position.y + size.y * position.z)
+				# Tile t fits when the neighbour allows t from the opposite side.
+				var allowed := library.allowed(dir ^ 1, neighbour)
+				var left := false
+				for w in word_count:
+					domains[cell * word_count + w] &= allowed[w]
+					left = left or domains[cell * word_count + w] != 0
+				if not left:
+					return "cell %s: no tile fits next to %s across face %s" % [position, library.tiles[neighbour].label(), TilePrototype.FACE_NAMES[dir]]
+	return ""
+
+
+## Why `orientation` is not valid for `family`, or "".
+static func orientation_error(family: EdgeRasteriser.TileFamily, orientation: int) -> String:
+	match family:
+		EdgeRasteriser.TileFamily.STAIR:
+			if orientation < 0 or orientation > 3:
+				return "a stair needs a yaw 0..3, not %d" % orientation
+		EdgeRasteriser.TileFamily.LADDER:
+			if orientation != EdgeRasteriser.ORIENTATION_UP:
+				return "a ladder needs orientation up (%d), not %d" % [EdgeRasteriser.ORIENTATION_UP, orientation]
+		EdgeRasteriser.TileFamily.PORTAL_OPENING:
+			if orientation < 0 or orientation > EdgeRasteriser.ORIENTATION_DOWN:
+				return "a portal opening needs a yaw 0..3, up or down, not %d" % orientation
+		_:
+			if orientation != 0:
+				return "an unoriented family needs orientation 0, not %d" % orientation
+	return ""
+
+
+## Whether a tile may stand in a cell holding a record of `family` and
+## `orientation`: same family, and for a stair or a portal opening on a side
+## face a rotation that turns the prototype's forward yaw onto the record's.
+static func tile_matches(tile: TileLibrary.Tile, family: EdgeRasteriser.TileFamily, orientation: int) -> bool:
+	if tile.prototype.family != family:
+		return false
+	if not AUTHORED_YAW.has(family) or orientation >= EdgeRasteriser.ORIENTATION_UP:
+		return true
+	return posmod(tile.rotation - (orientation - AUTHORED_YAW[family]), tile.prototype.rotations) == 0
+
+
+## The tiles `tile_matches` accepts, as `word_count` words.
+static func family_mask(library: TileLibrary, family: EdgeRasteriser.TileFamily, orientation: int) -> PackedInt64Array:
+	var mask := _single(library.word_count, -1)
+	for tile in library.tiles:
+		if tile_matches(tile, family, orientation):
+			mask[tile.index >> 6] |= 1 << (tile.index & 63)
+	return mask
+
+
+## Whether some tile of `from` allows some tile of `to` in direction `dir`.
+static func _any_allowed(library: TileLibrary, dir: int, from: PackedInt64Array, to: PackedInt64Array) -> bool:
+	for tile in library.tile_count():
+		if (from[tile >> 6] >> (tile & 63)) & 1 == 0:
+			continue
+		var allowed := library.allowed(dir, tile)
+		for w in library.word_count:
+			if allowed[w] & to[w] != 0:
+				return true
+	return false
+
+
+## Whether `p` comes before `q` in cell index order, so each pair is checked once.
+static func _before(p: Vector3i, q: Vector3i) -> bool:
+	if p.z != q.z:
+		return p.z < q.z
+	if p.y != q.y:
+		return p.y < q.y
+	return p.x < q.x
+
+
+## `word_count` words with only `tile` set (none for -1).
+static func _single(word_count: int, tile: int) -> PackedInt64Array:
+	var mask := PackedInt64Array()
+	mask.resize(word_count)
+	mask.fill(0)
+	if tile >= 0:
+		mask[tile >> 6] = 1 << (tile & 63)
+	return mask
+
+
+static func _is_empty(mask: PackedInt64Array) -> bool:
+	for word in mask:
+		if word != 0:
+			return false
+	return true
