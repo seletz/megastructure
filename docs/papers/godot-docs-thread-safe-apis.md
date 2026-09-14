@@ -44,3 +44,5 @@ go through `RenderingServer` and `PhysicsServer3D`, such as assigning
 - Related: [[godot-docs-workerthreadpool]], [[godot-docs-multimesh]].
 - [[sector-jobs]]: the thread-safety rules of `SectorJobs`; tasks share only
   read-only data and hand back a plain dictionary.
+- [[placement]]: `SectorMultiMesh.build` runs on the worker; the main thread
+  assigns `MultiMesh.buffer` and calls `ConcavePolygonShape3D.set_faces()`.

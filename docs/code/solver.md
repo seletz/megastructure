@@ -167,8 +167,9 @@ for sector in wanted:
 | `cancel(sector)`, `clear()` | Drops a queued sector or marks a running one so its result is discarded; `clear` does it for all. |
 | `poll()` | Called from `_process`: waits on the tasks that pushed a result, starts queued sectors nearest to `focus` within `start_budget_usec`, emits `sector_ready`. Never blocks on a running task. |
 | `wait_all()` | Blocks until every started task is waited on; `_exit_tree` calls `clear()` and then this. |
-| `sector_ready(result)` | Signal on the main thread: `sector`, `outcome`, `cells`, `attempts`, `time_usec`, `degraded`, `error`, `cancelled` (always false here). |
-| `solve_sector(library, grammar, seed, sector, boundaries, cancelled)` (static) | The pipeline of one task, callable from any thread and producing that dictionary. |
+| `sector_ready(result)` | Signal on the main thread: `sector`, `outcome`, `cells`, `attempts`, `time_usec`, `degraded`, `error`, `cancelled` (always false here), `placement` (`SectorMultiMesh.build` of the cells when `build_placement` was on and the sector solved, else empty; [[placement]]). |
+| `solve_sector(library, grammar, seed, sector, boundaries, cancelled, faces)` (static) | The pipeline of one task, callable from any thread and producing that dictionary; with `faces` (`SectorMultiMesh.prototype_faces`) a solved sector also gets its `placement`. |
+| `build_placement`, `faces()` | Tasks started while `build_placement` is on build placement data; `faces()` returns the tile faces `configure` read from the meshes on the main thread. |
 | `use_boundaries` | Solve through a cold `SectorBoundaries` per task instead of domains and one solver. |
 | `max_in_flight`, `default_max_in_flight()` | Most tasks at once, cancelled ones included; default half the logical CPUs (#168). |
 | `focus`, `high_priority`, `start_budget_usec` | Priority sector (squared distance); pool priority of the tasks (true); the start budget of one poll (1000 µs). |
