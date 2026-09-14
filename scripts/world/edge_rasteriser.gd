@@ -216,8 +216,7 @@ func hub_cell(sector: Vector3i) -> Vector3i:
 	var node := graph.interior_node(sector)
 	if node != null:
 		return node.local_cell
-	var level := (n / 2) / WalkableGraph.STRATUM_PITCH_CELLS * WalkableGraph.STRATUM_PITCH_CELLS
-	return Vector3i(n / 2, level, n / 2)
+	return Vector3i(n / 2, graph.centre_level(), n / 2)
 
 
 ## The portal cell of an edge inside the sector.
