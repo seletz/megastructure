@@ -177,6 +177,24 @@ arg "<z>" help="Sector z"
 flag "--seed <n>" default="0" help="World seed and solve seed"
 '''
 
+[tasks.solver-real]
+depends = ["import"]
+description = "Run the real stratum sectors solver-check samples through the fill pipeline per world seed and explain every sector that fails before an attempt: the record pair SectorDomains rejects, or a minimal set of records whose starting domains propagate to an empty cell; print solved, degraded and failed counts per seed; fail on any sector failing before an attempt or, with --min-solved, on a seed with fewer solved. Usage: mise run solver-real [--seeds 0,1,2,3,4] [--count N] [--no-solve] [--min-solved N] (headless)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=(--seeds "${usage_seeds:-0,1,2,3,4}" --count "${usage_count:-20}")
+[[ "${usage_no_solve:-false}" == "true" ]] && args+=(--no-solve)
+[[ -n "${usage_min_solved:-}" ]] && args+=(--min-solved "${usage_min_solved}")
+godot --headless --path . --script res://scripts/tools/solver_real.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--seeds <seeds>" default="0,1,2,3,4" help="Comma-separated world seeds (each also the solve seed)"
+flag "--count <n>" default="20" help="Real stratum sectors with records per seed"
+flag "--no-solve" help="Only build and propagate the starting domains"
+flag "--min-solved <n>" help="Fail when a seed solves fewer sectors without degradation"
+'''
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
