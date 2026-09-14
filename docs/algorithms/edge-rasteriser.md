@@ -442,11 +442,11 @@ landings; with hashed portal heights it had 105 327 stair cells.
 - Walks are one cell wide. Headroom reserves the cells above them, but not
   the cells beside them; a walker brushing a column in the next cell is
   possible.
-- Catwalk records still take tiles with a railing on one side, which
-  blocks a walk turning in that cell (#187); floor, bridge and tunnel
-  records drop tiles that block a face their walk crosses (#173, #182).
-  `walk-check` covers stratum sectors and, with `--tunnel`, one solid
-  sector.
+- Floor, bridge, catwalk and tunnel records drop tiles that block a face
+  their walk crosses (#173, #182, #187), and a catwalk that turns, branches
+  or crosses takes a platform; whether that platform or `4`/`4f` corners
+  is the look is decision #190. `walk-check` covers stratum sectors and,
+  with `--tunnel` and `--catwalk`, one solid and one shaft sector.
 - Where only the merge-rule pass (step 3) or a side-entry routing (step 5,
   item 5) fits, the walk is kept but cannot be walked; raster-check counts
   those among the fallbacks, not separately.

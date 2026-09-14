@@ -413,7 +413,7 @@ appears.
 
 `resources/tilesets/placeholder.tres` ([[tileset#The placeholder tileset]]
 has every prototype, its geometry and the meaning of each socket id) is the
-reference a real tileset is checked against. 40 prototypes expand to 118 tiles
+reference a real tileset is checked against. 43 prototypes expand to 127 tiles
 (two bitset words):
 
 | prototype | sockets `+x -x +y -y +z -z` | rotations | family |
@@ -455,6 +455,7 @@ reference a real tileset is checked against. 40 prototypes expand to 118 tiles
 | stairwell_end | `0s 1s 1i 0i 1s 1s` | 4 | none |
 | portal_tunnel | `1s 1s 1i 1i 0s 0s` | 2 | portal opening |
 | portal_tunnel_end | `1s 1s 1i 1i 0s 1s` | 4 | portal opening |
+| catwalk_corner, catwalk_t, catwalk_cross | `0s 0s 0i 0i 0s 0s` | 4, 4, 1 | catwalk |
 
 **Why it is closed.** Every socket's partner is shown on the opposite face
 by some tile, most often by the tile itself: `0s`, `1s`, `3s`, `0i` and `1i`
@@ -497,7 +498,8 @@ through the whole grid and collides with the rock around it. Measured with
 | committed, but catwalk and ladder backs open instead of `1s` | 173 | 73 | 0.422 |
 | all 20 prototypes (#161) | 135 | 35 | 0.259 |
 | all 22 prototypes, with `catwalk_short` and `backing` (#180) | 142 | 42 | 0.296 |
-| all 40 prototypes, with the passages in rock and bridge shapes (committed, #182) | 103 | 3 | 0.029 |
+| all 40 prototypes, with the passages in rock and bridge shapes (#182) | 103 | 3 | 0.029 |
+| all 43 prototypes, with the catwalk platforms and open catwalk ends (committed, #187) | 105 | 5 | 0.048 |
 
 The last row shows the other pressure: without its wildcard (#141) solid
 only matches rock faces, so every face of a rock region needs a tile showing
@@ -512,7 +514,12 @@ real sectors only admit them where a record needs them
 ([[sector-solver#Starting domains]]). The #182 row goes the other way: the
 tunnel, vault and stairwell shapes close a rock region against open space
 in almost any outline, so the rate falls to 0.029 (seeds 1 and 2: 0.074 and
-0.038).
+0.038). The #187 row adds three platforms, `0s` on every side, and opens
+the end of `catwalk_end`: 0.048 at seed 0, 0.065 and 0.099 at seeds 1 and
+2, noise around the #182 rate on 6³ grids. The platforms show `0s` rather
+than the `4`/`4f` of the catwalk runs they join; a catwalk meets them, a
+ladder or a portal with an open end. Corners that kept `4`/`4f` would need
+a variant per rock side of each arm, about 60 tiles (decision #190).
 
 **Passages in rock (#182).** The tunnel and vault shapes show `0s` on their
 open sides and `1s` on the closed ones, `1i` top and bottom, so a straight
@@ -531,7 +538,8 @@ percentage point of the table; with the 40 of #182: air 16.6 %, solid
 8.1 %, floor 7.0 %, stairwell_end 6.6 %, backing 4.8 %, ladder 4.5 %,
 stairwell 4.2 %, the straight tunnel down to 2.8 % with its corner, T,
 cross and end at 7.6 % together, every vault shape 8.3 %, bridge_cross the
-rarest at 0.2 %):
+rarest at 0.2 %; with the 43 of #187 the catwalk corner, T and cross
+platforms 0.7 %, 0.8 % and 0.2 %):
 
 | tiles | cells | share |
 | --- | --- | --- |
