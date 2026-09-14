@@ -26,7 +26,10 @@ status: current
 > task solves small grids twice, compares them with a recorded reference,
 > tests restarts and records, and runs 20 real sectors; a second task runs
 > the whole pipeline for any one sector; a third checks that borders agree
-> from both sides and that neighbouring sectors fit together.
+> from both sides and that neighbouring sectors fit together. Sector jobs
+> run that pipeline on background threads, one task per sector, and hand
+> the tiles back to the main thread without holding up a frame; a fourth
+> task checks they match the same sectors solved on the main thread.
 
 ## Files
 
@@ -40,8 +43,13 @@ status: current
   (`class_name SectorBoundaries`, a `RefCounted`): the face-first,
   order-independent sector borders, with the inner classes `Piece` and
   `SectorResult` and the enums `Kind` and `Level`.
+- [sector_jobs.gd](../../scripts/world/sector_jobs.gd) (`class_name
+  SectorJobs`, a `Node`): sector solves on the `WorkerThreadPool`, with the
+  inner classes `Job` and `Outbox` and the signal `sector_ready`.
 - `scripts/tools/boundary_check.gd`: the script behind `mise run
   boundary-check`, listed in [[tools-and-tasks]].
+- `scripts/tools/jobs_check.gd`: the script behind `mise run jobs-check`,
+  listed in [[tools-and-tasks]].
 - `scripts/tools/solver_check.gd`, `scripts/tools/solver_sector.gd` and
   `scripts/tools/solver_sector_run.gd` (`class_name SolverSectorRun`, the
   pipeline shared by both): the scripts behind `mise run solver-check` and
@@ -136,6 +144,40 @@ match result.outcome:
 A `SectorBoundaries` holds solvers and caches, so like a solver it belongs
 to one thread.
 
+### Sector jobs
+
+```gdscript
+var jobs := SectorJobs.new()
+add_child(jobs)
+jobs.configure(library, seed, grammar)
+jobs.sector_ready.connect(func(result: Dictionary) -> void:
+	if result.outcome == SectorSolver.Outcome.SOLVED:
+		place(result.sector, result.cells))    # main thread: build nodes here
+jobs.focus = player_sector
+for sector in wanted:
+	jobs.request(sector)
+```
+
+| `SectorJobs` member | Meaning |
+| --- | --- |
+| `configure(library, seed, grammar)` | Cancels everything, sets the library and seed and copies the grammar (default a new `SectorGrammar`) for the tasks started from now on. |
+| `request(sector)` | Queues a sector; false when it is already queued or running, or before `configure`. |
+| `cancel(sector)`, `clear()` | Drops a queued sector or marks a running one so its result is discarded; `clear` does it for all. |
+| `poll()` | Called from `_process`: waits on the tasks that pushed a result, starts queued sectors nearest to `focus` within `start_budget_usec`, emits `sector_ready`. Never blocks on a running task. |
+| `wait_all()` | Blocks until every started task is waited on; `_exit_tree` calls `clear()` and then this. |
+| `sector_ready(result)` | Signal on the main thread: `sector`, `outcome`, `cells`, `attempts`, `time_usec`, `degraded`, `error`, `cancelled` (always false here). |
+| `solve_sector(library, grammar, seed, sector, boundaries, cancelled)` (static) | The pipeline of one task, callable from any thread and producing that dictionary. |
+| `use_boundaries` | Solve through a cold `SectorBoundaries` per task instead of domains and one solver. |
+| `max_in_flight`, `default_max_in_flight()` | Most tasks at once, cancelled ones included; default half the logical CPUs (#168). |
+| `focus`, `high_priority`, `start_budget_usec` | Priority sector (squared distance); pool priority of the tasks (true); the start budget of one poll (1000 µs). |
+| `tasks_started`, `tasks_waited`, `last_poll_usec`, `max_poll_usec`, `reset_poll_stats()` | Counters and poll times for tools. |
+| `pending_count()`, `in_flight_count()`, `running_sectors()`, `has_sector(sector)`, `is_busy()` | Queue state. |
+
+A task builds its own skeleton, graph, rasteriser, domains and solver or
+boundaries and shares only the library and the grammar copy, both
+read-only; the thread-safety rules, handoff format, cancellation and
+measurements are in [[sector-jobs]].
+
 A solver holds its working arrays between solves, so one instance must not
 run two solves at once; give each worker thread its own. Salts, the
 algorithm, the record rules, the restart policy, measurements and why AC-3
@@ -173,6 +215,13 @@ was chosen over AC-4 are in [[sector-solver]].
   `SectorBoundaries.solve_sector`, and prints markdown tables and a verdict
   against the 1 s threshold of #138. How to run it and record the numbers is
   in [[maintaining#Benchmarking the solver]].
+- `mise run jobs-check [--quick] [--boundaries] [--seed N] [--workers N]`
+  (the `--quick` 8-sector run is part of `mise run check`, about 10 s; all
+  27 sectors in `check-full`, about 25 s) checks the queue, solves the 3³
+  block around the origin on worker threads and fails when a poll blocks
+  the main thread over 4 ms, a task id is not waited on, or a result differs
+  from the same sector solved on the main thread; prints poll times and
+  throughput.
 - After an intended change of the output (solver, hash, tileset or
   adjacency), run `mise run solver-check --update` and commit the reference.
 
@@ -181,6 +230,8 @@ was chosen over AC-4 are in [[sector-solver]].
 - [[sector-solver]]: the algorithm, worked example, complexity and salts.
 - [[face-first-boundaries]]: the border pieces, their order, the open
   boundary rule and measurements.
+- [[sector-jobs]]: the threaded job pipeline, thread-safety rules, handoff
+  format and cancellation.
 - [[wave-function-collapse]]: the idea behind it.
 - [[tileset]]: the tile library it consumes.
 - [[edge-rasteriser]]: the records the domains come from.
