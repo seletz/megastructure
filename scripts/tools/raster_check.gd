@@ -9,7 +9,7 @@ extends SceneTree
 ## raw records at one cell conflict; no record but headroom lies directly
 ## above or below a stair cell; every walking surface of a kept routing has
 ## its headroom cells (`EdgeRasteriser.headroom_for`) holding headroom
-## records; every edge of the sector has a portal
+## records or a ladder; every edge of the sector has a portal
 ## opening at its portal cell in both of its endpoint sectors, so each
 ## endpoint has at least one record; no edge is rejected; the records of a
 ## sector form one 26-connected group; every edge's routing is a walk from
@@ -155,7 +155,7 @@ func _check_cells(rasteriser: EdgeRasteriser, raster: EdgeRasteriser.SectorRaste
 		if not raster.rejected.has(ref):
 			for record in room:
 				var kept: EdgeRasteriser.Record = by_cell.get(record.cell)
-				if kept == null or kept.family != EdgeRasteriser.TileFamily.HEADROOM:
+				if kept == null or not kept.family in [EdgeRasteriser.TileFamily.HEADROOM, EdgeRasteriser.TileFamily.LADDER]:
 					bad.headroom += 1
 		else:
 			room.clear()
