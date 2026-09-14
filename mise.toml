@@ -32,11 +32,10 @@ depends = ["import"]
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-status=0
-while IFS= read -r -d '' file; do
-	godot --headless --path . --check-only --script "res://${file#./}" || status=1
-done < <(find . -path ./.godot -prune -o -name '*.gd' -print0)
-exit "$status"
+# One Godot per file, as many at a time as there are CPUs; xargs exits
+# non-zero when any of them fails.
+find . -path ./.godot -prune -o -name '*.gd' -print0 \
+	| xargs -0 -r -n 1 -P "$(nproc)" sh -c 'godot --headless --path . --check-only --script "res://${1#./}"' check-scripts
 '''
 
 [tasks.smoke]
@@ -228,7 +227,12 @@ description = "Click every kind of script-backed widget in the skeleton viewer's
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main, skeleton viewer and tile contact sheet scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures, check the placeholder tileset is up to date and passes the tileset validation, check the sector solver and the face-first sector boundaries, and verify the project loads headlessly"
+description = "The pull request tier (under 2 minutes): import assets, parse scripts, run the scenes headlessly, click through the viewer tweak panel, run every headless check, with graph-connectivity, raster-check, tiles-check-placeholder, solver-check and boundary-check on their --quick sample, and verify the project loads headlessly. mise run check-full runs the same tasks at full size"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity --quick", "raster-check --quick", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder --quick", "solver-check --quick", "boundary-check --quick"]
+run = "godot --headless --editor --path . --quit"
+
+[tasks.check-full]
+description = "The full tier, run by CI on pushes to develop and nightly: the tasks of mise run check with every statistical task at full size, and verify the project loads headlessly"
 depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder", "solver-check", "boundary-check"]
 run = "godot --headless --editor --path . --quit"
 
