@@ -113,9 +113,12 @@ where it fits.
 
 Vertical edges first (they have the fewest possible shapes), then horizontal
 edges, each group ordered by `edge_ref`. Every edge takes the first of its
-**routings** (steps 5 and 6) whose records merge with everything placed so
-far. If none does, the edge keeps only its portal cell and is listed as
-rejected.
+**routings** (steps 5 and 6) whose records, with their headroom (step 8),
+merge with everything placed so far. It looks twice: first for a
+**walkable** routing, one that merges no flat cell into another routing's
+stair or portal opening (`EdgeRasteriser.crosses`), then for any routing
+the merge rule accepts. If none does, the edge keeps only its portal cell
+and is listed as rejected.
 
 ### 4. Stair runs
 
@@ -158,8 +161,8 @@ it.
 1. Same level: an L from the hub to `D` at the hub's level, along the face
    axis first (across) or along the edge axis first (along the wall), then
    `P`. A hub on the face row would reach `P` along the wall across first;
-   that route runs through `P` itself, conflicts with the portal and falls
-   back to the other L.
+   that route runs through `P` itself, is not walkable and falls back to the
+   other L.
 2. Different levels, outside shafts and chasms: the L to the landing, then
    a stair run leaving `P` inwards (across), or leaving `D` along the wall
    followed by `D` and `P`.
@@ -170,6 +173,11 @@ it.
    line `d` cells in from the face, along the face to `P`'s column, then
    across to `P`, for `d = 1` to 23 in turn. A level walk whose L would pass
    directly under another edge's stair steps around its column this way.
+5. Very last, the routings along the wall that enter `P` from the side, as
+   before #173: the L straight to `P`, a stair run or ladder next to `P`
+   along the wall. They are not walkable, but they fit where the door row
+   is taken (a hub one cell in from the face with a stair to climb), so no
+   edge is rejected.
 
 ### 6. Vertical edges
 
@@ -196,13 +204,13 @@ Records are merged cell by cell with `EdgeRasteriser.merge`:
 | Records at one cell | Result |
 | --- | --- |
 | same family and orientation | one record, the smaller `edge_ref` |
-| floor, bridge, catwalk or tunnel with a ladder | the ladder |
-| floor, bridge, catwalk or tunnel with a stair or portal opening | conflict |
+| floor, bridge, catwalk or tunnel with a stair, ladder or portal opening | the stair, ladder or portal opening |
 | two portal openings with yaws | a corner opening with the smaller yaw |
 | two different surface families | conflict |
 | stairs of different orientation, stair and ladder | conflict |
 | portal opening and stair or ladder, up or down opening and any other opening | conflict |
 | headroom with headroom | one record, the smaller `edge_ref` |
+| headroom with a ladder | the ladder: a ladder column is a passage |
 | headroom with any other family | conflict |
 
 **Stair rule** (the headroom rule of #161). No record but headroom lies
@@ -278,11 +286,11 @@ it and the cell above that, and the solver keeps air or a doorway in all
 35.
 
 The rules are commutative, so the result does not depend on which record came
-first. A ladder wins over a flat cell where a walkway crosses the foot of
-another edge's ladder, whose rungs stand off one face. Until #173 a stair
-and a portal opening won too, but a flat walk across a stair's slope or
-between a portal's jambs is not walkable, so those routings now take their
-next shape; stair runs themselves only take free cells (step 4). A conflict never enters the output: the routing that caused it is
+first. A stair or ladder wins over a flat cell where a walkway crosses the
+foot of another edge's stair or ladder, a portal opening where it crosses a
+portal cell. A flat walk across a stair's slope or between a portal's jambs
+is not walkable, so step 3 takes such a merge only when no walkable routing
+fits; stair runs themselves only take free cells (step 4). A conflict never enters the output: the routing that caused it is
 dropped and the next one tried (step 3). Each edge's own walk is kept as it
 was routed, so the check can step through it even where the merged output
 shows another edge's cell.
@@ -372,26 +380,36 @@ every sample sector against a rasteriser on a fresh graph.
 ## Measured shape
 
 `mise run raster-check`, 1 000 random sectors within ±100 000 sectors, 200
-per seed 0 to 4: 698 have edges (1 606 edges), 47.0 records per sector with
-edges (0.34 % of its cells), 32.8 over all sampled sectors. 37 edges take a
-fallback routing, none is rejected, no record lies directly above or below
-a stair cell, every walk passes the level rule and every sector's records
-are one 26-connected group.
+per seed 0 to 4: 698 have edges (1 606 edges), 100.9 records per sector with
+edges (0.73 % of its cells), 70.4 over all sampled sectors. 91 edges take a
+fallback routing, none is rejected, no record but headroom lies directly
+above or below a stair cell, every walking surface has its headroom, every
+walk passes the level rule and every sector's records are one 26-connected
+group.
 
-| Family | Records |
-| --- | ---: |
-| floor | 17 245 |
-| stair | 6 154 |
-| bridge | 2 278 |
-| catwalk | 2 486 |
-| tunnel | 1 898 |
-| portal opening | 1 601 |
-| ladder | 1 134 |
+| Family | Records | Before #173 |
+| --- | ---: | ---: |
+| floor | 17 340 | 17 245 |
+| stair | 6 154 | 6 154 |
+| bridge | 2 288 | 2 278 |
+| catwalk | 2 472 | 2 486 |
+| tunnel | 1 891 | 1 898 |
+| portal opening | 1 601 | 1 601 |
+| ladder | 1 134 | 1 134 |
+| headroom | 37 557 | – |
 
 Level changes: 576 horizontal edge ends change level. They produce 3 957
 stair cells; vertical edges add 2 197 stair cells, ladders 1 134 cells
-(counted along the walks, before merging) and turning runs 112 landing
-cells.
+(counted along the walks, before merging) and turning runs 245 landing
+cells (112 before #173).
+
+**Headroom and door cells (#173).** Headroom more than doubles the records
+(32.8 to 70.4 per sector) but moves few walks: fallback routings rise from
+37 to 91, mostly walks that now reach their portal from the door cell or
+avoid crossing another edge's stair, and landings from 112 to 245 as stair
+runs turn around reserved head space. With neither the merge-rule pass of
+step 3 nor the side-entry routings (step 5, item 5) 9 edges were rejected,
+with the merge-rule pass alone 2.
 
 **Headroom rule (#161).** Without it the same sample had 52 record pairs
 directly above or below a stair cell (4, 12, 13, 11 and 12 for seeds 0 to
@@ -427,6 +445,9 @@ landings; with hashed portal heights it had 105 327 stair cells.
   one side, which blocks a walk turning in that cell; floor records drop
   tiles that block a face their walk crosses (#173). `walk-check` covers
   stratum sectors only.
+- Where only the merge-rule pass (step 3) or a side-entry routing (step 5,
+  item 5) fits, the walk is kept but cannot be walked; raster-check counts
+  those among the fallbacks, not separately.
 - Tunnels need a headroom tile with rock above (a tunnel vault) before a
   solid sector with records can build its domains.
 - A stair next to a portal can make the walkway pass beside or under the

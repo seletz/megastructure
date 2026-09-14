@@ -146,7 +146,8 @@ var raster := rasteriser.rasterise(Vector3i(0, 0, 0))  # records plus per-edge w
 | `rasterise(sector)` | A `SectorRaster`: `records`, `edge_records` (each edge's own walk in walking order, by `edge_ref`, without headroom), `rejected` (edge refs whose every routing conflicted) and `fallbacks` (edges that did not take their first routing). |
 | `headroom_for(records)` | The `HEADROOM` records above the walking surfaces among `records`: `headroom_cells` (default `HEADROOM_CELLS` = 1, the second argument of `new`) above a flat cell or side portal, one more above a stair, inside the grid. |
 | `hub_cell(sector)` | The cell all walks of the sector meet at: the interior node, or the centre of a solid sector. |
-| `merge(p, q)` (static) | The record two records at one cell merge into, or `null` for a conflict; headroom merges only with headroom. Commutative. |
+| `merge(p, q)` (static) | The record two records at one cell merge into, or `null` for a conflict; headroom merges with headroom and yields to a ladder. Commutative. |
+| `crosses(p, q)` (static) | Whether the pair is a flat walk cell and a stair or portal opening: `merge` accepts it, but `rasterise` first looks for a routing without one. |
 | `portal_cell(sector, edge, n)` (static) | The edge's portal cell inside the sector. |
 | `surface_family(type)` (static) | The flat family of a sector type: floor, catwalk (shaft), bridge (cavity, chasm) or tunnel (solid). |
 | `edge_ref(edge)` (static) | `Vector4i(a.x, a.y, a.z, axis)`, the key both sectors of an edge use. |

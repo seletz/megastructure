@@ -764,9 +764,10 @@ See also: [[sector-jobs]], [[godot-docs-thread-safe-apis]], Sector job.
 ### Merge rule
 
 What happens when two records of the edge rasteriser land on the same cell:
-identical records merge, a ladder wins over a floor, bridge, catwalk or
-tunnel cell, two horizontal portal openings form a corner opening, headroom
-merges only with headroom, and every other pair is a conflict.
+identical records merge, a stair, ladder or portal opening wins over a floor,
+bridge, catwalk or tunnel cell, two horizontal portal openings form a corner
+opening, headroom merges with headroom and yields to a ladder, and every
+other pair is a conflict.
 
 In this project: `EdgeRasteriser.merge`; a conflicting path takes its next
 routing.

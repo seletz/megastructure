@@ -345,6 +345,19 @@ path walks exactly as the GridMap path does, and the real-sector walk
 still waits on the headroom work (#171, #173). Sectors (0, -1, -1) and
 (1, 1, 0) solve but have fewer than two kept horizontal portals.
 
+**Walk-check status after #173.** With headroom records over every walking
+surface, portals entered from their door cell and floor records that keep
+parapets off the faces their walk crosses
+([[edge-rasteriser#8. Headroom records]]), `mise run walk-check --sector
+-1,1,-1` walks portal to portal on seed 0. `mise run walk-check
+--all-solving` solves the 84 stratum sectors within three sectors of the
+origin that have two kept horizontal portals and records that build; 66
+solve and all 66 walk portal to portal on both placements, against 0 of 74
+before. Of the five
+sectors listed in #171, (-1, 1, -1), (2, 1, -3) and (3, 2, 0) walk, and
+(-2, -1, -3) and (-2, 1, -1) now degrade. The real-sector walk still runs on
+demand only (decision #171, question 2).
+
 ## References
 
 - [[RESEARCH_WFC]], sections 4 (threads) and 5 (placement) and section 7

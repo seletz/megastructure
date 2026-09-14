@@ -39,7 +39,7 @@ sources:
 > placeholder tileset an 8³ grid takes about 19 ms and a 24³ attempt about
 > 0.63 s in typed GDScript; every unconstrained 24³ sector of seeds 0 to 19
 > solves within 2 attempts, and every real stratum sector sampled reaches an
-> attempt, 18 of the 20 at seed 0 solving (#161).
+> attempt, 17 of the 20 at seed 0 solving with headroom records (#173).
 
 This is milestone 0.2.0 items D1 (the core) and D2 (pre-collapse and the
 restart policy) of [[RESEARCH_WFC]] section 7, following sections 3 and 4 of
@@ -361,6 +361,7 @@ With restarts (default 8 attempts, MRV):
 | 8³ unconstrained, 53 tiles, seeds 0–19 | 20 | 0 | 0 | all at the first |
 | 24³ unconstrained, 53 tiles, seeds 0–19 | 20 | 0 | 0 | 16 × 1, 4 × 2; mean 1.2 |
 | 20 real stratum sectors with records, 53 tiles, seed 0 | 18 | 2 | 0 | mean 3.10 over the 20 searched |
+| the same with headroom and walkable floor faces (#173) | 17 | 3 | 0 | mean 3.25 over the 20 searched |
 
 **Real sectors (#161).** On the 30-tile set, 14 of the 20 real sectors of
 seed 0, and 71 of the 100 of seeds 0 to 4, failed before an attempt. `mise
@@ -385,6 +386,23 @@ solved at seed 0, and adding end pieces for parapets and catwalks raised
 the single-attempt success from 12 % to 56 %
 ([[socket-adjacency#Worked example: the placeholder tileset]]). Over seeds 0
 to 4, 18, 19, 19, 20 and 19 of the 20 sectors solve; the rest degrade.
+
+**Headroom and walkable floors (#173).** `mise run solver-real` over seeds
+0 to 4, 20 sectors each, every sector reaching an attempt in every run:
+
+| Records and domains | Solved | At the first attempt | Mean attempts |
+| --- | ---: | ---: | ---: |
+| before #173 | 95 | 58 | 2.15 |
+| headroom records only | 97 | 55 | – |
+| headroom, door cells, walkable routings first, floor faces (this) | 90 | 37 | 2.97 |
+| the same without the floor face filter | 97 | 56 | – |
+| floor faces free of parapets entirely, no headroom | 77 | 41 | – |
+
+Headroom does not cost solves: air above a walk is easy to tile. What does
+is keeping parapets off the faces a walk crosses, since a parapet line
+along a walk has to run on and end with end pieces. It is also what makes
+the sectors walkable: `mise run walk-check --all-solving` at seed 0 walks
+66 of 66 solving sectors with it and 37 of 78 without ([[placement]]).
 Solid, shaft, cavity and chasm sectors are not sampled yet. `mise run
 solver-check` prints the seed 0 table and checks that seeds 1 to 4 reach an
 attempt; `mise run solver-sector <x> <y> <z>` reproduces one sector.
