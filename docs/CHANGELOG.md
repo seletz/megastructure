@@ -43,6 +43,7 @@ status: current
 
 ### Fixed
 
+- `mise run shot` no longer drops a `.gdignore` into output folders that already sit under one, such as `docs/images`. (#184)
 - Real stratum sectors can be walked portal to portal: the edge rasteriser reserves headroom above every walkway, enters portals from their door cell and prefers walkable routings, floor records keep parapets off the faces their walk crosses, the portal frame loses its low lintel, and `mise run walk-check --all-solving` walks all 66 solving sectors near the origin at seed 0. (#181)
 - Every sampled real stratum sector reaches a solve attempt and 18 of 20 solve at seed 0: the placeholder tileset gains open floors and stairs, a free-standing portal frame and parapet and catwalk end pieces, the edge rasteriser keeps records out of the cells above and below stairs, and `mise run solver-real` explains sectors that fail before an attempt. (#174)
 

@@ -108,7 +108,9 @@ byte-identical unless you pass `--params grain_amount=0`.
 The PNG goes exactly where you point it; a relative path is relative to the
 project root. Put shots under `build/shots/`: `build/` is ignored by git, and
 the task drops a `.gdignore` into the output folder so Godot does not import
-the images into the project. Never commit shots.
+the images into the project. It skips the marker when the folder or one of its
+parents already has a `.gdignore`, so renders under `docs/` leave nothing
+behind. Never commit shots.
 
 ## Using it
 
