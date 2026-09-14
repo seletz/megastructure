@@ -8,7 +8,7 @@ extends SceneTree
 ## unsatisfiable one fails, then prints the tile histogram, steps and time
 ## per seed and the time of a 24³ solve with restarts.
 ##
-## Restarts and pre-collapse: seed 36 fails its first 8³ attempt, so it
+## Restarts and pre-collapse: seed 374 fails its first 8³ attempt, so it
 ## degrades to all solid with one attempt allowed and solves on the second
 ## by default, the same on a second instance. Records that cannot hold
 ## fail fast with a clear error, in `SectorDomains` (two records, a bad
@@ -17,9 +17,11 @@ extends SceneTree
 ## between them). Consistent records on an 8³ stratum grid, with headroom
 ## above the walk, hold in every solved result over seeds 0 to 9, the
 ## placeholder's headroom tiles are air and the wall doorway, and fixed faces
-## restrict the boundary cells. Last, `REAL_SECTORS` real stratum sectors at seed 0 run through the
-## whole pipeline; every solved one must keep its records and adjacencies, and
-## the solved, degraded and inconsistent counts and mean attempts are printed.
+## restrict the boundary cells. Last, `REAL_SECTORS` real stratum sectors and
+## `REAL_VOID_SECTORS` shaft, cavity and chasm sectors each at seed 0 run
+## through the whole pipeline; every solved one must keep its records and
+## adjacencies and hold walk-family tiles only in record cells (#180), and the
+## solved, degraded and inconsistent counts and mean attempts are printed.
 ## Run headless with `mise run solver-check`; pass `--update` to rewrite the
 ## reference file instead of comparing against it.
 
@@ -33,11 +35,14 @@ const SEEDS: Array[int] = [0, 1, 2, 3, 4]
 const QUICK_SEEDS: Array[int] = [0, 1]
 const SECTOR := Vector3i.ZERO
 ## An 8³ seed whose attempts before RESTART_ATTEMPTS hit a contradiction.
-const RESTART_SEED := 36
+const RESTART_SEED := 374
 ## The attempt RESTART_SEED solves at.
 const RESTART_ATTEMPTS := 2
 ## Real stratum sectors the pipeline runs at seed 0.
 const REAL_SECTORS := 20
+## Real sectors of each void type (shaft, cavity, chasm) the pipeline runs at
+## seed 0.
+const REAL_VOID_SECTORS := 2
 const REAL_RANGE := 1000
 ## Salt for picking the real sectors; outside the grammar's salt range.
 const SALT_TEST_SOLVER := 905
@@ -240,6 +245,7 @@ func _check_consistent(library: TileLibrary) -> void:
 	var outcomes := PackedInt32Array([0, 0, 0])
 	var broken := 0
 	var bad := 0
+	var outside := 0
 	for seed in 10:
 		var result := solver.solve(seed, SECTOR, built.words)
 		outcomes[result.outcome] += 1
@@ -249,13 +255,17 @@ func _check_consistent(library: TileLibrary) -> void:
 			if not SectorDomains.tile_matches(library.tiles[result.cells[solver.index(record.cell)]], record.family, record.orientation):
 				broken += 1
 		bad += _bad_adjacencies(library, solver, result.cells)
+		outside += SolverSectorRun.count_walk_tiles_outside(library, SMALL, records, result.cells)
 	_expect(outcomes[SectorSolver.Outcome.FAILED] == 0, "consistent: no solve fails (%d solved, %d degraded)" % [outcomes[0], outcomes[1]])
 	_expect(outcomes[SectorSolver.Outcome.SOLVED] > 0, "consistent: at least one of seeds 0..9 solves")
 	_expect(broken == 0 and bad == 0, "consistent: every solved result keeps all %d records and its adjacencies, %d broken, %d forbidden" % [records.size(), broken, bad])
+	_expect(outside == 0, "consistent: no walk-family tile outside a record cell, %d found" % outside)
 
 
-## A +y face of solid neighbours leaves only tiles with rock on top in the top
-## layer; -1 entries stay free; a face of the wrong size is an error.
+## A +y face of solid neighbours ANDed into free domains leaves only tiles
+## with rock on top in the top layer; -1 entries stay free; the same face on
+## an empty stratum, all air (#180), is an error, and so is a face of the
+## wrong size.
 func _check_faces(library: TileLibrary) -> void:
 	var faces: Array[PackedInt32Array] = []
 	for dir in TilePrototype.FACE_COUNT:
@@ -265,10 +275,13 @@ func _check_faces(library: TileLibrary) -> void:
 	top.fill(library.solid_tile)
 	top[0] = -1
 	faces[TilePrototype.FACE_POS_Y] = top
-	var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, [], faces)
-	_expect(built.error.is_empty(), "faces: a solid +y face builds")
 	var solver := SectorSolver.new(library, SMALL)
-	var result := solver.solve(0, SECTOR, built.words)
+	var words := PackedInt64Array()
+	words.resize(solver.cell_count() * library.word_count)
+	words.fill(-1)
+	var error := SectorDomains.apply_faces(library, SMALL, words, faces)
+	_expect(error.is_empty(), "faces: a solid +y face applies to free domains")
+	var result := solver.solve(0, SECTOR, words)
 	var rock_on_top := result.outcome == SectorSolver.Outcome.SOLVED
 	for x in SMALL.x:
 		for z in SMALL.z:
@@ -279,13 +292,18 @@ func _check_faces(library: TileLibrary) -> void:
 	_expect(rock_on_top, "faces: every top cell but the free one allows solid above (%s)" % SectorSolver.OUTCOME_NAMES[result.outcome])
 	_expect(result.precollapsed.size() == SMALL.x * SMALL.z - 1, "faces: %d fixed boundary cells pre-collapsed" % result.precollapsed.size())
 
+	var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, [], faces)
+	_expect(built.error.contains("no tile fits next to solid@0") and built.words.is_empty(), "faces: a solid +y face over an empty stratum is an error: %s" % built.error)
+
 	faces[TilePrototype.FACE_POS_Y] = PackedInt32Array([library.solid_tile])
 	built = SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, [], faces)
 	_expect(built.error.contains("expected 64"), "faces: a face of the wrong size is an error: %s" % built.error)
 
 
 ## Runs REAL_SECTORS stratum sectors with records through the pipeline at
-## seed 0 and prints the outcome counts; solved ones must keep their records.
+## seed 0 and prints the outcome counts; solved ones must keep their records
+## and hold walk-family tiles only in record cells. Then the same for
+## REAL_VOID_SECTORS sectors of each void type.
 func _run_real_sectors(library: TileLibrary) -> void:
 	var rasteriser := EdgeRasteriser.new(WalkableGraph.new(0))
 	var solver := SectorSolver.new(library, LARGE)
@@ -293,6 +311,7 @@ func _run_real_sectors(library: TileLibrary) -> void:
 	var attempts := 0
 	var ran := 0
 	var broken := 0
+	var outside := 0
 	var usec := 0
 	var i := 0
 	while ran < REAL_SECTORS and i < 10000:
@@ -312,6 +331,7 @@ func _run_real_sectors(library: TileLibrary) -> void:
 				attempts += run.result.attempts
 			if run.result.outcome == SectorSolver.Outcome.SOLVED:
 				broken += run.broken_records(library) + SolverSectorRun.bad_adjacencies(library, LARGE, run.result.cells)
+				outside += run.walk_tiles_outside_records(library)
 		counts[outcome] += 1
 		print("  real %s: %d records, %s%s" % [
 			sector, run.records.size(), outcome,
@@ -319,10 +339,25 @@ func _run_real_sectors(library: TileLibrary) -> void:
 		])
 	_expect(ran == REAL_SECTORS, "real sectors: %d stratum sectors with records at seed 0" % ran)
 	_expect(broken == 0, "real sectors: every solved sector keeps its records and adjacencies, %d broken" % broken)
+	_expect(outside == 0, "real sectors: no walk-family tile outside a record cell in any solved sector, %d found" % outside)
 	var searched: int = counts.solved + counts.degraded
 	print("  real sectors: %d solved, %d degraded, %d inconsistent in the solver, %d rejected by the record checks; mean attempts %.2f over %d searched, %.0f ms total solve time" % [
 		counts.solved, counts.degraded, counts.failed, counts.rejected, float(attempts) / maxi(searched, 1), searched, usec / 1000.0,
 	])
+
+	for type: Skeleton.SectorType in [Skeleton.SectorType.SHAFT, Skeleton.SectorType.CAVITY, Skeleton.SectorType.CHASM]:
+		var type_name := Skeleton.type_name(type)
+		var sectors := SolverSectorRun.real_sectors(rasteriser, REAL_VOID_SECTORS, type)
+		var solved := 0
+		var bad := 0
+		for sector in sectors:
+			var run := SolverSectorRun.run(library, rasteriser, sector, 0, solver)
+			var outcome := run.error if not run.error.is_empty() else SectorSolver.OUTCOME_NAMES[run.result.outcome]
+			if run.error.is_empty() and run.result.outcome == SectorSolver.Outcome.SOLVED:
+				solved += 1
+				bad += run.broken_records(library) + SolverSectorRun.bad_adjacencies(library, LARGE, run.result.cells) + run.walk_tiles_outside_records(library)
+			print("  real %s %s: %d records, %s" % [type_name, sector, run.records.size(), outcome])
+		_expect(sectors.size() == REAL_VOID_SECTORS and solved > 0 and bad == 0, "real sectors: %d of %d %s sectors solve, keeping records and adjacencies with walk-family tiles only in record cells, %d wrong" % [solved, sectors.size(), type_name, bad])
 
 
 static func _sample(i: int, axis: int) -> int:

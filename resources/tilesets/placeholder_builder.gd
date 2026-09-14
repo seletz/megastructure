@@ -44,6 +44,7 @@ const LADDER_HALF := 0.3
 const LADDER_WALL_GAP := 0.14
 const RUNGS := 5
 const TUNNEL_WALL := 0.3
+const BACKING := 0.3
 
 const FAMILY := EdgeRasteriser.TileFamily
 
@@ -150,6 +151,12 @@ static func build() -> TileSet3D:
 			_box(Vector3(-H, SLAB_TOP, -WALL_HALF), Vector3(-H + JAMB, H, WALL_HALF)),
 			_box(Vector3(H - JAMB, SLAB_TOP, -WALL_HALF), Vector3(H, H, WALL_HALF)),
 		]), 0.5, FAMILY.PORTAL_OPENING, ["0s", "0s", "0i", "0i", "0s", "0s"], 2),
+		_prototype("catwalk_short", _mesh(_catwalk_short_boxes()), 0.25, FAMILY.CATWALK, ["0s", "0s", "0i", "0i", "1s", "0s"], 4),
+		# The rock a catwalk or ladder hangs on where open space is all around,
+		# kept INSET off the side faces so they show no lopsided profile (#180).
+		_prototype("backing", _mesh([
+			_box(Vector3(-H + INSET, -H, -H), Vector3(H - INSET, H, -H + BACKING)),
+		]), 0.5, TilePrototype.FAMILY_NONE, ["0s", "0s", "0i", "0i", "0s", "1s"], 4),
 	]
 	return tileset
 
@@ -200,6 +207,18 @@ static func _catwalk_end_boxes(side: float) -> Array[AABB]:
 	var post := end if side > 0 else end - RAIL
 	boxes.append(_box(Vector3(post, SLAB_TOP, H - CATWALK_WIDTH + RAIL), Vector3(post + RAIL, PARAPET_TOP, back)))
 	return boxes
+
+
+## A catwalk deck with its railing that stops INSET short of both side faces,
+## so it continues into no neighbour and stands alone in a record cell; open
+## at both ends so a walk steps on and off along it. It keeps CATWALK_END off
+## the +z face like the end pieces.
+static func _catwalk_short_boxes() -> Array[AABB]:
+	var reach := H - INSET
+	return [
+		_box(Vector3(-reach, SLAB_TOP - CATWALK_DECK, H - CATWALK_WIDTH), Vector3(reach, SLAB_TOP, H - CATWALK_END)),
+		_box(Vector3(-reach, SLAB_TOP, H - CATWALK_WIDTH), Vector3(reach, PARAPET_TOP, H - CATWALK_WIDTH + RAIL)),
+	]
 
 
 ## Two rails and five rungs standing off the +z face.

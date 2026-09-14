@@ -153,7 +153,7 @@ finds those (below). The placeholder tileset passes `validate(true)` and
 ![Every rotated tile of the placeholder tileset with its sockets](../images/placeholder-tileset.png)
 
 `resources/tilesets/placeholder.tres` is the first tileset meant for the
-solver: 20 prototypes, 53 tiles, every `EdgeRasteriser.TileFamily` plus free
+solver: 22 prototypes, 61 tiles, every `EdgeRasteriser.TileFamily` plus free
 tiles. Every mesh is a handful of axis-aligned boxes in one 2 m cell centred
 on the origin, built by `placeholder_builder.gd` at the proportions of
 [[MEGASTRUCTURE_CONCEPT]] section 3: slab 0.6 thick at the bottom of the cell
@@ -168,7 +168,7 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | id | horizontal faces | vertical faces |
 | --- | --- | --- |
 | 0 | `0s` open: nothing that must continue, including a slab edge, a tunnel mouth, a wall side, the end of a parapet or catwalk and a portal frame's jamb | `0i` open: a slab top or bottom lying on the plane, open space under an open floor, open stair or portal frame, and thin columns and ladders |
-| 1 | `1s` rock: solid, a stair's high end, a tunnel side, the wall a catwalk or ladder is fixed to | `1i` rock: solid, under a floor, slab edge, stair or tunnel, and over a tunnel |
+| 1 | `1s` rock: solid, a stair's high end, a tunnel side, the wall a catwalk or ladder is fixed to, a backing plate's face | `1i` rock: solid, under a floor, slab edge, stair or tunnel, and over a tunnel |
 | 2 | `2` / `2f` parapet line along a slab edge (asymmetric) | – |
 | 3 | `3s` wall end, 0.7 m centred | `3_R` wall stack, R the run direction |
 | 4 | `4` / `4f` catwalk deck along a wall (asymmetric) | – |
@@ -195,6 +195,8 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | `catwalk_end` | catwalk deck from `+x` stopping 0.2 m short of `-x`, railing across its end | `4 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
 | `catwalk_end_f` | the same deck from `-x` | `0s 4f 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
 | `portal_frame` | slab and two 0.2 m jambs, free-standing, open at the top | `0s 0s 0i 0i 0s 0s` | 2 | portal opening | 0.5 |
+| `catwalk_short` | catwalk deck and railing stopping 0.02 m short of `+x` and `-x`, open at both ends | `0s 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
+| `backing` | 0.3 m full-height plate on `-z`, 0.02 m short of `+x` and `-x` | `0s 0s 0i 0i 0s 1s` | 4 | none | 0.5 |
 
 Read a row as "what may touch this face": a floor lies on rock and has open
 space above and around it; a stair is cut into rock, climbing out of open
@@ -202,13 +204,21 @@ space towards rock that carries the next flight or the landing; a wall
 continues along its run and upwards, and a wall stack ends at the bottom in a
 doorway or a portal opening, which stand on any open face; a catwalk and a
 ladder hang on rock; a tunnel runs through rock and opens at both ends.
-The last seven prototypes make real sectors tileable (#161): an open floor,
+The seven prototypes after the first thirteen make real sectors tileable
+(#161): an open floor,
 an open stair and a portal frame stand over open space and need no wall, so
 walks can stack in a stratum without rock columns down to the grid bottom
 and a portal on a sector face pulls no wall plane to the grid boundary; the
 end pieces let a parapet or catwalk run stop instead of crossing the whole
 grid, which is what made most 24³ attempts contradict. They come after the
 original prototypes, so the original tile indices 0 to 29 are unchanged.
+The last two (#180) let catwalks and ladders stand in open space now that
+every cell outside a record is air ([[0018-walk-tiles-only-in-record-cells]]):
+`backing` is the rock a catwalk or ladder hangs on, admitted only in the
+cells beside such a record, and `catwalk_short` is a catwalk cell that
+continues into no neighbour, for a catwalk walk one cell long (a door cell,
+the foot of a ladder), which before took a catwalk tile outside the record.
+It has no end railings, so a walk steps on and off along it.
 The portal frame has no lintel since #173: the lintel left 1.2 m over its
 slab, too little for the 1.8 m walker, and the cell above a portal is
 headroom (air or a doorway, whose own lintel starts 1.8 m up). A parapet
