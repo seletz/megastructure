@@ -137,14 +137,29 @@ depends = ["import"]
 description = "Check the tiles-check tool itself: the fixture tileset passes, the dead socket fixture fails with exactly dead sockets, empty directions, an unreachable tile and a never-placed tile, the placement repeats per seed and fails a low contradiction threshold, and the mesh symmetry check passes, fails and skips built meshes (headless)"
 run = "godot --headless --path . --script res://scripts/tools/tiles_check.gd -- --self-test"
 
+[tasks.tileset-build]
+depends = ["import"]
+description = "Regenerate resources/tilesets/placeholder.tres from resources/tilesets/placeholder_builder.gd, the box-only placeholder tileset (headless)"
+run = "godot --headless --path . --script res://resources/tilesets/placeholder_builder.gd"
+
+[tasks.tileset-build-check]
+depends = ["import"]
+description = "Fail when resources/tilesets/placeholder.tres differs from what mise run tileset-build would write, or when the placeholder tileset misses a tile family (headless)"
+run = "godot --headless --path . --script res://resources/tilesets/placeholder_builder.gd -- --check"
+
+[tasks.tiles-check-placeholder]
+depends = ["import"]
+description = "Run the tileset validation (mise run tiles-check) on the placeholder tileset with the default options (headless)"
+run = "godot --headless --path . --script res://scripts/tools/tiles_check.gd -- res://resources/tilesets/placeholder.tres"
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures"]
+description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures, check the placeholder tileset is up to date and passes the tileset validation, and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]

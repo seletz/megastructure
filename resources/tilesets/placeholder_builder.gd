@@ -1,0 +1,208 @@
+extends SceneTree
+## Builds the box-only placeholder tileset and saves it as
+## `resources/tilesets/placeholder.tres`, so its geometry lives in code and
+## the resource is only ever regenerated, never edited by hand.
+##
+##     godot --headless --path . --script res://resources/tilesets/placeholder_builder.gd
+##     godot --headless --path . --script res://resources/tilesets/placeholder_builder.gd -- --check
+##
+## With `--check` it builds the tileset into a temporary file and exits 1
+## when that differs from the committed resource or when the tileset does not
+## validate with every tile family. Run with `mise run tileset-build` and
+## `mise run tileset-build-check`.
+##
+## Every mesh is a set of axis-aligned boxes in one 2 m cell centred on the
+## origin, at the proportions of docs/MEGASTRUCTURE_CONCEPT.md section 3: slab
+## 0.6 thick at the bottom of the cell, column 1.1 square, wall 0.7 thick,
+## parapet 1.1 tall and 0.14 thick, stair treads 0.4 by 0.4 so one stair cell
+## climbs one cell and three climb a stratum. The prototypes, their sockets and
+## families are tabled in docs/code/tileset.md.
+
+const OUT := "res://resources/tilesets/placeholder.tres"
+
+## Half a cell, in metres.
+const H := 1.0
+const SLAB_TOP := -0.4
+const COLUMN_HALF := 0.55
+const WALL_HALF := 0.35
+const PARAPET_TOP := SLAB_TOP + 1.1
+const PARAPET := 0.14
+const LINTEL_BOTTOM := 0.8
+const JAMB := 0.2
+const TREADS := 5
+const TREAD := 0.4
+const STAIR_HALF := 0.9
+const CATWALK_WIDTH := 1.0
+const CATWALK_DECK := 0.2
+const RAIL := 0.06
+const LADDER_HALF := 0.3
+const LADDER_WALL_GAP := 0.14
+const RUNGS := 5
+const TUNNEL_WALL := 0.3
+
+const FAMILY := EdgeRasteriser.TileFamily
+
+
+func _init() -> void:
+	var check := "--check" in OS.get_cmdline_user_args()
+	var tileset := build()
+	var errors := tileset.validate(true)
+	for error in errors:
+		printerr("tileset build: %s" % error)
+	if not errors.is_empty():
+		quit(1)
+		return
+	var target := OUT
+	if check:
+		target = OS.get_user_data_dir().path_join("placeholder_check.tres")
+	var status := ResourceSaver.save(tileset, target)
+	if status != OK:
+		printerr("tileset build: could not save %s (error %d)" % [target, status])
+		quit(1)
+		return
+	if not check:
+		print("tileset build: wrote %s, %d prototypes" % [OUT, tileset.prototypes.size()])
+		quit(0)
+		return
+	var built := _normalised(FileAccess.get_file_as_string(target))
+	var committed := _normalised(FileAccess.get_file_as_string(OUT))
+	DirAccess.remove_absolute(target)
+	if built != committed:
+		printerr("tileset build: %s is out of date, run: mise run tileset-build" % OUT)
+		quit(1)
+		return
+	print("tileset build: %s is up to date, %d prototypes" % [OUT, tileset.prototypes.size()])
+	quit(0)
+
+
+## The saved text with the script ids, which Godot derives from the path the
+## file is saved to, replaced by their order of appearance.
+static func _normalised(text: String) -> String:
+	var ids := {}
+	var re := RegEx.create_from_string("\"(\\d+_[a-z0-9]+)\"")
+	for found in re.search_all(text):
+		ids.get_or_add(found.get_string(1), "script_%d" % ids.size())
+	for id: String in ids:
+		text = text.replace("\"%s\"" % id, "\"%s\"" % ids[id])
+	return text
+
+
+## The placeholder tileset. Sockets in face order +x, -x, +y, -y, +z, -z.
+## Horizontal ids: 0 open, 1 rock, 2 parapet line, 3 wall, 4 catwalk.
+## Vertical ids: 0 open, 1 rock, 3 wall stack. Slab edges are open and
+## columns and ladders open at both ends (decision #153); cells clip the
+## concept's doorway, stair and tunnel proportions (decision #154).
+static func build() -> TileSet3D:
+	var tileset := TileSet3D.new()
+	var slab := _box(Vector3(-H, -H, -H), Vector3(H, SLAB_TOP, H))
+	tileset.prototypes = [
+		_prototype("air", null, 20.0, TilePrototype.FAMILY_NONE, ["0s", "0s", "0i", "0i", "0s", "0s"], 1),
+		_prototype("solid", _box_mesh(Vector3(2 * H, 2 * H, 2 * H)), 16.0, TilePrototype.FAMILY_NONE, ["1s", "1s", "1i", "1i", "1s", "1s"], 1),
+		_prototype("floor", _mesh([slab]), 10.0, FAMILY.FLOOR, ["0s", "0s", "0i", "1i", "0s", "0s"], 1),
+		_prototype("slab_edge", _mesh([
+			slab,
+			_box(Vector3(-H, SLAB_TOP, H - PARAPET), Vector3(H, PARAPET_TOP, H)),
+		]), 1.0, FAMILY.FLOOR, ["2", "2f", "0i", "1i", "0s", "0s"], 4),
+		_prototype("column", _mesh([
+			_box(Vector3(-COLUMN_HALF, -H, -COLUMN_HALF), Vector3(COLUMN_HALF, H, COLUMN_HALF)),
+		]), 0.5, TilePrototype.FAMILY_NONE, ["0s", "0s", "0i", "0i", "0s", "0s"], 1),
+		_prototype("wall", _mesh([
+			_box(Vector3(-H, -H, -WALL_HALF), Vector3(H, H, WALL_HALF)),
+		]), 1.0, TilePrototype.FAMILY_NONE, ["3s", "3s", "3_0", "3_0", "0s", "0s"], 2),
+		_prototype("wall_doorway", _mesh([
+			_box(Vector3(-H, LINTEL_BOTTOM, -WALL_HALF), Vector3(H, H, WALL_HALF)),
+		]), 0.5, TilePrototype.FAMILY_NONE, ["3s", "3s", "3_0", "0i", "0s", "0s"], 2),
+		_prototype("stair", _mesh(_stair_boxes()), 0.5, FAMILY.STAIR, ["1s", "0s", "0i", "1i", "0s", "0s"], 4),
+		_prototype("bridge", _mesh([
+			slab,
+			_box(Vector3(-H, SLAB_TOP, H - PARAPET), Vector3(H, PARAPET_TOP, H)),
+			_box(Vector3(-H, SLAB_TOP, -H), Vector3(H, PARAPET_TOP, -H + PARAPET)),
+		]), 1.0, FAMILY.BRIDGE, ["0s", "0s", "0i", "0i", "0s", "0s"], 2),
+		_prototype("catwalk", _mesh([
+			_box(Vector3(-H, SLAB_TOP - CATWALK_DECK, H - CATWALK_WIDTH), Vector3(H, SLAB_TOP, H)),
+			_box(Vector3(-H, SLAB_TOP, H - CATWALK_WIDTH), Vector3(H, PARAPET_TOP, H - CATWALK_WIDTH + RAIL)),
+		]), 0.5, FAMILY.CATWALK, ["4", "4f", "0i", "0i", "1s", "0s"], 4),
+		_prototype("ladder", _mesh(_ladder_boxes()), 0.5, FAMILY.LADDER, ["0s", "0s", "0i", "0i", "1s", "0s"], 4),
+		_prototype("tunnel", _mesh([
+			slab,
+			_box(Vector3(-H, SLAB_TOP, H - TUNNEL_WALL), Vector3(H, H, H)),
+			_box(Vector3(-H, SLAB_TOP, -H), Vector3(H, H, -H + TUNNEL_WALL)),
+		]), 1.0, FAMILY.TUNNEL, ["0s", "0s", "1i", "1i", "1s", "1s"], 2),
+		_prototype("portal_opening", _mesh([
+			_box(Vector3(-H, -H, -WALL_HALF), Vector3(-H + JAMB, H, WALL_HALF)),
+			_box(Vector3(H - JAMB, -H, -WALL_HALF), Vector3(H, H, WALL_HALF)),
+		]), 0.5, FAMILY.PORTAL_OPENING, ["3s", "3s", "3_0", "0i", "0s", "0s"], 2),
+	]
+	return tileset
+
+
+## Five treads climbing towards +x, each 0.4 m deeper and higher than the
+## last, the top tread flush with the top of the cell.
+static func _stair_boxes() -> Array[AABB]:
+	var boxes: Array[AABB] = []
+	for i in TREADS:
+		boxes.append(_box(Vector3(-H + TREAD * i, -H, -STAIR_HALF), Vector3(H, -H + TREAD * (i + 1), STAIR_HALF)))
+	return boxes
+
+
+## Two rails and five rungs standing off the +z face.
+static func _ladder_boxes() -> Array[AABB]:
+	var z_back := H - LADDER_WALL_GAP
+	var boxes: Array[AABB] = [
+		_box(Vector3(-LADDER_HALF, -H, z_back - RAIL), Vector3(-LADDER_HALF + RAIL, H, z_back)),
+		_box(Vector3(LADDER_HALF - RAIL, -H, z_back - RAIL), Vector3(LADDER_HALF, H, z_back)),
+	]
+	var pitch := 2 * H / RUNGS
+	for i in RUNGS:
+		var y := -H + pitch * (i + 0.5)
+		boxes.append(_box(Vector3(-LADDER_HALF + RAIL, y - RAIL / 2, z_back - RAIL), Vector3(LADDER_HALF - RAIL, y + RAIL / 2, z_back)))
+	return boxes
+
+
+static func _prototype(prototype_name: String, mesh: Mesh, weight: float, family: int, sockets: Array, rotations: int) -> TilePrototype:
+	var prototype := TilePrototype.new()
+	prototype.name = prototype_name
+	prototype.mesh = mesh
+	prototype.weight = weight
+	prototype.family = family
+	prototype.sockets = PackedStringArray(sockets)
+	prototype.rotations = rotations
+	# Fixed ids keep the saved resource identical from build to build.
+	prototype.resource_scene_unique_id = "prototype_%s" % prototype_name
+	if mesh != null:
+		mesh.resource_scene_unique_id = "mesh_%s" % prototype_name
+	return prototype
+
+
+static func _box(from: Vector3, to: Vector3) -> AABB:
+	return AABB(from, to - from)
+
+
+static func _box_mesh(size: Vector3) -> BoxMesh:
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	return mesh
+
+
+## One surface of all boxes, six outward quads each with flat normals.
+static func _mesh(boxes: Array[AABB]) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for box in boxes:
+		var a := box.position
+		var b := box.end
+		# Corners of each face counter-clockwise seen from outside.
+		var faces := [
+			[Vector3.RIGHT, Vector3(b.x, a.y, b.z), Vector3(b.x, a.y, a.z), Vector3(b.x, b.y, a.z), Vector3(b.x, b.y, b.z)],
+			[Vector3.LEFT, Vector3(a.x, a.y, a.z), Vector3(a.x, a.y, b.z), Vector3(a.x, b.y, b.z), Vector3(a.x, b.y, a.z)],
+			[Vector3.UP, Vector3(a.x, b.y, b.z), Vector3(b.x, b.y, b.z), Vector3(b.x, b.y, a.z), Vector3(a.x, b.y, a.z)],
+			[Vector3.DOWN, Vector3(a.x, a.y, a.z), Vector3(b.x, a.y, a.z), Vector3(b.x, a.y, b.z), Vector3(a.x, a.y, b.z)],
+			[Vector3.BACK, Vector3(a.x, a.y, b.z), Vector3(b.x, a.y, b.z), Vector3(b.x, b.y, b.z), Vector3(a.x, b.y, b.z)],
+			[Vector3.FORWARD, Vector3(b.x, a.y, a.z), Vector3(a.x, a.y, a.z), Vector3(a.x, b.y, a.z), Vector3(b.x, b.y, a.z)],
+		]
+		for face in faces:
+			st.set_normal(face[0])
+			# Godot's front faces are clockwise, so emit the quad reversed.
+			for index in [1, 3, 2, 1, 4, 3]:
+				st.add_vertex(face[index])
+	return st.commit()
