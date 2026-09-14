@@ -58,6 +58,26 @@ func broken_records(library: TileLibrary) -> int:
 	return broken
 
 
+## Cells outside every record that hold a tile of a walk family (any family
+## but none): 0 when walk tiles stand only in record cells (#180).
+func walk_tiles_outside_records(library: TileLibrary) -> int:
+	return count_walk_tiles_outside(library, size, records, result.cells)
+
+
+## `walk_tiles_outside_records` for any grid, records and cells.
+static func count_walk_tiles_outside(library: TileLibrary, grid: Vector3i, cell_records: Array[EdgeRasteriser.Record], cells: PackedInt32Array) -> int:
+	var in_record := PackedByteArray()
+	in_record.resize(cells.size())
+	in_record.fill(0)
+	for record in cell_records:
+		in_record[record.cell.x + grid.x * (record.cell.y + grid.y * record.cell.z)] = 1
+	var outside := 0
+	for cell in cells.size():
+		if in_record[cell] == 0 and library.tiles[cells[cell]].prototype.family != TilePrototype.FAMILY_NONE:
+			outside += 1
+	return outside
+
+
 ## Face-neighbour pairs of `cells` that the adjacency table forbids.
 static func bad_adjacencies(library: TileLibrary, grid: Vector3i, cells: PackedInt32Array) -> int:
 	var bad := 0
@@ -99,16 +119,17 @@ static func real_sector(index: int) -> Vector3i:
 	return axes
 
 
-## The first `count` sampled sectors that are stratum sectors with records at
-## the rasteriser's world seed (fewer when `REAL_SEARCH_LIMIT` runs out).
-static func real_sectors(rasteriser: EdgeRasteriser, count: int) -> Array[Vector3i]:
+## The first `count` sampled sectors of `type` (stratum by default) with
+## records at the rasteriser's world seed (fewer when `REAL_SEARCH_LIMIT` runs
+## out).
+static func real_sectors(rasteriser: EdgeRasteriser, count: int, type := Skeleton.SectorType.STRATUM) -> Array[Vector3i]:
 	var graph := rasteriser.graph
 	var found: Array[Vector3i] = []
 	var i := 0
 	while found.size() < count and i < REAL_SEARCH_LIMIT:
 		var sector := real_sector(i)
 		i += 1
-		if graph.skeleton.sector_type(graph.world_seed, sector) != Skeleton.SectorType.STRATUM:
+		if graph.skeleton.sector_type(graph.world_seed, sector) != type:
 			continue
 		if rasteriser.records_for_sector(sector).is_empty():
 			continue
