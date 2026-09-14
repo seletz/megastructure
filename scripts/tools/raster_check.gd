@@ -6,7 +6,8 @@ extends SceneTree
 ## on a fresh graph) return identical records; every record cell lies inside
 ## 0..23; no two records share a cell; every record an edge's routing
 ## produced is kept or merged away without conflict by `merge`, and no two
-## raw records at one cell conflict; every edge of the sector has a portal
+## raw records at one cell conflict; no record lies directly above or below a
+## stair cell; every edge of the sector has a portal
 ## opening at its portal cell in both of its endpoint sectors, so each
 ## endpoint has at least one record; no edge is rejected; the records of a
 ## sector form one 26-connected group; every edge's routing is a walk from
@@ -69,7 +70,7 @@ func _check_seed(seed_value: int, families: PackedInt32Array, totals: Dictionary
 	_expect(rasteriser.graph.cells_per_sector() == CELLS, "%s %d cells per sector" % [label, CELLS])
 	# Rasters by sector, so endpoint sectors are computed once.
 	var rasters := {}
-	var bad := {"fresh": 0, "bounds": 0, "duplicate": 0, "conflict": 0, "endpoint": 0, "rejected": 0, "split": 0, "walk": 0}
+	var bad := {"fresh": 0, "bounds": 0, "duplicate": 0, "conflict": 0, "endpoint": 0, "rejected": 0, "split": 0, "walk": 0, "headroom": 0}
 	var with_edges := 0
 	var records := 0
 	var edges := 0
@@ -98,6 +99,7 @@ func _check_seed(seed_value: int, families: PackedInt32Array, totals: Dictionary
 
 	_expect(bad.fresh == 0, "%s a fresh graph rasterises all %d sectors identically, %d differ" % [label, SECTORS_PER_SEED, bad.fresh])
 	_expect(bad.bounds == 0 and bad.duplicate == 0, "%s %d records inside 0..%d with one record per cell, %d outside, %d duplicate cells" % [label, records, CELLS - 1, bad.bounds, bad.duplicate])
+	_expect(bad.headroom == 0, "%s no record directly above or below a stair cell, %d pairs" % [label, bad.headroom / 2])
 	_expect(bad.conflict == 0, "%s no conflicting records in %d sectors, %d conflicts" % [label, SECTORS_PER_SEED, bad.conflict])
 	_expect(bad.endpoint == 0, "%s both endpoint sectors of all %d edges have the portal opening, %d miss it" % [label, edges, bad.endpoint])
 	_expect(bad.rejected == 0, "%s no edge rejected, %d are" % [label, bad.rejected])
@@ -117,7 +119,8 @@ func _raster(rasteriser: EdgeRasteriser, rasters: Dictionary, sector: Vector3i) 
 	return rasters[sector]
 
 
-## Bounds, one record per cell, and every raw routing record kept or merged
+## Bounds, one record per cell, no record directly above or below a stair
+## cell (counted from both cells), and every raw routing record kept or merged
 ## into the final record without conflict.
 func _check_cells(raster: EdgeRasteriser.SectorRaster, bad: Dictionary) -> void:
 	var by_cell := {}
@@ -128,6 +131,11 @@ func _check_cells(raster: EdgeRasteriser.SectorRaster, bad: Dictionary) -> void:
 		if by_cell.has(c):
 			bad.duplicate += 1
 		by_cell[c] = record
+	for record in raster.records:
+		for step in [Vector3i.UP, Vector3i.DOWN]:
+			var other: EdgeRasteriser.Record = by_cell.get(record.cell + step)
+			if other != null and (record.family == EdgeRasteriser.TileFamily.STAIR or other.family == EdgeRasteriser.TileFamily.STAIR):
+				bad.headroom += 1
 	var raw := {}
 	for ref: Vector4i in raster.edge_records:
 		for record: EdgeRasteriser.Record in raster.edge_records[ref]:
