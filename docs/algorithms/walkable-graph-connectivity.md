@@ -139,10 +139,15 @@ vertically (157). Tunnels never come back as loops.
 - `edges_for_sector(s)`: the edges of `s`'s region touching `s`, plus the
   boundary edges of that region's faces that land on `s`.
 
-Every `Edge` carries `a`, `b`, `axis`, `kind` and a `portal`, the face point
-of [[GLOSSARY#Portal|portal]] salts 140 to 145. Tunnel edges get the same
-point, although `portal(a, b)` returns null for solid pairs. It gives the
-fill layer a place to carve the corridor through.
+Every `Edge` carries `a`, `b`, `axis`, `kind` and a `portal`, the
+[[GLOSSARY#Portal|portal]] point on the face. On a y face both coordinates
+are hashed (salts 142, 143); on an x or z face the coordinate along the face
+is hashed (salt 141 or 144) and the height is the floor level of `a`'s hub,
+the level of its interior node or, for a solid `a`, the centre level of 12
+cells. So every horizontal edge is level in `a` and changes height only in
+`b` ([[sector-skeleton-and-walkable-graph#Nodes and portals]]). Tunnel edges
+get the same point, although `portal(a, b)` returns null for solid pairs. It
+gives the fill layer a place to carve the corridor through.
 
 ## Worked example
 
@@ -305,5 +310,21 @@ used only by the connectivity check to place its samples.
 ![The graph around the camera inside the world at seed 0](../images/walkable-graph-inside.png)
 
 Corridors are white, stairs and ladders yellow, bridges cyan, catwalks green
-and tunnels magenta. Both renders come from `mise run shot` on
-`scenes/skeleton_viewer.tscn`.
+and tunnels magenta. Each half of an edge is drawn level at its node's floor
+level to the point above or below the portal, and a yellow vertical segment
+on the portal's side marks the height change, the end where the edge
+rasteriser starts its stair run or ladder ([[walkable-graph#Debug lines]]).
+Nothing is drawn as a slope, and horizontal edges have a vertical segment on
+their upper side (`b`) only.
+
+Both renders come from `mise run shot` on `scenes/skeleton_viewer.tscn` at
+seed 0 with the HUD, 1280 × 720:
+
+```sh
+# Outside: the 7^3 region around the origin, pose of skeleton#Viewer.
+mise run shot scenes/skeleton_viewer.tscn docs/images/walkable-graph-outside.png \
+	--seed 0 --pose=-300,260,-300,0.79,-0.48 --params follow_camera=false,radius=3 --ui
+# Inside: at the origin sector's centre, radius 4.
+mise run shot scenes/skeleton_viewer.tscn docs/images/walkable-graph-inside.png \
+	--seed 0 --pose 24,24,24,0.9,-0.28 --params radius=4 --ui
+```

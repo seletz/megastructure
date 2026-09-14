@@ -794,7 +794,8 @@ A point on the shared face between two adjacent non-solid sectors where the
 walkable graph crosses from one to the other.
 
 In this project: `WalkableGraph.portal`; tunnel edges carry a point from the
-same salts on the face into solid.
+same salts on the face into solid. On an x or z face the portal sits at the
+floor level of the lower sector's hub, so an edge is level on that side.
 
 See also: [[sector-skeleton-and-walkable-graph]], [[MEGASTRUCTURE_CONCEPT]],
 [[RESEARCH_WFC]].
