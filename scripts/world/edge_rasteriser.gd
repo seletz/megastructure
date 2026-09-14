@@ -19,25 +19,35 @@ extends RefCounted
 ## portal flat. All portal cells are placed first; records at the same cell
 ## merge by `merge`, and an edge whose walk would conflict with the records
 ## before it tries its next routing. When none fits it keeps only its portal
-## cell and is listed as rejected. Rules and a worked example are in
+## cell and is listed as rejected. Every walking surface of a routing
+## (flat cells, stairs and side portal openings) also reserves the cells above
+## it as HEADROOM records, `headroom_cells` of them (one more over a stair),
+## which merge only with each other. Rules and a worked example are in
 ## docs/algorithms/edge-rasteriser.md.
 
-## Tile families a record restricts its cell to.
-enum TileFamily { FLOOR, STAIR, BRIDGE, CATWALK, LADDER, TUNNEL, PORTAL_OPENING }
+## Tile families a record restricts its cell to. HEADROOM is the last and
+## belongs to no prototype: it asks for any tile that leaves a walker's head
+## room (`TileLibrary.Tile.headroom`).
+enum TileFamily { FLOOR, STAIR, BRIDGE, CATWALK, LADDER, TUNNEL, PORTAL_OPENING, HEADROOM }
 
-const FAMILY_NAMES: Array[String] = ["floor", "stair", "bridge", "catwalk", "ladder", "tunnel", "portal_opening"]
+const FAMILY_NAMES: Array[String] = ["floor", "stair", "bridge", "catwalk", "ladder", "tunnel", "portal_opening", "headroom"]
+## Families a tile prototype may belong to: every family before HEADROOM.
+const PROTOTYPE_FAMILIES := TileFamily.HEADROOM
 
 ## Orientation of a record. 0 to 3 are yaw quarter turns: the forward
 ## direction is +x turned that many quarter turns about +y (0 +x, 1 -z, 2 -x,
 ## 3 +z), so a stair's forward is the way up and a portal opening's forward
 ## points out of the sector. UP and DOWN mark a vertical record: a ladder
 ## (always UP) or an opening in the ceiling (UP) or floor (DOWN). Floor,
-## bridge, catwalk and tunnel records are unoriented and carry 0.
+## bridge, catwalk, tunnel and headroom records are unoriented and carry 0.
 const ORIENTATION_UP := 4
 const ORIENTATION_DOWN := 5
 
 ## Flights a stair run search may lay before it gives up on one start.
 const RUN_SEARCH_LIMIT := 64
+## Default `headroom_cells`: one clear cell above a walking surface
+## (decision #171).
+const HEADROOM_CELLS := 1
 
 const _YAW_DIRS: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(0, 0, -1), Vector3i(-1, 0, 0), Vector3i(0, 0, 1)]
 const _UP := Vector3i(0, 1, 0)
@@ -80,7 +90,8 @@ class SectorRaster:
 	## Merged records, one per cell, ordered by cell x, then y, then z.
 	var records: Array[Record] = []
 	## For every edge, by edge_ref, the records of the routing it kept before
-	## merging with the other edges (only the portal cell when rejected).
+	## merging with the other edges (only the portal cell when rejected), in
+	## walking order and without its headroom (`headroom_for`).
 	var edge_records: Dictionary = {}
 	## Edge refs whose every routing conflicted, in rasterising order.
 	var rejected: Array[Vector4i] = []
@@ -89,10 +100,15 @@ class SectorRaster:
 
 
 var graph: WalkableGraph
+## Clear cells reserved above every flat cell and side portal opening; a
+## stair reserves one more, as its top tread rises to the floor of the cell
+## above. 0 turns headroom records off.
+var headroom_cells := HEADROOM_CELLS
 
 
-func _init(walkable_graph: WalkableGraph) -> void:
+func _init(walkable_graph: WalkableGraph, headroom := HEADROOM_CELLS) -> void:
 	graph = walkable_graph
+	headroom_cells = headroom
 
 
 static func family_name(family: TileFamily) -> String:
@@ -127,10 +143,18 @@ func rasterise(sector: Vector3i) -> SectorRaster:
 	# routing instead of pushing the portal out.
 	var portal_ok := {}
 	for edge in edges:
-		var merged: Variant = _merge_all(cells, [_portal_record(sector, edge, n)])
+		var portal: Array[Record] = [_portal_record(sector, edge, n)]
+		var merged: Variant = _merge_all(cells, portal)
 		if merged != null:
 			cells = merged
 			portal_ok[edge_ref(edge)] = true
+	# Then the room above them, where it fits; a portal whose room does not
+	# fit leaves every routing of its edge to conflict.
+	for edge in edges:
+		if portal_ok.has(edge_ref(edge)):
+			var merged: Variant = _merge_all(cells, headroom_for([_portal_record(sector, edge, n)]))
+			if merged != null:
+				cells = merged
 	for edge in edges:
 		var ref := edge_ref(edge)
 		var chosen: Array[Record] = []
@@ -139,7 +163,10 @@ func rasterise(sector: Vector3i) -> SectorRaster:
 			var found := false
 			var candidates := _candidates(sector, edge, hub, surface, n, cells)
 			for i in candidates.size():
-				var merged: Variant = _merge_all(cells, candidates[i])
+				var with_room: Array[Record] = []
+				with_room.assign(candidates[i])
+				with_room.append_array(headroom_for(with_room))
+				var merged: Variant = _merge_all(cells, with_room)
 				if merged != null:
 					cells = merged
 					chosen.assign(candidates[i])
@@ -173,19 +200,25 @@ static func surface_family(type: Skeleton.SectorType) -> TileFamily:
 
 
 ## Merges two records at the same cell; null when they conflict. The same
-## family and orientation merge. Stairs, ladders and portal openings win over
-## the surface families (floor, bridge, catwalk, tunnel). Two portal openings
-## with different yaws merge into a corner opening with the smaller yaw.
-## Every other pair conflicts: two surface families, stairs of different
-## orientation, a stair and a ladder, a portal opening and a stair or ladder.
-## On a tie the smaller edge_ref stays, so merge(p, q) equals merge(q, p).
+## family and orientation merge. Headroom merges only with headroom: a cell
+## one walk needs for its head is no cell another walk may stand in. A ladder
+## wins over the surface families (floor, bridge, catwalk, tunnel): its rungs
+## stand off one face. A stair or portal opening does not: a flat walk
+## through a stair's slope or between a portal's jambs cannot be walked, so
+## those pairs conflict (#173). Two portal openings with different yaws merge
+## into a corner opening with the smaller yaw. Every other pair conflicts: two
+## surface families, stairs of different orientation, a stair and a ladder, a
+## portal opening and a stair or ladder. On a tie the smaller edge_ref stays,
+## so merge(p, q) equals merge(q, p).
 static func merge(p: Record, q: Record) -> Record:
 	var rank_p := _rank(p.family)
 	var rank_q := _rank(q.family)
 	if p.family == q.family and p.orientation == q.orientation:
 		return p if _ref_before(p.edge_ref, q.edge_ref) or p.edge_ref == q.edge_ref else q
+	if p.family == TileFamily.HEADROOM or q.family == TileFamily.HEADROOM:
+		return null
 	if rank_p != rank_q:
-		if rank_p == 0 or rank_q == 0:
+		if (rank_p == 0 and q.family == TileFamily.LADDER) or (rank_q == 0 and p.family == TileFamily.LADDER):
 			return p if rank_p > rank_q else q
 		return null
 	if p.family == TileFamily.PORTAL_OPENING and q.family == TileFamily.PORTAL_OPENING:
@@ -202,6 +235,37 @@ static func _rank(family: TileFamily) -> int:
 		TileFamily.PORTAL_OPENING:
 			return 2
 	return 0
+
+
+## The HEADROOM records above the walking surfaces among `records`, in
+## order, inside the grid: `headroom_cells` cells above a flat cell (floor,
+## bridge, catwalk, tunnel) or a portal opening on a side face, one more above
+## a stair. Ladders and openings in a floor or ceiling are passages, not
+## surfaces, and reserve nothing. A cell above two records is listed twice.
+func headroom_for(records: Array[Record]) -> Array[Record]:
+	var result: Array[Record] = []
+	var n := graph.cells_per_sector()
+	for record in records:
+		for y in _room_heights(record, headroom_cells):
+			if y < n:
+				result.append(Record.make(Vector3i(record.cell.x, y, record.cell.z), TileFamily.HEADROOM, 0, record.edge_ref))
+	return result
+
+
+## Heights of the cells a record's walker needs clear above it.
+static func _room_heights(record: Record, room: int) -> Array[int]:
+	var cells := 0
+	match record.family:
+		TileFamily.FLOOR, TileFamily.BRIDGE, TileFamily.CATWALK, TileFamily.TUNNEL:
+			cells = room
+		TileFamily.STAIR:
+			cells = room + 1 if room > 0 else 0
+		TileFamily.PORTAL_OPENING:
+			cells = room if record.orientation < ORIENTATION_UP else 0
+	var heights: Array[int] = []
+	for k in range(1, cells + 1):
+		heights.append(record.cell.y + k)
+	return heights
 
 
 ## The yaw 0..3 of a horizontal unit direction.
@@ -262,59 +326,72 @@ func _candidates(sector: Vector3i, edge: WalkableGraph.Edge, hub: Vector3i, surf
 
 
 ## Horizontal edges: the path reaches the portal `p` along the edge axis
-## (across the face) or along the face wall; catwalks prefer the wall. A
-## level change sits next to the portal: a stair run leaving `p` in that
-## direction, or in a shaft or chasm a ladder in the cell before `p`. A level
-## walk last tries detours: along the edge axis to the line `d` cells in from
-## the face (d = 1 to n - 1), along the face to the portal's column, then
+## (across the face) or along the face wall; catwalks prefer the wall. Either
+## way the last step is across the face, from the door cell `p` + inward,
+## because a portal's jambs close its sides: along the wall the path runs to
+## the door cell, not to `p`, and a level walk ends in the door cell either
+## way (a route through `p` itself conflicts with the portal). A level change sits next to the portal: a stair
+## run leaving `p` inwards or leaving the door cell along the wall, or in a
+## shaft or chasm a ladder in the cell before `p` or beside the door cell. A
+## level walk last tries detours: along the edge axis to the line `d` cells in
+## from the face (d = 1 to n - 1), along the face to the portal's column, then
 ## across to `p`.
 func _horizontal_candidates(edge: WalkableGraph.Edge, hub: Vector3i, surface: TileFamily, n: int, portal: Record, by_ladder: bool, cells: Dictionary, result: Array[Array]) -> void:
 	var ref := portal.edge_ref
 	var p := portal.cell
 	var face_axis := Vector3i.AXIS_Z if edge.axis == Vector3i.AXIS_X else Vector3i.AXIS_X
+	var inward := _unit(edge.axis, -1 if p[edge.axis] == n - 1 else 1)
+	var door := p + inward
 	var last_axes: Array[int] = [edge.axis, face_axis]
 	if edge.kind == WalkableGraph.EdgeKind.CATWALK:
 		last_axes = [face_axis, edge.axis]
 	for last_axis in last_axes:
 		var other_axis := face_axis if last_axis == edge.axis else edge.axis
-		# Directions leaving the portal into the sector, preferred first.
+		# Along the wall the run ends at the door cell, then steps into `p`.
+		var end := p if last_axis == edge.axis else door
+		# Directions leaving `end` into the sector, preferred first.
 		var dirs: Array[Vector3i] = []
 		if last_axis == edge.axis:
-			dirs.append(_unit(last_axis, -1 if p[last_axis] == n - 1 else 1))
+			dirs.append(inward)
 		else:
 			var toward_hub := signi(hub[last_axis] - p[last_axis])
 			if toward_hub == 0:
 				toward_hub = 1
 			dirs.append(_unit(last_axis, toward_hub))
 			dirs.append(_unit(last_axis, -toward_hub))
+		var tail: Array[Record] = [portal]
+		if end != p:
+			tail.push_front(Record.make(door, surface, 0, ref))
 		if p.y == hub.y:
+			# Level walks always end door, portal, even across the face: a hub
+			# on the face row would otherwise reach `p` along the wall.
 			var plain: Array[Record] = []
-			_append_route(plain, hub, p, other_axis, surface, ref, false)
+			_append_route(plain, hub, door, other_axis, surface, ref, true)
 			plain.append(portal)
 			result.append(plain)
 			continue
 		if by_ladder:
-			var foot := p + dirs[0]
+			var foot := end + dirs[0]
 			if not _inside(foot, n):
 				continue
 			var ladder: Array[Record] = []
 			_append_route(ladder, hub, Vector3i(foot.x, hub.y, foot.z), other_axis, surface, ref, false)
 			_append_ladder(ladder, foot, hub.y, p.y, ref)
-			ladder.append(portal)
+			ladder.append_array(tail)
 			result.append(ladder)
 			continue
 		for dir in dirs:
-			var stair := _stair_run(p, hub, dir, surface, ref, n, cells)
+			var stair := _stair_run(end, hub, dir, surface, ref, n, cells)
 			if not stair.is_empty():
-				stair.append(portal)
+				stair.append_array(tail)
 				result.append(stair)
 	if p.y != hub.y:
 		return
 	# Detours, last: across the face along a line `d` cells in from the face,
 	# so a level walk can step around the column of another edge's stair.
-	var inward := -1 if p[edge.axis] == n - 1 else 1
+	var inward_sign := inward[edge.axis]
 	for d in range(1, n):
-		var line := p[edge.axis] + inward * d
+		var line := p[edge.axis] + inward_sign * d
 		var first := hub
 		first[edge.axis] = line
 		var second := first
@@ -399,7 +476,7 @@ func _stair_run(end: Vector3i, hub: Vector3i, first_dir: Vector3i, surface: Tile
 func _flights(cursor: Vector3i, h: int, dir: Vector3i, first_dir: Vector3i, up: int, remaining: int, surface: TileFamily, ref: Vector4i, n: int, cells: Dictionary, outward: Array[Record], budget: Array[int]) -> bool:
 	if remaining == 0:
 		var landing := Record.make(Vector3i(cursor.x + dir.x, h, cursor.z + dir.z), surface, 0, ref)
-		if not _free(cells, landing) or not _headroom(cells, outward, landing):
+		if not _free(cells, landing) or not _stair_clear(cells, outward, landing) or not _room(cells, outward, landing):
 			return false
 		outward.append(landing)
 		return true
@@ -432,7 +509,7 @@ func _flights(cursor: Vector3i, h: int, dir: Vector3i, first_dir: Vector3i, up: 
 		var pending: Array[Record] = outward.duplicate()
 		pending.append_array(laid)
 		for record in laid:
-			free = free and _free(cells, record) and _headroom(cells, pending, record)
+			free = free and _free(cells, record) and _stair_clear(cells, pending, record) and _room(cells, pending, record)
 		if not free:
 			continue
 		var mark := outward.size()
@@ -450,16 +527,36 @@ static func _free(cells: Dictionary, record: Record) -> bool:
 	return existing == null or (existing.family == record.family and existing.orientation == record.orientation)
 
 
-## True when `record` keeps the headroom rule against the records in `cells`
-## and in `pending`: nothing directly above or below a stair cell.
-static func _headroom(cells: Dictionary, pending: Array[Record], record: Record) -> bool:
+## True when `record` keeps the stair rule against the records in `cells`
+## and in `pending`: nothing but headroom directly above or below a stair
+## cell. Headroom records themselves are never checked.
+static func _stair_clear(cells: Dictionary, pending: Array[Record], record: Record) -> bool:
+	if record.family == TileFamily.HEADROOM:
+		return true
 	for step in [_UP, -_UP]:
 		var next: Vector3i = record.cell + step
 		var other: Record = cells.get(next)
 		for candidate in pending:
 			if candidate.cell == next:
 				other = candidate
-		if other != null and (record.family == TileFamily.STAIR or other.family == TileFamily.STAIR):
+		if other != null and other.family != TileFamily.HEADROOM and (record.family == TileFamily.STAIR or other.family == TileFamily.STAIR):
+			return false
+	return true
+
+
+## True when the headroom of `record` is free (empty or headroom in `cells`,
+## no record of `pending`) and `record` is in no headroom of `pending`.
+func _room(cells: Dictionary, pending: Array[Record], record: Record) -> bool:
+	for y in _room_heights(record, headroom_cells):
+		var above := Vector3i(record.cell.x, y, record.cell.z)
+		var existing: Record = cells.get(above)
+		if existing != null and existing.family != TileFamily.HEADROOM:
+			return false
+		for candidate in pending:
+			if candidate.cell == above:
+				return false
+	for candidate in pending:
+		if candidate.cell.x == record.cell.x and candidate.cell.z == record.cell.z and record.cell.y in _room_heights(candidate, headroom_cells):
 			return false
 	return true
 
@@ -490,8 +587,8 @@ static func _append_ladder(out: Array[Record], column: Vector3i, from_y: int, to
 
 
 ## Merges records into a copy of `cells`; null on the first conflict or when
-## the result breaks the headroom rule at one of the records' cells (a stair
-## cell with a record directly above or below it).
+## the result breaks the stair rule at one of the records' cells (a stair
+## cell with a record other than headroom directly above or below it).
 static func _merge_all(cells: Dictionary, records: Array[Record]) -> Variant:
 	var result := cells.duplicate()
 	for record in records:
@@ -504,7 +601,7 @@ static func _merge_all(cells: Dictionary, records: Array[Record]) -> Variant:
 			return null
 		result[record.cell] = merged
 	for record in records:
-		if not _headroom(result, [], result[record.cell]):
+		if not _stair_clear(result, [], result[record.cell]):
 			return null
 	return result
 

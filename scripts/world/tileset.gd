@@ -33,14 +33,15 @@ func find(prototype_name: String) -> TilePrototype:
 	return null
 
 
-## `EdgeRasteriser.TileFamily` values no prototype belongs to, ascending.
+## `EdgeRasteriser.TileFamily` values of tiles (all but HEADROOM) no
+## prototype belongs to, ascending.
 func missing_families() -> Array[int]:
 	var present := {}
 	for prototype in prototypes:
 		if prototype != null:
 			present[prototype.family] = true
 	var missing: Array[int] = []
-	for family in EdgeRasteriser.TileFamily.size():
+	for family in EdgeRasteriser.PROTOTYPE_FAMILIES:
 		if not present.has(family):
 			missing.append(family)
 	return missing
