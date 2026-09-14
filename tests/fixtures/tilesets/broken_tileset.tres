@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="TileSet3D" format=3]
+
+[ext_resource type="Script" path="res://scripts/world/tile_prototype.gd" id="1_nj1ph"]
+[ext_resource type="Script" path="res://scripts/world/tileset.gd" id="2_7d380"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_ys376"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="Resource" id="Resource_lnomy"]
+script = ExtResource("1_nj1ph")
+name = "solid"
+mesh = SubResource("BoxMesh_ys376")
+sockets = PackedStringArray("1s", "1s", "1i", "1i", "1s", "1s")
+exclusions = PackedStringArray()
+
+[sub_resource type="BoxMesh" id="BoxMesh_dp6ta"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="Resource" id="Resource_8scl4"]
+script = ExtResource("1_nj1ph")
+name = "solid"
+mesh = SubResource("BoxMesh_dp6ta")
+weight = 0.0
+sockets = PackedStringArray("1s", "1s", "1i", "1i", "1s", "1s")
+exclusions = PackedStringArray()
+
+[sub_resource type="Resource" id="Resource_e4ywt"]
+script = ExtResource("1_nj1ph")
+name = "ramp"
+family = 9
+sockets = PackedStringArray("3x", "03", "5_1", "5_4", "2i", "2s")
+rotations = 3
+exclusions = PackedStringArray("nowhere", "solid")
+
+[sub_resource type="BoxMesh" id="BoxMesh_u828y"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="Resource" id="Resource_m4ogd"]
+script = ExtResource("1_nj1ph")
+name = "short"
+mesh = SubResource("BoxMesh_u828y")
+family = 1
+sockets = PackedStringArray("1s", "1s", "1", "1i", "1s")
+rotations = 4
+exclusions = PackedStringArray()
+
+[sub_resource type="BoxMesh" id="BoxMesh_tcbll"]
+
+[sub_resource type="Resource" id="Resource_mbfly"]
+script = ExtResource("1_nj1ph")
+mesh = SubResource("BoxMesh_tcbll")
+sockets = PackedStringArray("0s", "0", "0_3", "0i", "0f", "0s")
+exclusions = PackedStringArray()
+
+[resource]
+script = ExtResource("2_7d380")
+prototypes = Array[ExtResource("1_nj1ph")]([SubResource("Resource_lnomy"), SubResource("Resource_8scl4"), SubResource("Resource_e4ywt"), SubResource("Resource_m4ogd"), SubResource("Resource_mbfly")])
+air_name = "void"

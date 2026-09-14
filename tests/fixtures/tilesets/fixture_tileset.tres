@@ -1,0 +1,47 @@
+[gd_resource type="Resource" script_class="TileSet3D" format=3]
+
+[ext_resource type="Script" path="res://scripts/world/tile_prototype.gd" id="1_bnjeb"]
+[ext_resource type="Script" path="res://scripts/world/tileset.gd" id="2_u3ule"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_ayn41"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="Resource" id="Resource_t1ft7"]
+script = ExtResource("1_bnjeb")
+name = "solid"
+mesh = SubResource("BoxMesh_ayn41")
+sockets = PackedStringArray("1s", "1s", "1i", "1i", "1s", "1s")
+exclusions = PackedStringArray()
+
+[sub_resource type="Resource" id="Resource_egyre"]
+script = ExtResource("1_bnjeb")
+name = "air"
+sockets = PackedStringArray("0s", "0s", "0i", "0i", "0s", "0s")
+exclusions = PackedStringArray()
+
+[sub_resource type="BoxMesh" id="BoxMesh_hxjcc"]
+size = Vector3(2, 0.6, 2)
+
+[sub_resource type="Resource" id="Resource_thp4j"]
+script = ExtResource("1_bnjeb")
+name = "floor"
+mesh = SubResource("BoxMesh_hxjcc")
+weight = 4.0
+family = 0
+sockets = PackedStringArray("2s", "2s", "0i", "1i", "2s", "2s")
+exclusions = PackedStringArray()
+
+[sub_resource type="BoxMesh" id="BoxMesh_0ef1o"]
+size = Vector3(0.7, 2, 2)
+
+[sub_resource type="Resource" id="Resource_musk7"]
+script = ExtResource("1_bnjeb")
+name = "wall"
+mesh = SubResource("BoxMesh_0ef1o")
+sockets = PackedStringArray("0s", "0s", "3_0", "3_0", "3s", "3s")
+rotations = 2
+exclusions = PackedStringArray()
+
+[resource]
+script = ExtResource("2_u3ule")
+prototypes = Array[ExtResource("1_bnjeb")]([SubResource("Resource_t1ft7"), SubResource("Resource_egyre"), SubResource("Resource_thp4j"), SubResource("Resource_musk7")])
