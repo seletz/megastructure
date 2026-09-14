@@ -642,6 +642,20 @@ In this project: a warm point light with inverse-square falloff
 
 See also: [[MEGASTRUCTURE_CONCEPT]].
 
+### Headroom record
+
+A record of the edge rasteriser that keeps the cell above a walking surface
+passable, so no slab, column or lintel lands on a walker's head.
+
+In this project: `EdgeRasteriser.TileFamily.HEADROOM`, `headroom_cells`
+(default 1, decision #171) above every floor, bridge, catwalk, tunnel and
+side portal opening, one more above a stair; `SectorDomains` restricts the
+cell to tiles whose mesh leaves the lowest 1.8 m empty
+(`TileLibrary.Tile.headroom`: air and the wall doorway on the placeholder
+tileset).
+
+See also: [[edge-rasteriser#8. Headroom records]], Merge rule, Tile family.
+
 ### Hub
 
 The cell of a sector where all its walkable-graph paths meet.
@@ -750,9 +764,9 @@ See also: [[sector-jobs]], [[godot-docs-thread-safe-apis]], Sector job.
 ### Merge rule
 
 What happens when two records of the edge rasteriser land on the same cell:
-identical records merge, a stair, ladder or portal opening wins over a floor,
-bridge, catwalk or tunnel cell, two horizontal portal openings form a corner
-opening, and every other pair is a conflict.
+identical records merge, a ladder wins over a floor, bridge, catwalk or
+tunnel cell, two horizontal portal openings form a corner opening, headroom
+merges only with headroom, and every other pair is a conflict.
 
 In this project: `EdgeRasteriser.merge`; a conflicting path takes its next
 routing.
@@ -1338,7 +1352,8 @@ as all floor tiles or all stair tiles of one orientation. A cell restricted to
 a family is a domain restriction.
 
 In this project: `EdgeRasteriser.TileFamily`: floor, stair, bridge, catwalk,
-ladder, tunnel and portal opening.
+ladder, tunnel and portal opening, the families of tile prototypes, and
+headroom, which records use to ask for any tile a walker's head fits in.
 
 See also: [[edge-rasteriser]], Domain restriction.
 

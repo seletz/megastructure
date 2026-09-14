@@ -22,7 +22,9 @@ sources:
 > portal. No flat cell ever changes level, so nothing is drawn as a slope.
 > Each cell becomes a record with a [[GLOSSARY#Tile family|tile family]]
 > (floor, stair, bridge, catwalk, ladder, tunnel, portal opening) and an
-> orientation. Where two walks share a cell a fixed
+> orientation, and the cell above every walking surface becomes a
+> [[GLOSSARY#Headroom record|headroom record]] so no slab, column or lintel
+> lands on the walker's head. Where two walks share a cell a fixed
 > [[GLOSSARY#Merge rule|merge rule]] decides, and a walk that would clash
 > tries another shape. The records are the whole contract between graph and
 > solver, and they depend only on the seed and the sector.
@@ -42,13 +44,13 @@ sorted by cell:
 | Field | Meaning |
 | --- | --- |
 | `cell` | Local cell, 0 to 23 on each axis (sector 48 m, cell 2 m). |
-| `family` | `FLOOR`, `STAIR`, `BRIDGE`, `CATWALK`, `LADDER`, `TUNNEL` or `PORTAL_OPENING`. |
+| `family` | `FLOOR`, `STAIR`, `BRIDGE`, `CATWALK`, `LADDER`, `TUNNEL`, `PORTAL_OPENING` or `HEADROOM`. |
 | `orientation` | 0 to 3: yaw quarter turns of the forward direction, +x turned about +y (0 +x, 1 −z, 2 −x, 3 +z); 4 up, 5 down; 0 for unoriented families. |
 | `edge_ref` | `Vector4i(a.x, a.y, a.z, axis)` of the edge, the same key in both sectors. |
 
 | Family | Orientation |
 | --- | --- |
-| floor, bridge, catwalk, tunnel | unoriented (0): the solver picks the rotation |
+| floor, bridge, catwalk, tunnel, headroom | unoriented (0): the solver picks the rotation |
 | stair | yaw of the way up |
 | ladder | always up (4) |
 | portal opening, on a side face | yaw pointing out of the sector |
@@ -104,7 +106,8 @@ For every edge of `edges_for_sector(sector)`, the portal cell is the portal's
 `face_cell` on the two face axes and `n − 1` (sector is `a`) or `0` (sector
 is `b`) along the edge axis. All portal cells are placed before any walk,
 because the graph fixes them; a walk that would run through one must go
-elsewhere.
+elsewhere. The headroom of the side portal cells (step 8) goes in next,
+where it fits.
 
 ### 3. Edge order
 
@@ -126,9 +129,10 @@ built backwards from `E`, leaving it in a given direction:
    **landing** in the next cell towards the sector centre, turn the other
    way, turn back. Take the first choice whose flight and the cell after it
    fit in the sector and whose cells are free (empty, or holding the same
-   family and orientation; the portal cells and the walks of earlier edges
-   are already placed) and keep the headroom rule (step 7) against the
-   records placed so far and the run's own earlier flights. If later flights find no free choice, undo and try
+   family and orientation; the portal cells, their headroom and the walks
+   of earlier edges are already placed), keep the stair rule (step 7) and
+   whose headroom (step 8) is free, against the records placed so far and
+   the run's own earlier flights. If later flights find no free choice, undo and try
    the next choice: a depth-first search, capped at `RUN_SEARCH_LIMIT` = 64
    flights per run.
 3. Each stair cell faces the way up. The flat cell after the last flight, at
@@ -145,15 +149,23 @@ portal already holds.
 
 The walk reaches the portal `P` either across the face (along the edge axis)
 or along the face wall. Corridors, bridges and tunnels try across first,
-catwalks along the wall first. Along the wall the stair leaves `P` towards
-the hub first, then away from it.
+catwalks along the wall first. The last step always enters `P` across the
+face, from the **door cell** `D` one cell inwards, because a portal's jambs
+close its sides (#173): along the wall the walk runs to `D`, then into `P`.
+Along the wall the stair leaves `D` towards the hub first, then away from
+it.
 
-1. Same level: an L from the hub to `P` at the hub's level, ending in `P`
-   from the chosen direction.
+1. Same level: an L from the hub to `D` at the hub's level, along the face
+   axis first (across) or along the edge axis first (along the wall), then
+   `P`. A hub on the face row would reach `P` along the wall across first;
+   that route runs through `P` itself, conflicts with the portal and falls
+   back to the other L.
 2. Different levels, outside shafts and chasms: the L to the landing, then
-   a stair run leaving `P` inwards (across) or along the wall.
-3. Different levels, in a shaft or chasm: the L to the cell before `P`, a
-   ladder there from the hub's level to `P.y`, then `P`.
+   a stair run leaving `P` inwards (across), or leaving `D` along the wall
+   followed by `D` and `P`.
+3. Different levels, in a shaft or chasm: the L to the cell before `P` (or
+   beside `D`), a ladder there from the hub's level to `P.y`, then `D`
+   along the wall, then `P`.
 4. Same level, last: **detours**. Along the edge axis from the hub to the
    line `d` cells in from the face, along the face to `P`'s column, then
    across to `P`, for `d = 1` to 23 in turn. A level walk whose L would pass
@@ -184,23 +196,93 @@ Records are merged cell by cell with `EdgeRasteriser.merge`:
 | Records at one cell | Result |
 | --- | --- |
 | same family and orientation | one record, the smaller `edge_ref` |
-| floor, bridge, catwalk or tunnel with a stair, ladder or portal opening | the stair, ladder or portal opening |
+| floor, bridge, catwalk or tunnel with a ladder | the ladder |
+| floor, bridge, catwalk or tunnel with a stair or portal opening | conflict |
 | two portal openings with yaws | a corner opening with the smaller yaw |
 | two different surface families | conflict |
 | stairs of different orientation, stair and ladder | conflict |
 | portal opening and stair or ladder, up or down opening and any other opening | conflict |
+| headroom with headroom | one record, the smaller `edge_ref` |
+| headroom with any other family | conflict |
 
-**Headroom rule.** No record lies directly above or below a stair cell. A
-stair's walker needs the cell above it open, and a floor directly under a
-stair has 1.4 m of headroom, so a flat cell over or under a stair (or two
-stacked stair cells) describes geometry no tile pair can hold. A routing
-whose merged records break the rule at one of its cells is dropped like a
+**Stair rule** (the headroom rule of #161). No record but headroom lies
+directly above or below a stair cell. A floor directly under a stair has
+1.4 m of clearance, so a flat cell over or under a stair (or two stacked
+stair cells) describes geometry no tile pair can hold. A routing whose
+merged records break the rule at one of its cells is dropped like a
 conflict, and stair runs check the rule as they search (step 4).
 
-The rule is commutative, so the result does not depend on which record came
-first. A stair or ladder wins over a flat cell where a walkway crosses the
-foot of another edge's stair or ladder; stair runs themselves only take
-free cells (step 4). A conflict never enters the output: the routing that caused it is
+Headroom conflicts with every walk family because a cell one walker needs
+for its head is no cell another may stand in: a floor of a second walk
+directly over a first walk's floor puts its 0.6 m slab 1.4 m above the
+lower walking surface. Neither side can win without breaking one walk, so
+the later routing is dropped and the edge tries its next shape (step 3),
+exactly as for two surface families.
+
+### 8. Headroom records
+
+Every walking surface of a kept routing reserves the cells above it
+(`headroom_for`), each as a `HEADROOM` record with the routing's `edge_ref`
+and orientation 0:
+
+| Record | Headroom cells above it |
+| --- | --- |
+| floor, bridge, catwalk, tunnel | `headroom_cells` (default 1) |
+| stair | `headroom_cells + 1`: the tread rises to the top of its cell, the floor of the cell above |
+| portal opening on a side face | `headroom_cells` |
+| ladder, portal opening up or down | none: a passage, not a surface |
+
+Cells above the grid top are skipped. The routing's records and its
+headroom merge into the placed records together (step 3), so a routing
+whose headroom lands on another walk's cell, or whose cells land on
+another walk's headroom, is dropped like any conflict; stair runs test
+both while they search. Decision #171 set one cell as the conservative
+default and keeps the count a parameter: `EdgeRasteriser.new(graph,
+headroom)`, 0 turning headroom records off.
+
+The solver turns a headroom record into a domain of every tile whose mesh
+leaves the lowest 1.8 m of the cell empty (`TileLibrary.HEADROOM_CLEAR`,
+[[sector-solver#Starting domains]]): a 1.8 m walker on a floor reaches
+0.4 m into the cell above and on the top tread of a stair 1.8 m. On the
+placeholder tileset that is air and the wall doorway under its lintel. An
+open floor, a portal frame and a column are not: their slab or jambs start
+at the cell bottom. Tunnels need rock above (`1i`) and no headroom tile has
+it, so a tunnel with headroom cannot build its domains; on the placeholder
+tileset tunnels through rock failed before an attempt already.
+
+**Portal cells.** A portal opening's own cell needs a walking surface. Its
+record takes `portal_opening` (two jambs in a wall, no slab) and
+`portal_frame` (a slab and two jambs). The headroom above a side portal
+removes `portal_opening`, whose `3_0` top needs a wall stack, when the
+domains propagate, so the portal cell is always the frame's slab at the
+walk's level. The frame has no lintel: one cell over a 0.6 m slab leaves
+1.4 m, and the lintel belongs to the cell above if anything does.
+
+**Worked example.** The sector below (seed 0, `(3, 0, 59)`, hub
+`(22, 15, 14)`) has 27 floor cells at `y = 15`, three stair cells and two
+portal openings. With `headroom_cells = 1`:
+
+| Records | Headroom cells |
+| --- | --- |
+| 27 floor cells at `y = 15` | the 27 cells above them at `y = 16` |
+| stair `(7, 15, 3)` | `(7, 16, 3)`, `(7, 17, 3)` |
+| stair `(7, 16, 2)` | `(7, 17, 2)`, `(7, 18, 2)` |
+| stair `(7, 17, 1)` | `(7, 18, 1)`, `(7, 19, 1)` |
+| portal `(7, 18, 0)`, yaw 1 | `(7, 19, 0)` |
+| portal `(23, 15, 13)`, yaw 0 | `(23, 16, 13)` |
+
+No cell is above two records, so the sector gets 35 headroom records and
+67 records in all. The stair
+rule already kept every cell above a stair empty; the headroom now fills
+it and the cell above that, and the solver keeps air or a doorway in all
+35.
+
+The rules are commutative, so the result does not depend on which record came
+first. A ladder wins over a flat cell where a walkway crosses the foot of
+another edge's ladder, whose rungs stand off one face. Until #173 a stair
+and a portal opening won too, but a flat walk across a stair's slope or
+between a portal's jambs is not walkable, so those routings now take their
+next shape; stair runs themselves only take free cells (step 4). A conflict never enters the output: the routing that caused it is
 dropped and the next one tried (step 3). Each edge's own walk is kept as it
 was routed, so the check can step through it even where the merged output
 shows another edge's cell.
@@ -251,8 +333,9 @@ z=0   P . . . . . . . . . . . . . . . .
      x=7                             x=23
 ```
 
-The sector gets 32 records: 2 portal openings, 3 stair cells and 27 floor
-cells, one 26-connected group. In `(3, 0, 58)` the same corridor reaches its
+The sector gets 32 walk records: 2 portal openings, 3 stair cells and 27
+floor cells, one 26-connected group, and 35 headroom records above them
+(step 8). In `(3, 0, 58)` the same corridor reaches its
 portal at `(7, 18, 23)` without a stair.
 
 A turning run: a vertical stair edge whose hub is at `y = 3` in the lower
@@ -279,6 +362,8 @@ every sample sector against a rasteriser on a fresh graph.
 | `STRATUM_PITCH_CELLS` | 3 | `WalkableGraph` | floor levels; steps per stair flight |
 | `ORIENTATION_UP`, `ORIENTATION_DOWN` | 4, 5 | `EdgeRasteriser` | vertical orientations |
 | `RUN_SEARCH_LIMIT` | 64 | `EdgeRasteriser` | flights a stair run search lays before it gives up on one start |
+| `HEADROOM_CELLS`, `headroom_cells` | 1 | `EdgeRasteriser` | headroom cells above a flat cell or side portal, one more above a stair (decision #171) |
+| `HEADROOM_CLEAR` | 1.8 m | `TileLibrary` | empty height above the cell bottom a tile needs to count as headroom |
 
 | Salt | Used by | Decides |
 | ---: | --- | --- |
@@ -335,10 +420,15 @@ landings; with hashed portal heights it had 105 327 stair cells.
 
 ## Open questions
 
-- Walks are one cell wide. The headroom rule keeps records out of the cells
-  directly above and below stairs, but walkways still have no reserved air
-  above them; whether the solver needs it, or a two-cell corridor, is for
-  the tileset (C4) and D2 to decide.
+- Walks are one cell wide. Headroom reserves the cells above them, but not
+  the cells beside them; a walker brushing a column in the next cell is
+  possible.
+- Bridge and catwalk records still take tiles with a parapet or railing on
+  one side, which blocks a walk turning in that cell; floor records drop
+  tiles that block a face their walk crosses (#173). `walk-check` covers
+  stratum sectors only.
+- Tunnels need a headroom tile with rock above (a tunnel vault) before a
+  solid sector with records can build its domains.
 - A stair next to a portal can make the walkway pass beside or under the
   stair and double back (a switchback). It is walkable but not the shortest
   path.

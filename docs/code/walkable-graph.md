@@ -143,9 +143,10 @@ var raster := rasteriser.rasterise(Vector3i(0, 0, 0))  # records plus per-edge w
 | Function | Returns |
 | --- | --- |
 | `records_for_sector(sector)` | The merged `Record`s of the sector, one per cell, ordered by cell x, then y, then z. |
-| `rasterise(sector)` | A `SectorRaster`: `records`, `edge_records` (each edge's own walk in walking order, by `edge_ref`), `rejected` (edge refs whose every routing conflicted) and `fallbacks` (edges that did not take their first routing). |
+| `rasterise(sector)` | A `SectorRaster`: `records`, `edge_records` (each edge's own walk in walking order, by `edge_ref`, without headroom), `rejected` (edge refs whose every routing conflicted) and `fallbacks` (edges that did not take their first routing). |
+| `headroom_for(records)` | The `HEADROOM` records above the walking surfaces among `records`: `headroom_cells` (default `HEADROOM_CELLS` = 1, the second argument of `new`) above a flat cell or side portal, one more above a stair, inside the grid. |
 | `hub_cell(sector)` | The cell all walks of the sector meet at: the interior node, or the centre of a solid sector. |
-| `merge(p, q)` (static) | The record two records at one cell merge into, or `null` for a conflict. Commutative. |
+| `merge(p, q)` (static) | The record two records at one cell merge into, or `null` for a conflict; headroom merges only with headroom. Commutative. |
 | `portal_cell(sector, edge, n)` (static) | The edge's portal cell inside the sector. |
 | `surface_family(type)` (static) | The flat family of a sector type: floor, catwalk (shaft), bridge (cavity, chasm) or tunnel (solid). |
 | `edge_ref(edge)` (static) | `Vector4i(a.x, a.y, a.z, axis)`, the key both sectors of an edge use. |
@@ -154,8 +155,8 @@ var raster := rasteriser.rasterise(Vector3i(0, 0, 0))  # records plus per-edge w
 | `Record` field | Meaning |
 | --- | --- |
 | `cell` | Local cell, 0 to `cells_per_sector() - 1` on each axis. |
-| `family` | `TileFamily`: `FLOOR`, `STAIR`, `BRIDGE`, `CATWALK`, `LADDER`, `TUNNEL` or `PORTAL_OPENING`. |
-| `orientation` | Yaw quarter turns 0..3 (0 +x, 1 −z, 2 −x, 3 +z), `ORIENTATION_UP` (4) or `ORIENTATION_DOWN` (5); 0 for floor, bridge, catwalk and tunnel. |
+| `family` | `TileFamily`: `FLOOR`, `STAIR`, `BRIDGE`, `CATWALK`, `LADDER`, `TUNNEL`, `PORTAL_OPENING` or `HEADROOM`. |
+| `orientation` | Yaw quarter turns 0..3 (0 +x, 1 −z, 2 −x, 3 +z), `ORIENTATION_UP` (4) or `ORIENTATION_DOWN` (5); 0 for floor, bridge, catwalk, tunnel and headroom. |
 | `edge_ref` | The edge the record came from; after a merge, the smaller of the two. |
 
 Every edge becomes a walk from the hub to its portal cell: flat at the hub's

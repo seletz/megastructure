@@ -60,7 +60,8 @@ status: current
   `tiles-check-fixtures`), listed in [[tools-and-tasks]].
 
 Both scripts are `@tool`, so the inspector shows `family` as a drop-down of
-the `EdgeRasteriser.TileFamily` names plus None.
+the `EdgeRasteriser.TileFamily` names plus None, without `HEADROOM`: no
+prototype belongs to it, headroom records ask for tiles by geometry.
 
 ## Using it
 
@@ -104,7 +105,7 @@ precise grammar, what each form matches and why the ids are numbers are in
 | `solid_name` | Name of the solid tile (default `"solid"`). |
 | `air_name` | Name of the air tile (default `"air"`). |
 | `find(name)` | The prototype with that name, or `null`. |
-| `missing_families()` | The `TileFamily` values no prototype has, ascending. |
+| `missing_families()` | The `TileFamily` values of tiles (all but `HEADROOM`) no prototype has, ascending. |
 | `validate(require_families := false)` | Every problem as one string, empty when valid: first each prototype in order (its own `validate()`, then a repeated name, then a missing mesh), then exclusions naming no prototype, a `solid_name` or `air_name` naming no prototype, the two names being equal and, with `require_families`, one line per missing family. |
 
 Every message starts with `prototype "<name>":` when it belongs to one
@@ -128,7 +129,8 @@ print(library.dump())
 | --- | --- |
 | `build(tileset)` (static) | The library; on an invalid or null tileset `errors` holds the messages and there are no tiles. |
 | `errors` | `Array[String]`, empty for a usable library. |
-| `tiles` | `Array[TileLibrary.Tile]`, index = bit position. Each has `index`, `prototype`, `prototype_index`, `rotation` (quarter turns), `sockets` (effective strings in face order), `weight` (the prototype's, unchanged; #146), `keys` and `label()` (`name@rotation`). |
+| `tiles` | `Array[TileLibrary.Tile]`, index = bit position. Each has `index`, `prototype`, `prototype_index`, `rotation` (quarter turns), `sockets` (effective strings in face order), `weight` (the prototype's, unchanged; #146), `keys`, `headroom` (whether a walker's head fits: no mesh, or mesh bounds starting at least `HEADROOM_CLEAR` = 1.8 m above the cell bottom; #173), `blocked_faces` (bit per side face a walker cannot cross: geometry in the strip from the centre to that face, `PASSAGE_HALF_WIDTH` = 0.3 m either side, above `PASSAGE_BOTTOM` = 0.65 m) and `label()` (`name@rotation`). |
+| `has_headroom(prototype)`, `blocked_prototype_faces(prototype)` (static) | The `headroom` flag and the blocked side faces of a prototype's unrotated tile, read from its mesh once when the library is built, so worker threads never touch the mesh. |
 | `word_count` | `ceil(tile_count / 64)` words per bitset. |
 | `solid_tile`, `air_tile` | Index of the first rotation of the tileset's `solid_name` and `air_name` prototypes, or -1; the solver's degradation fills with `solid_tile` and solid and void sectors default to these. |
 | `tile_count()` | Number of tiles. |
@@ -192,7 +194,7 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | `stair_open` | the five treads as 0.1 m plates, open below | `0s 0s 0i 0i 0s 0s` | 4 | stair | 0.5 |
 | `catwalk_end` | catwalk deck from `+x` stopping 0.2 m short of `-x`, railing across its end | `4 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
 | `catwalk_end_f` | the same deck from `-x` | `0s 4f 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
-| `portal_frame` | slab, two 0.2 m jambs and a lintel, free-standing | `0s 0s 0i 0i 0s 0s` | 2 | portal opening | 0.5 |
+| `portal_frame` | slab and two 0.2 m jambs, free-standing, open at the top | `0s 0s 0i 0i 0s 0s` | 2 | portal opening | 0.5 |
 
 Read a row as "what may touch this face": a floor lies on rock and has open
 space above and around it; a stair is cut into rock, climbing out of open
@@ -207,6 +209,11 @@ and a portal on a sector face pulls no wall plane to the grid boundary; the
 end pieces let a parapet or catwalk run stop instead of crossing the whole
 grid, which is what made most 24³ attempts contradict. They come after the
 original prototypes, so the original tile indices 0 to 29 are unchanged.
+The portal frame has no lintel since #173: the lintel left 1.2 m over its
+slab, too little for the 1.8 m walker, and the cell above a portal is
+headroom (air or a doorway, whose own lintel starts 1.8 m up). A parapet
+slab stays a floor tile, but `SectorDomains` keeps it out of a floor record
+whose walk crosses the parapet's face (`blocked_faces`).
 End pieces keep their geometry 0.02 m off the faces whose socket is
 symmetric, so `tiles-check` sees no lopsided profile there. Weights favour
 air, solid and floor. Two approximations are open decisions:

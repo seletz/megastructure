@@ -102,6 +102,15 @@ turns one sector's inputs into the `domains` words:
    (authored yaw 3), so on a side face its rotation is `yaw + 1` modulo its
    2 rotations. Floor, bridge, catwalk, ladder and tunnel records, and portal
    openings in the floor or ceiling, take every rotation of their family.
+   A headroom record ([[edge-rasteriser#8. Headroom records]]) takes every
+   tile, of any family, whose `TileLibrary.Tile.headroom` is set: no mesh,
+   or a mesh whose bounds start at least `HEADROOM_CLEAR` = 1.8 m above
+   the cell bottom. A floor record then drops every tile that blocks a side
+   face (`TileLibrary.Tile.blocked_faces`: a parapet in the walker's strip
+   to that face) towards a record a walker steps to: any record but headroom
+   in the face neighbour, or a stair under it climbing into the floor
+   (#173). Floor records are unoriented, so this is how a parapet ends up
+   beside a walk and not across it.
 3. **Record pairs.** For every two records that are face neighbours, some
    tile of the first must allow some tile of the second in that direction
    (the byte union of step 6 below, done once per pair). Otherwise the
@@ -232,7 +241,15 @@ portal opening on the +x face has yaw 0: `(r − (0 − 3)) mod 2 = (r + 3) mod
 2 = 0` holds for `r = 1`, so it matches `portal_opening@1` and
 `portal_frame@1`, bits 29 and 52, with their passage along x. On the −z
 face (yaw 1) it matches bits 28 and 51. A floor record matches bits 2 to 6
-and 30 to 38: floor, open floor and every slab edge and slab edge end.
+and 30 to 38: floor, open floor and every slab edge and slab edge end. A
+headroom record matches bits 0, 10 and 11: air and both rotations of the
+wall doorway, whose lintel starts 1.8 m up.
+
+**Floor faces a walk crosses.** A floor record at (5, 3, 5) with a floor
+record at (5, 3, 6) drops every tile whose `blocked_faces` has `+z` (bit 4):
+`slab_edge@0`, `slab_edge_end@0` and `slab_edge_end_f@0`, bits 3, 31 and 35,
+whose parapet runs along `+z`. Floor and open floor block no face, so the
+mask is never empty.
 
 **Record pair.** A bridge at (2, 2, 2) under a tunnel at (2, 3, 2): the
 bridge tiles' `+y` sockets are `0i`, so their union in `+y` holds only
@@ -354,7 +371,7 @@ or a minimal record set whose propagation empties a cell:
 | --- | ---: | ---: | --- |
 | Two side portal openings, or a portal and a floor, in crossing wall planes: a portal opening pulls a wall stack to the grid top and wall ends along the face to the grid edge | 9 | 39 | `portal_frame` |
 | A floor or stair beside a portal opening's wall side (the walk reaches the portal along the face) | 3 | 15 | `portal_frame` |
-| A floor directly over or under a stair cell, or beside a stair's high end, which is the cell under the next step | 1 | 8 | headroom rule in the rasteriser |
+| A floor directly over or under a stair cell, or beside a stair's high end, which is the cell under the next step | 1 | 8 | stair rule in the rasteriser |
 | A floor or stair above an open-topped record in its column: rock only rests on rock, so every floor and stair needs rock down to the grid bottom | 1 | 9 | `floor_open`, `stair_open` |
 
 With the portal frame and a soffit tile alone, 16 of the 100 still failed:
