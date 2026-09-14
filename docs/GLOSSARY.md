@@ -44,10 +44,11 @@ A precomputed lookup that says, for each tile and each of the six directions,
 which tiles may sit next to it. It is derived from socket matching once when
 the tileset loads.
 
-In this project: planned as `allowed[dir][tile]`, a bitset per entry stored in
-a `PackedInt64Array`.
+In this project: `TileLibrary.allowed(dir, tile)`, one bitset per direction
+and tile, all stored in one `PackedInt64Array` per direction and checked by
+`mise run adjacency-check`.
 
-See also: [[RESEARCH_WFC]], Socket.
+See also: [[socket-adjacency]], [[RESEARCH_WFC]], Socket, Tile library.
 
 ### ADR
 
@@ -126,10 +127,11 @@ See also: [[RESEARCH_WFC]], Restart.
 A row of bits where each bit stands for one item, stored in plain integers.
 Set operations become fast bitwise AND and OR on whole words.
 
-In this project: a cell's domain is a bitset over tiles, two 64-bit ints for
-up to ~128 tiles.
+In this project: a cell's domain and each adjacency table entry are bitsets
+over tiles, `ceil(tiles / 64)` 64-bit words; tile b is bit `b & 63` of word
+`b >> 6`, two words for up to 128 tiles.
 
-See also: [[RESEARCH_WFC]].
+See also: [[RESEARCH_WFC]], [[socket-adjacency]].
 
 ### Boundary edge
 
@@ -326,6 +328,17 @@ In this project: `EdgeRasteriser` in
 
 See also: [[edge-rasteriser]], [[RESEARCH_WFC]] (Epic B, B4), Tile family,
 Merge rule.
+
+### Effective socket
+
+The socket string a generated tile shows on one face after its prototype's
+sockets are turned: moved to another face and, on top and bottom faces,
+with the rotation index advanced.
+
+In this project: `TileLibrary.Tile.sockets`, what the adjacency table
+matches.
+
+See also: [[socket-adjacency]], Rotation expansion.
 
 ### Emissive
 
@@ -832,6 +845,19 @@ sense, a hand-authored tile before its rotations are generated
 
 See also: [[MEGASTRUCTURE_CONCEPT]], [[RESEARCH_WFC]], [[tileset]].
 
+## Q
+
+### Quarter turn
+
+A 90° turn about the vertical axis, the only rotation tiles get.
+
+In this project: counter-clockwise seen from above, as
+`Basis(Vector3.UP, PI / 2)` turns: `+x` to `-z`, `-z` to `-x`, `-x` to
+`+z`, `+z` to `+x` (`TileLibrary.QUARTER_TURN`), the same order as
+`EdgeRasteriser` orientations.
+
+See also: [[socket-adjacency]], Rotation expansion.
+
 ## R
 
 ### Ray marching
@@ -885,7 +911,11 @@ See also: [[PLAN_0.1.0]], Depth buffer.
 Generating the rotated copies of each hand-authored tile automatically,
 turning its sockets along with it.
 
-See also: [[RESEARCH_WFC]], Symmetry tag.
+In this project: `TileLibrary` generates `rotations` tiles per prototype,
+quarter turns 0 to `rotations - 1`.
+
+See also: [[RESEARCH_WFC]], [[socket-adjacency]], Symmetry tag, Quarter
+turn.
 
 ### Rotation index
 
@@ -1089,6 +1119,16 @@ In this project: `EdgeRasteriser.TileFamily`: floor, stair, bridge, catwalk,
 ladder, tunnel and portal opening.
 
 See also: [[edge-rasteriser]], Domain restriction.
+
+### Tile library
+
+The rotated tiles of a tileset together with its adjacency table, built once
+when the tileset loads.
+
+In this project: `TileLibrary.build(tileset)`; `mise run adjacency-dump`
+prints one.
+
+See also: [[socket-adjacency]], [[tileset]], Adjacency table.
 
 ### Tile vocabulary
 
