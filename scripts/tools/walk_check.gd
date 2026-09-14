@@ -1,6 +1,7 @@
 extends SceneTree
-## Walks a `Player` capsule along a route of cells through a `SectorGridMap`
-## and fails when it falls, gets stuck or ends away from the goal.
+## Walks a `Player` capsule along a route of cells through a placed sector,
+## once as a `SectorMultiMesh` and once as a `SectorGridMap`, and fails when it
+## falls, gets stuck or ends away from the goal.
 ##
 ## Two routes:
 ##
@@ -16,6 +17,9 @@ extends SceneTree
 ##   order) back along its records to the hub, then along the last such
 ##   edge's records to its portal.
 ##
+## `--placement multimesh` or `--placement gridmap` walks only that
+## placement; by default both walk, MultiMesh first, each in a fresh tree.
+##
 ## The capsule starts on the first cell and, one physics frame at a time,
 ## `scripted_direction` points it at the centre of the next cell until it is
 ## within `REACHED` metres across; `move_and_slide` and the player's step-up
@@ -27,9 +31,9 @@ extends SceneTree
 ## tile, frames per cell, steps climbed and the final distance, and on a
 ## failure the tiles around the feet.
 ##
-##     godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- [--sector x,y,z] [--seed N]
+##     godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- [--sector x,y,z] [--seed N] [--placement multimesh|gridmap]
 ##
-## Run with `mise run walk-check [--sector x,y,z] [--seed N]`.
+## Run with `mise run walk-check [--sector x,y,z] [--seed N] [--placement P]`.
 
 const TILESET := "res://resources/tilesets/placeholder.tres"
 const REACHED := 0.3
@@ -40,6 +44,7 @@ const SETTLE_FRAMES := 30
 ## Height of the walking surface of a flat cell above the cell bottom.
 const SLAB_TOP := 0.6
 const CELLS := 24
+const PLACEMENTS: Array[String] = ["multimesh", "gridmap"]
 
 var _failures := 0
 var _library: TileLibrary
@@ -53,6 +58,7 @@ func _run() -> void:
 	var sector := Vector3i.ZERO
 	var real := false
 	var seed := 0
+	var placements := PLACEMENTS.duplicate()
 	var args := OS.get_cmdline_user_args()
 	var i := 0
 	while i < args.size():
@@ -66,7 +72,11 @@ func _run() -> void:
 			real = true
 			i += 2
 			continue
-		printerr("walk check: unexpected argument '%s'; usage: [--sector x,y,z] [--seed N]" % args[i])
+		if args[i] == "--placement" and i + 1 < args.size() and args[i + 1] in PLACEMENTS:
+			placements = [args[i + 1]]
+			i += 2
+			continue
+		printerr("walk check: unexpected argument '%s'; usage: [--sector x,y,z] [--seed N] [--placement multimesh|gridmap]" % args[i])
 		quit(1)
 		return
 	_library = TileLibrary.build(load(TILESET) as TileSet3D)
@@ -101,17 +111,39 @@ func _run() -> void:
 
 	for cell in route:
 		print("  route %s %s" % [cell, _tile_at(cells, cell).label()])
-	var grid := SectorGridMap.new()
-	grid.mesh_library = SectorGridMap.build_mesh_library(_library, false)
-	root.add_child(grid)
-	print("  placed %d cells" % grid.place(_library, sector, cells))
-	await _walk(route, cells, sector)
+	for placement in placements:
+		var failures := _failures
+		var node: Node3D
+		if placement == "gridmap":
+			var grid := SectorGridMap.new()
+			grid.mesh_library = SectorGridMap.build_mesh_library(_library, false)
+			root.add_child(grid)
+			print("  gridmap: placed %d cells" % grid.place(_library, sector, cells))
+			node = grid
+		else:
+			var built := SectorMultiMesh.build(_library, SectorMultiMesh.prototype_faces(_library), cells)
+			var multimesh := SectorMultiMesh.new()
+			root.add_child(multimesh)
+			multimesh.place(SectorMultiMesh.build_meshes(_library, false), sector, built)
+			print("  multimesh: placed %d instances in %d MultiMeshes, %d collision triangles (%d culled), built in %.1f ms" % [
+				built.instances, multimesh.multimesh_count, built.triangles, built.culled_triangles, built.build_usec / 1000.0,
+			])
+			node = multimesh
+		await _walk(route, cells, sector)
+		print("  %s walk: %s" % [placement, "ok" if _failures == failures else "failed"])
+		node.queue_free()
+		await physics_frame
 	_finish()
 
 
 func _walk(route: Array[Vector3i], cells: PackedInt32Array, sector: Vector3i) -> void:
 	var player := Player.new()
 	root.add_child(player)
+	await _walk_player(player, route, cells, sector)
+	player.queue_free()
+
+
+func _walk_player(player: Player, route: Array[Vector3i], cells: PackedInt32Array, sector: Vector3i) -> void:
 	player.teleport(_walk_point(sector, route[0]))
 	for frame in SETTLE_FRAMES:
 		await physics_frame

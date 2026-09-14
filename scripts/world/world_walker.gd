@@ -1,14 +1,16 @@
 class_name WorldWalker
 extends Node3D
 ## The walkable world view: solves the sectors around the origin on worker
-## threads, places each as a `SectorGridMap` as its result arrives, and puts
-## a `Player` capsule into the first one that solved.
+## threads, places each as a `SectorMultiMesh` as its result arrives, and
+## puts a `Player` capsule into the first one that solved.
 ##
 ## On start (and after every seed change) it configures the `SectorJobs` at
 ## `jobs` with the placeholder tileset and the world seed and requests the
 ## (2 `block_radius` + 1)³ sectors around sector (0, 0, 0), nearest first.
-## Each `sector_ready` result that SOLVED becomes a SectorGridMap child of
-## `sectors`, offset to `sector * 48` m; a FAILED or DEGRADED sector gets a
+## The jobs build the MultiMesh buffers and collision faces on their worker
+## threads; each `sector_ready` result that SOLVED becomes a SectorMultiMesh
+## child of `sectors`, offset to `sector * 48` m, or with `use_gridmap` (a
+## debugging path kept while #139 is open) a SectorGridMap; a FAILED or DEGRADED sector gets a
 ## translucent red box filling its 48 m instead, so the gap is visible (a
 ## degraded result is all solid and would hide it).
 ##
@@ -22,7 +24,8 @@ extends Node3D
 ##
 ## `--seed N` after `--` on the command line sets the world seed on start.
 ## The legend under the HUD label lists the sectors placed, failed, queued
-## and running, the mode and the feet position.
+## and running, the placement path with the frame's draw calls and the mean
+## worker build time, the mode and the feet position.
 
 const TILESET := "res://resources/tilesets/placeholder.tres"
 const MAX_BLOCK_RADIUS := 2
@@ -58,10 +61,21 @@ const TOGGLE_VIEW_KEYS: Array[Key] = [KEY_V]
 		show_failed = value
 		for box: Node3D in _failed.values():
 			box.visible = show_failed
+## Place sectors as GridMaps instead of MultiMeshes, for debugging (#139);
+## changing it places the block again.
+@export var use_gridmap := false:
+	set(value):
+		if value == use_gridmap:
+			return
+		use_gridmap = value
+		if is_node_ready():
+			reload()
 
 var library: TileLibrary
 var mesh_library: MeshLibrary
-## Sector -> SectorGridMap of the solved sectors placed.
+## `SectorMultiMesh.build_meshes` of `library`, by prototype index.
+var meshes: Array[Mesh] = []
+## Sector -> SectorMultiMesh or SectorGridMap of the solved sectors placed.
 var placed := {}
 ## Sector -> outcome name of every result received since the last reload.
 var outcomes := {}
@@ -78,6 +92,9 @@ var _spawned := false
 var _flying := false
 var _box_mesh: BoxMesh
 var _legend: Label
+## Worker build time of the MultiMesh sectors placed since the last reload.
+var _build_usec := 0
+var _built := 0
 
 
 func _ready() -> void:
@@ -93,6 +110,7 @@ func _ready() -> void:
 	for error in library.errors:
 		push_error("WorldWalker: %s" % error)
 	mesh_library = SectorGridMap.build_mesh_library(library)
+	meshes = SectorMultiMesh.build_meshes(library)
 	_box_mesh = BoxMesh.new()
 	_box_mesh.material = _failed_material()
 	var args := OS.get_cmdline_user_args()
@@ -129,12 +147,15 @@ func reload() -> void:
 	placed.clear()
 	_failed.clear()
 	outcomes.clear()
+	_build_usec = 0
+	_built = 0
 	_spawned = false
 	_rasteriser = EdgeRasteriser.new(WalkableGraph.new(WorldState.seed))
 	_box_mesh.size = Vector3.ONE * (_rasteriser.graph.cells_per_sector() * WalkableGraph.CELL_SIZE - 2.0 * FAILED_INSET)
 	if _jobs == null or not library.errors.is_empty():
 		return
 	_jobs.configure(library, WorldState.seed)
+	_jobs.build_placement = not use_gridmap
 	_jobs.focus = Vector3i.ZERO
 	for x in range(-block_radius, block_radius + 1):
 		for y in range(-block_radius, block_radius + 1):
@@ -149,6 +170,7 @@ func register_params(registry: ParamRegistry) -> void:
 	registry.add_script_params("walk", {
 		"free_fly": {"value": free_fly, "default": false},
 		"show_failed": {"value": show_failed, "default": true},
+		"use_gridmap": {"value": use_gridmap, "default": false},
 		"block_radius": {"value": block_radius, "default": 1, "min": 0, "max": MAX_BLOCK_RADIUS, "step": 1},
 	}, func(param_name: String, value: Variant) -> void: set(param_name, value))
 	if body != null:
@@ -177,12 +199,26 @@ func _on_sector_ready(result: Dictionary) -> void:
 		_sectors.add_child(box)
 		_failed[sector] = box
 		return
-	var grid := SectorGridMap.new()
-	grid.name = "Sector_%d_%d_%d" % [sector.x, sector.y, sector.z]
-	grid.mesh_library = mesh_library
-	_sectors.add_child(grid)
-	grid.place(library, sector, result.cells)
-	placed[sector] = grid
+	var node_name := "Sector_%d_%d_%d" % [sector.x, sector.y, sector.z]
+	if use_gridmap:
+		var grid := SectorGridMap.new()
+		grid.name = node_name
+		grid.mesh_library = mesh_library
+		_sectors.add_child(grid)
+		grid.place(library, sector, result.cells)
+		placed[sector] = grid
+	else:
+		var placement: Dictionary = result.placement
+		if placement.is_empty():
+			# A job started without build_placement; build it here.
+			placement = SectorMultiMesh.build(library, _jobs.faces(), result.cells)
+		_build_usec += placement.build_usec
+		_built += 1
+		var node := SectorMultiMesh.new()
+		node.name = node_name
+		_sectors.add_child(node)
+		node.place(meshes, sector, placement)
+		placed[sector] = node
 	if not _spawned and _player != null and not _rasteriser.records_for_sector(sector).is_empty():
 		_spawned = true
 		_player.teleport(SectorGridMap.cell_centre(sector, _rasteriser.hub_cell(sector), n) + Vector3.DOWN * (WalkableGraph.CELL_SIZE * 0.5 - 0.6))
@@ -240,6 +276,10 @@ func _update_legend() -> void:
 	var lines := PackedStringArray()
 	lines.append("sectors  %d placed  %d failed  %d degraded  %d queued  %d running" % [
 		placed.size(), failed, degraded, _jobs.pending_count() if _jobs != null else 0, _jobs.running_sectors().size() if _jobs != null else 0,
+	])
+	lines.append("placing  %s  %d draw calls%s" % [
+		"GridMap" if use_gridmap else "MultiMesh", int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		"" if use_gridmap or _built == 0 else "  worker build %.0f ms per sector" % (_build_usec / 1000.0 / _built),
 	])
 	var mode := "free fly" if free_fly or not _spawned else "walk, %s person" % ("first" if _player.first_person else "third")
 	if not _spawned and not free_fly:

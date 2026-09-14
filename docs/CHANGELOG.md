@@ -35,6 +35,7 @@ status: current
 
 ### Changed
 
+- The walk scene places sectors as one MultiMesh per tile mesh with one merged trimesh collision, both built on the sector job's worker thread, cutting a mixed sector from 238 to 353 draw calls to at most one per mesh, with GridMap placement kept behind the `use_gridmap` toggle and the buffer layout pinned by `mise run multimesh-check`. (#176)
 - `mise run check` runs the statistical checks on a reduced `--quick` sample in under 2 minutes for pull requests, and the new `mise run check-full` runs everything at full size in CI on pushes to `develop` and nightly. (#166)
 - Tunnels that open a chasm or cavity wall now come after every other tunnel, cutting chasm-end tunnels from 83 to 63 and cavity-end from 96 to 9 in chasm samples, and `mise run graph-connectivity` measures this and the per region pair and skip solid faces boundary schemes behind new graph parameters. (#151)
 - Portals on side faces sit at the floor level of the lower sector's hub, so every corridor is level on one side and mean stair cells per sector drop from 10.5 to 6.2, and the viewer draws graph edges as level runs with vertical segments in the stair colour. (#145)
