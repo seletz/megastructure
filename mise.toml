@@ -40,7 +40,7 @@ exit "$status"
 '''
 
 [tasks.smoke]
-description = "Run the main scene and the skeleton viewer headlessly for 60 frames each and fail on any script or scene error"
+description = "Run the main scene, the skeleton viewer and the tile contact sheet headlessly for 60 frames each and fail on any script or scene error"
 depends = ["import"]
 run = '''
 #!/usr/bin/env bash
@@ -55,7 +55,7 @@ patterns=(-e 'SCRIPT ERROR' -e 'ERROR:' -e 'Parse Error' -e 'invalid UID')
 allow=()
 
 # The main scene (no scene argument), then every other runnable scene.
-scenes=("" scenes/skeleton_viewer.tscn)
+scenes=("" scenes/skeleton_viewer.tscn scenes/tile_contact_sheet.tscn)
 for scene in "${scenes[@]}"; do
 	echo "smoke: ${scene:-main scene}"
 	status=0
@@ -158,7 +158,7 @@ description = "Click every kind of script-backed widget in the skeleton viewer's
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures, check the placeholder tileset is up to date and passes the tileset validation, and verify the project loads headlessly"
+description = "Import assets, parse scripts, run the main, skeleton viewer and tile contact sheet scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures, check the placeholder tileset is up to date and passes the tileset validation, and verify the project loads headlessly"
 depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures", "tileset-build-check", "tiles-check-placeholder"]
 run = "godot --headless --editor --path . --quit"
 
