@@ -28,12 +28,13 @@ extends RefCounted
 ## is iterated. Steps, a worked example, complexity and salts are in
 ## docs/algorithms/sector-solver.md.
 
-## Salt of the per-attempt seed drawn from the solve seed and the sector.
+## Base salt of the per-attempt seed drawn from the solve seed and the
+## sector; the attempt number (below 100) is added.
 const ATTEMPT_SALT := 9100
 ## Salt of the per-cell tie-break priority.
-const TIE_SALT := 9101
+const TIE_SALT := 9200
 ## Base salt of the weighted tile choice; the observation counter is added.
-const CHOICE_SALT := 9102
+const CHOICE_SALT := 9300
 ## Fixed-point scale of tile weights: a weight of 1.0 counts as 1000.
 const WEIGHT_SCALE := 1000
 ## Largest summed integer weight of one domain, so `hash * total` stays
