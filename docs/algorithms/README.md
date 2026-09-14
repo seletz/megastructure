@@ -49,7 +49,7 @@ either follow the renderer (left) or the generator (right).
 | --- | --- |
 | [[wave-function-collapse]] | Simple-tiled WFC with a worked 2D example, cell choice, propagation, contradictions and restarts, determinism from the hash. |
 | [[model-synthesis-and-sectors]] | Merrell's block scheme and the face-first, order-independent sector boundaries that make streaming work. |
-| [[socket-adjacency]] | Sockets, symmetry and rotation conventions, rotation expansion and deriving adjacency bitsets (implemented), validating a tileset. |
+| [[socket-adjacency]] | Sockets, symmetry and rotation conventions, rotation expansion and deriving adjacency bitsets, validating a tileset (all implemented). |
 | [[sector-skeleton-and-walkable-graph]] | The hashed sector grammar (implemented, with its rules, salts and parameters) and the path graph: portals and interior nodes. Draft. |
 | [[walkable-graph-connectivity]] | Edges of the walkable graph (implemented): Kruskal with hashed weights per 3³ region, tunnels through solid, boundary edges between regions, loops, and why region-aligned windows are connected. |
 | [[edge-rasteriser]] | The fill contract (implemented): each sector's edges as walks of tile family records from the hub to the portals, explicit stair runs and ladders at every level change, and the merge rule that keeps records from conflicting. |

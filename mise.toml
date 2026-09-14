@@ -116,14 +116,35 @@ usage = '''
 arg "<tileset>" help="TileSet3D resource path, e.g. res://tests/fixtures/tilesets/fixture_tileset.tres"
 '''
 
+[tasks.tiles-check]
+depends = ["import"]
+description = "Validate a tileset: dead sockets, directions with no allowed tile, tiles unreachable from air and solid, symmetric sockets whose mesh face is not mirror-symmetric, and a 100-run 6x6x6 placement histogram that fails on a never-placed tile or a contradiction rate above the threshold. Usage: mise run tiles-check <tileset.tres> [--max-contradiction-rate R] [--runs N] [--seed N] (headless)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=(-- "${usage_tileset}" --runs "${usage_runs:-100}" --max-contradiction-rate "${usage_max_contradiction_rate:-0.5}" --seed "${usage_seed:-0}")
+godot --headless --path . --script res://scripts/tools/tiles_check.gd "${args[@]}"
+'''
+usage = '''
+arg "<tileset>" help="TileSet3D resource, e.g. res://tests/fixtures/tilesets/fixture_tileset.tres or tests/fixtures/tilesets/fixture_tileset.tres"
+flag "--max-contradiction-rate <rate>" default="0.5" help="Fail when more than this fraction of placement attempts hit a contradiction"
+flag "--runs <n>" default="100" help="Placement runs on the 6x6x6 grid"
+flag "--seed <n>" default="0" help="Base seed of the hashed placement"
+'''
+
+[tasks.tiles-check-fixtures]
+depends = ["import"]
+description = "Check the tiles-check tool itself: the fixture tileset passes, the dead socket fixture fails with exactly dead sockets, empty directions, an unreachable tile and a never-placed tile, the placement repeats per seed and fails a low contradiction threshold, and the mesh symmetry check passes, fails and skips built meshes (headless)"
+run = "godot --headless --path . --script res://scripts/tools/tiles_check.gd -- --self-test"
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"
 run = "godot --headless --path . --script res://scripts/tools/panel_check.gd"
 
 [tasks.check]
-description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format and the adjacency table and verify the project loads headlessly"
-depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check"]
+description = "Import assets, parse scripts, run the main and skeleton viewer scenes, click through the viewer tweak panel, run the skeleton histogram regression and structure statistics, check the walkable graph portals, nodes, edge connectivity and edge rasteriser, check the tile resource format, the adjacency table and the tileset validation on the fixtures and verify the project loads headlessly"
+depends = ["import", "check-scripts", "smoke", "panel-check", "skeleton-histogram", "skeleton-stats", "graph-check", "graph-connectivity", "raster-check", "tileset-check", "adjacency-check", "tiles-check-fixtures"]
 run = "godot --headless --editor --path . --quit"
 
 [tasks.templates]

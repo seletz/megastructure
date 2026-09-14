@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- `mise run tiles-check <tileset>` fails a tileset on dead sockets, empty directions, tiles unreachable from air and solid, falsely symmetric mesh faces, and never-placed tiles or too many contradictions in a 100-run 6³ placement histogram, with a dead socket fixture checked by `mise run tiles-check-fixtures`. (#150)
 - `TileLibrary` expands tile prototypes into their quarter-turn rotations and derives the six-direction adjacency table as bitsets from socket matching and exclusions, checked by `mise run adjacency-check` and printed by `mise run adjacency-dump`. (#148)
 - `TilePrototype` and `TileSet3D` resources describe tiles by mesh, weight, tile family, six socket strings, rotations and exclusions, with a validator and fixture tilesets checked by `mise run tileset-check`. (#144)
 - `EdgeRasteriser` turns each sector's walkable graph edges into tile family records on its cell grid, walks from the hub to every portal with explicit stair runs or ladders at each level change, checked for conflicts and walkability by `mise run raster-check`. (#133)

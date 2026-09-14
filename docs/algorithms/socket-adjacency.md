@@ -21,11 +21,11 @@ status: current
 > sockets that can never match and tiles that can never be placed. The tile
 > format and the socket string grammar below are implemented
 > (`TilePrototype`, `TileSet3D`), and so are matching,
-> [[GLOSSARY#Rotation expansion|rotation expansion]] and the
-> [[GLOSSARY#Adjacency table|adjacency table]] (`TileLibrary`); the
-> validation task comes next. The convention follows [[RESEARCH_WFC]], which
-> takes it from Marian42's infinite city, and is proposed for approval in
-> issue #140.
+> [[GLOSSARY#Rotation expansion|rotation expansion]], the
+> [[GLOSSARY#Adjacency table|adjacency table]] (`TileLibrary`) and the
+> validation task (`mise run tiles-check`). The convention follows
+> [[RESEARCH_WFC]], which takes it from Marian42's infinite city, and is
+> proposed for approval in issue #140.
 
 ## Sockets
 
@@ -297,26 +297,137 @@ the same table on every platform, which the solver's seeded choices need
 
 ## Validation
 
-Today `mise run tileset-check` checks only the format: the socket grammar,
-unique names, weights, rotations, families, meshes and the names that
-exclusions, solid and air refer to (see [[tileset]]). A headless `mise`
-task, planned as `tiles-check`, will run in CI and fail the build on:
+Two tasks check a tileset before any solver sees it. `mise run
+tileset-check` checks the format: the socket grammar, unique names,
+weights, rotations, families, meshes and the names that exclusions, solid
+and air refer to (see [[tileset]]). `mise run tiles-check <tileset.tres>`
+checks whether the tiles can actually be placed. It builds the
+`TileLibrary`, prints every finding as one `FAIL` line with its category,
+and exits 1 when there is any; a tileset that does not validate stops at
+its format errors. `mise run check` runs it on the fixtures through
+`mise run tiles-check-fixtures`: the real fixture must pass, and
+`tests/fixtures/tilesets/dead_socket_tileset.tres` must fail with exactly
+the categories below that it was built to trip.
 
-1. **Dead sockets.** A socket used on some `+d` face that no `-d` face
-   matches. The tile can never have a neighbour there and causes a
-   contradiction whenever it is placed away from a fixed boundary.
-2. **Empty directions.** A tile whose allowed set is empty in some direction
-   (the same failure, seen per tile).
-3. **Unreachable tiles.** A breadth-first search over the adjacency graph
-   from air and solid. Sector faces start as mostly air and solid, so a tile
-   not reachable from them will never appear.
-4. **False symmetry.** For every socket tagged symmetric, quantise the mesh
-   vertices lying on that face, hash the set, and compare with the hash of
-   the mirrored set. The same face-profile hash could later derive socket ids
-   from geometry, as Oskar Stålberg describes for Bad North.
-5. **Dead tiles in practice.** Solve an unconstrained 6³ grid 100 times and
-   print how often each tile was placed. A tile that never appears usually
-   has a weight or socket mistake.
+### The checks
+
+1. **Dead sockets.** For each direction `d`, collect the socket keys shown
+   on face `d ^ 1` by any tile, every rotation included. A socket on face
+   `d` whose partner key is not among them is dead: no tile, not even the
+   tile itself, can ever sit on that side. It is reported once per socket
+   string and direction with the tiles showing it, for example
+   `+x "7" on pipe@0 has no -x partner "7f"`. Exclusions are ignored here;
+   they are the next check's business.
+2. **Empty directions.** A tile whose `allowed(d, tile)` bitset is all zero
+   in some direction, the same failure seen per tile and after exclusions.
+   A tile with a dead socket lists one line here per affected rotation and
+   face; a tile whose only partners it excludes appears here alone.
+3. **Unreachable tiles.** A breadth-first search over the adjacency graph,
+   starting from every rotation of the air and the solid tile at once. An
+   edge joins `a` and `b` when `b` is allowed next to `a` in any direction;
+   the table is symmetric, so the graph is undirected. Sector faces start as
+   air and solid, so a tile the search never reaches cannot grow out of
+   them, however often it could fill a grid on its own.
+4. **False symmetry.** For each prototype and each horizontal face with an
+   `Ns` socket, take the mesh vertices within `SLAB` = 0.01 m of the face
+   plane (at ±1 m, half a cell, from the centre). Each gives a profile point
+   (tangent, y), where the tangent is z on `±x` faces and x on `±z` faces.
+   Mirror every point across the face's vertical centre line to
+   (−tangent, y) and look for an original point within `TOLERANCE` =
+   0.001 m, using a hash grid of that cell size and its 3 × 3 neighbourhood.
+   Any point without a mirror image fails the socket. Only the unrotated
+   prototype is checked: a quarter turn moves the profile with its socket.
+   Vertices come from `PrimitiveMesh.get_mesh_arrays()` for a `BoxMesh` and
+   the other primitives, and from `surface_get_arrays` for an `ArrayMesh`;
+   both work under `--headless`. A mesh with no vertex data is skipped with
+   a warning, not a failure. A face no vertex touches has an empty profile
+   and passes, which is right for a thin wall that stops short of it.
+5. **Placement histogram.** Fill a 6 × 6 × 6 grid 100 times with a minimal
+   placement (next section) and print, per tile, how many cells held it and
+   its share. A tile never placed in 100 runs fails, and so does a
+   contradiction rate above `--max-contradiction-rate` (default 0.5,
+   decision #149).
+
+### Minimal placement
+
+Not the solver of [[wave-function-collapse]], only enough of one to see
+which tiles come out. For run `r` and attempt `k`:
+
+1. The attempt seed is `hash3_u(seed, (r, k, 0), 8701)`, `seed` from
+   `--seed` (default 0).
+2. Every cell's domain is the full bitset, `word_count` words per cell. The
+   grid has no boundary constraints: outside cells are simply not there.
+3. The cells are sorted by `hash3_u(attempt seed, cell, 8702) >> 1`, ties by
+   index, and visited in that order. A cell whose domain still has more
+   than one tile picks one: `hash3(attempt seed, cell, 8703)` times the
+   summed weights of the remaining tiles, walked through in index order.
+4. After each pick, bitset AC-3 propagation: pop a changed cell, and for each
+   of its six neighbours AND the union of `allowed(d, t)` over the cell's
+   remaining tiles `t` into the neighbour's domain; push the neighbour if it
+   shrank. An empty domain is a contradiction.
+5. On a contradiction the run starts again with attempt `k + 1`, up to
+   `--max-restarts` = 8 restarts; a run that fails every attempt counts as
+   failed and places nothing.
+
+The contradiction rate is contradictions divided by attempts. Everything is
+integer hashing and bit operations except the weighted draw, so a seed
+always gives the same histogram; the self-test checks that, and that seed 1
+gives a different one.
+
+### Worked example: the two fixtures
+
+The fixture tileset passes. Its sockets allow only a few whole-grid
+patterns: a floor forces its entire layer to floor, solid below and air
+above; a wall forces a full vertical plane. The propagation never
+contradicts:
+
+| tile | cells | share |
+| --- | --- | --- |
+| solid@0 | 7 416 | 34.3 % |
+| air@0 | 7 776 | 36.0 % |
+| floor@0 | 2 412 | 11.2 % |
+| wall@0 | 1 728 | 8.0 % |
+| wall@1 | 2 268 | 10.5 % |
+
+100 runs, 100 attempts, contradiction rate 0.000.
+
+The dead socket fixture adds three tiles to solid and air:
+
+| tile | sockets | mistake |
+| --- | --- | --- |
+| pipe | `7 0s 0i 0i 0s 0s` | `+x` is `7` and nothing shows `7f` on `-x` |
+| island | `9s 9s 9i 9i 9s 9s` | matches only itself |
+| plug | `8 8 0i 0i 0s 0s` | `+x` and `-x` both `8`, nothing shows `8f` |
+
+It fails with three dead sockets (pipe `+x`, plug `+x` and `-x`), three
+empty directions (the same faces), island unreachable, and plug never
+placed; contradiction rate 0.320 (47 of 147 attempts). The histogram shows
+why checks 1 to 3 are needed next to it: pipe is still placed (3.1 %),
+because a cell on the grid's `+x` boundary has no neighbour there, and
+island fills whole grids (27.0 %), because an unconstrained grid is not a
+sector. Only plug, dead on two opposite sides of a 6-wide grid, never
+appears.
+
+### Complexity
+
+With `n` tiles, `w` words and `c = 216` cells: dead sockets and empty
+directions are `O(6 × n × w)`; reachability is `O(6 × n²)` bit reads; the
+symmetry check is `O(V)` per symmetric face for `V` mesh vertices. One
+placement attempt sorts `c` keys and propagates each change over 6
+neighbours at `O(n × w)` per neighbour. The fixtures take well under a
+second each in GDScript, including 100 runs.
+
+### Parameters
+
+| Parameter | Where | Effect |
+| --- | --- | --- |
+| `--runs` | `tiles-check` | Placement runs, default 100. |
+| `--grid` | tool option | Grid edge in cells, default 6. |
+| `--max-restarts` | tool option | Restarts per run after a contradiction, default 8. |
+| `--max-contradiction-rate` | `tiles-check` | Highest passing contradictions ÷ attempts, default 0.5 (#149). |
+| `--seed` | `tiles-check` | Base seed of the placement hashes, default 0. |
+| `SLAB` | `tiles_check.gd` | 0.01 m either side of a face plane counts as on the face. |
+| `TOLERANCE` | `tiles_check.gd` | 0.001 m between a mirrored point and its match. |
 
 `mise run adjacency-check` (part of `check`) covers the matching rules (`s`
 with `s`, `N` with `Nf`, vertical rotation indices), the quarter and half
@@ -339,6 +450,17 @@ table it builds that it equals the direct pairwise rule and is symmetric.
 - **Hand-written or derived socket ids.** Hand-written ids in a resource are
   faster for the box-only placeholder tileset; derived ids from face profiles
   remove a class of authoring bugs once real meshes arrive.
+- **Contradiction threshold.** `tiles-check` fails above a rate of 0.5 by
+  default, lenient on purpose until the placeholder tileset (#88) shows
+  real numbers; decision #149.
+- **Histogram boundary.** The placement grid is unconstrained, so a tile
+  with a dead socket still appears on the grid boundary and a
+  self-contained group of tiles fills whole grids. The reachability and
+  dead socket checks catch both; seeding the grid faces with air and solid,
+  as a sector does, would make the histogram catch them too.
+- **Vertical symmetry.** Only horizontal `Ns` faces are compared with their
+  mirror image; an `Ni` top or bottom face is not yet checked for looking
+  the same under all four quarter turns.
 - **How many sockets refuse solid.** Too many and contradictions return; too
   few and stairs end in walls.
 - **Tile format.** Settled as `TileSet3D` holding `TilePrototype`s
@@ -358,7 +480,9 @@ Sources:
 Related notes: [[wave-function-collapse]], [[model-synthesis-and-sectors]],
 [[RESEARCH_WFC]] (section 2, the convention and the derivation),
 [[MEGASTRUCTURE_CONCEPT]] (tile vocabulary). Terms: [[GLOSSARY#Socket]],
-[[GLOSSARY#Bitset]], [[GLOSSARY#Tile library]], [[GLOSSARY#Exclusion list]].
+[[GLOSSARY#Bitset]], [[GLOSSARY#Tile library]], [[GLOSSARY#Exclusion list]],
+[[GLOSSARY#Dead socket]], [[GLOSSARY#Face profile]].
 
 Code: [[tileset]] (the resource format, the socket parser and
-`TileLibrary`, the expansion and the table).
+`TileLibrary`, the expansion and the table), [[tools-and-tasks]]
+(`tiles_check.gd`, the validation).

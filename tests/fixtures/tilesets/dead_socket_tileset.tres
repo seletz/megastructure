@@ -1,0 +1,54 @@
+[gd_resource type="Resource" script_class="TileSet3D" format=3]
+
+[ext_resource type="Script" path="res://scripts/world/tile_prototype.gd" id="1_d7k2p"]
+[ext_resource type="Script" path="res://scripts/world/tileset.gd" id="2_q4m8v"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_s0l1d"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="Resource" id="Resource_s0l1d"]
+script = ExtResource("1_d7k2p")
+name = "solid"
+mesh = SubResource("BoxMesh_s0l1d")
+sockets = PackedStringArray("1s", "1s", "1i", "1i", "1s", "1s")
+exclusions = PackedStringArray()
+
+[sub_resource type="Resource" id="Resource_a1r0o"]
+script = ExtResource("1_d7k2p")
+name = "air"
+sockets = PackedStringArray("0s", "0s", "0i", "0i", "0s", "0s")
+exclusions = PackedStringArray()
+
+[sub_resource type="BoxMesh" id="BoxMesh_p1p3e"]
+size = Vector3(2, 0.5, 0.5)
+
+[sub_resource type="Resource" id="Resource_p1p3e"]
+script = ExtResource("1_d7k2p")
+name = "pipe"
+mesh = SubResource("BoxMesh_p1p3e")
+sockets = PackedStringArray("7", "0s", "0i", "0i", "0s", "0s")
+exclusions = PackedStringArray()
+
+[sub_resource type="BoxMesh" id="BoxMesh_1s1an"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="Resource" id="Resource_1s1an"]
+script = ExtResource("1_d7k2p")
+name = "island"
+mesh = SubResource("BoxMesh_1s1an")
+sockets = PackedStringArray("9s", "9s", "9i", "9i", "9s", "9s")
+exclusions = PackedStringArray()
+
+[sub_resource type="BoxMesh" id="BoxMesh_p1u9x"]
+size = Vector3(2, 0.5, 0.5)
+
+[sub_resource type="Resource" id="Resource_p1u9x"]
+script = ExtResource("1_d7k2p")
+name = "plug"
+mesh = SubResource("BoxMesh_p1u9x")
+sockets = PackedStringArray("8", "8", "0i", "0i", "0s", "0s")
+exclusions = PackedStringArray()
+
+[resource]
+script = ExtResource("2_q4m8v")
+prototypes = Array[ExtResource("1_d7k2p")]([SubResource("Resource_s0l1d"), SubResource("Resource_a1r0o"), SubResource("Resource_p1p3e"), SubResource("Resource_1s1an"), SubResource("Resource_p1u9x")])
