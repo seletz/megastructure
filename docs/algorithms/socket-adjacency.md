@@ -413,7 +413,7 @@ appears.
 
 `resources/tilesets/placeholder.tres` ([[tileset#The placeholder tileset]]
 has every prototype, its geometry and the meaning of each socket id) is the
-reference a real tileset is checked against. 13 prototypes expand to 30 tiles:
+reference a real tileset is checked against. 20 prototypes expand to 53 tiles:
 
 | prototype | sockets `+x -x +y -y +z -z` | rotations | family |
 | --- | --- | --- | --- |
@@ -430,6 +430,13 @@ reference a real tileset is checked against. 13 prototypes expand to 30 tiles:
 | ladder | `0s 0s 0i 0i 1s 0s` | 4 | ladder |
 | tunnel | `0s 0s 1i 1i 1s 1s` | 2 | tunnel |
 | portal_opening | `3s 3s 3_0 0i 0s 0s` | 2 | portal opening |
+| floor_open | `0s 0s 0i 0i 0s 0s` | 1 | floor |
+| slab_edge_end | `2 0s 0i 1i 0s 0s` | 4 | floor |
+| slab_edge_end_f | `0s 2f 0i 1i 0s 0s` | 4 | floor |
+| stair_open | `0s 0s 0i 0i 0s 0s` | 4 | stair |
+| catwalk_end | `4 0s 0i 0i 1s 0s` | 4 | catwalk |
+| catwalk_end_f | `0s 4f 0i 0i 1s 0s` | 4 | catwalk |
+| portal_frame | `0s 0s 0i 0i 0s 0s` | 2 | portal opening |
 
 **Why it is closed.** Every socket's partner is shown on the opposite face
 by some tile, most often by the tile itself: `0s`, `1s`, `3s`, `0i` and `1i`
@@ -447,15 +454,22 @@ of it carries the next flight one cell up (whose own bottom is `1i`) or the
 landing floor (whose bottom is also `1i`). Its low end is `0s`, so it opens
 onto a floor at the foot and onto the open cell above the previous flight.
 Three stair cells turned the same way climb a stratum, exactly as
-`EdgeRasteriser` lays a stair run.
+`EdgeRasteriser` lays a stair run. `stair_open` climbs the same way on thin
+plates with open space below and at both ends (all `0s` and `0i`), so a
+long flight needs no wedge of rock under it: rock can only end sideways
+against a tile that shows `1s`, and a rock wedge under a diagonal run cannot
+close.
 
 **Walls** stack strictly: `wall` has `3_0` on both vertical faces, so a wall
 continues upwards, and a stack ends at the bottom only in `wall_doorway` or
 `portal_opening`, whose `-y` is `0i` because nothing crosses the bottom of an
-opening. **Columns and ladders** are open (`0i`) at both ends instead. With
+opening. `portal_frame` is the other portal opening: a slab with jambs and a
+lintel, open on every side, so a portal on a sector face does not pull a
+wall plane up to the grid top and along the face to the grid edge, where
+two portals' planes or any record in the plane would break it. **Columns and ladders** are open (`0i`) at both ends instead. With
 stacking ids for them too, nothing ends a column or a ladder, so every one runs
 through the whole grid and collides with the rock around it. Measured with
-`mise run tiles-check`, seed 0:
+`mise run tiles-check`, seed 0, on the first 13 prototypes (#155):
 
 | variant | attempts | contradictions | rate |
 | --- | --- | --- | --- |
@@ -463,6 +477,7 @@ through the whole grid and collides with the rock around it. Measured with
 | walls stack, columns and ladders open (committed) | 138 | 38 | 0.275 |
 | everything open | 135 | 35 | 0.259 |
 | committed, but catwalk and ladder backs open instead of `1s` | 173 | 73 | 0.422 |
+| all 20 prototypes (committed, #161) | 135 | 35 | 0.259 |
 
 The last row shows the other pressure: without its wildcard (#141) solid
 only matches rock faces, so every face of a rock region needs a tile showing
@@ -471,30 +486,55 @@ catwalk and ladder backs) lower the rate; taking them away raises it. Seeds 1
 and 2 give 0.213 and 0.206. Which of these approximations to keep is decision
 #153; the one-cell doorway, stair and tunnel proportions are #154.
 
-Placement histogram, 100 runs, 0 failed:
+Placement histogram of the 20 prototypes, 100 runs, 0 failed:
 
 | tiles | cells | share |
 | --- | --- | --- |
-| air@0 | 6 903 | 32.0 % |
-| solid@0 | 2 779 | 12.9 % |
-| tunnel@0, @1 | 3 621 | 16.8 % |
-| ladder@0 to @3 | 3 516 | 16.3 % |
-| floor@0 | 1 060 | 4.9 % |
-| wall@0, @1 | 758 | 3.5 % |
-| stair@0 to @3 | 1 183 | 5.5 % |
-| bridge@0, @1 | 680 | 3.1 % |
-| slab_edge@0 to @3 | 366 | 1.7 % |
-| column@0 | 202 | 0.9 % |
-| portal_opening@0, @1 | 182 | 0.8 % |
-| wall_doorway@0, @1 | 158 | 0.7 % |
-| catwalk@0 to @3 | 192 | 0.9 % |
+| air@0 | 5 946 | 27.5 % |
+| solid@0 | 2 396 | 11.1 % |
+| tunnel@0, @1 | 3 372 | 15.6 % |
+| ladder@0 to @3 | 2 822 | 13.1 % |
+| catwalk_end, catwalk_end_f, all rotations | 1 222 | 5.7 % |
+| stair@0 to @3 | 1 096 | 5.1 % |
+| floor@0 | 945 | 4.4 % |
+| wall@0, @1 | 699 | 3.2 % |
+| bridge@0, @1 | 624 | 2.9 % |
+| stair_open@0 to @3 | 621 | 2.9 % |
+| slab_edge_end, slab_edge_end_f, all rotations | 346 | 1.6 % |
+| catwalk@0 to @3 | 339 | 1.6 % |
+| portal_frame@0, @1 | 300 | 1.4 % |
+| floor_open@0 | 287 | 1.3 % |
+| wall_doorway@0, @1 | 157 | 0.7 % |
+| portal_opening@0, @1 | 146 | 0.7 % |
+| column@0 | 143 | 0.7 % |
+| slab_edge@0 to @3 | 139 | 0.6 % |
 
 Tunnels and ladders are placed far more often than their weights suggest.
 Below a rock cell only rock or a tunnel may sit, so propagation forces
 tunnels under every solid region the unconstrained grid starts; a ladder
 fits wherever air fits and also offers a rock face, so it fills the open
-cells beside rock. Catwalks are rarest, because their asymmetric
-ends need a straight run of catwalks along a rock face across the grid.
+cells beside rock. Full catwalks and slab edges are rare, because their
+asymmetric ends need a straight run across the grid unless an end piece
+stops it; the end pieces are placed about four times as often.
+
+**Real sectors (#161).** The 6³ rate hides what a 24³ sector needs: a run
+that must cross 24 cells meets an obstacle far more often than one that
+must cross 6. Solving each of the 100 real stratum sectors of `solver-check`
+(20 per world seed 0 to 4) with a single attempt, while the prototypes were
+added:
+
+| tileset | first attempt solved |
+| --- | ---: |
+| 13 prototypes (records fail before an attempt in 71 of 100 sectors) | – |
+| + `floor_open`, `stair_open`, `portal_frame` | 12 of 100 |
+| + `catwalk_end`, `catwalk_end_f` | 12 of 100 |
+| + `slab_edge_end`, `slab_edge_end_f` (committed) | 56 of 100 |
+
+The end pieces work together: without the catwalk ends the committed set
+solves 34 of 100 first attempts. Tunnels are the next largest source of
+contradictions (each forces rock above, below and beside it); a tunnel
+weight of 0.1 instead of 1 solves 79 of 100, but that changes the look and
+is left to decision #159.
 
 ### Complexity
 

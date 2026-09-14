@@ -151,7 +151,7 @@ finds those (below). The placeholder tileset passes `validate(true)` and
 ![Every rotated tile of the placeholder tileset with its sockets](../images/placeholder-tileset.png)
 
 `resources/tilesets/placeholder.tres` is the first tileset meant for the
-solver: 13 prototypes, 30 tiles, every `EdgeRasteriser.TileFamily` plus free
+solver: 20 prototypes, 53 tiles, every `EdgeRasteriser.TileFamily` plus free
 tiles. Every mesh is a handful of axis-aligned boxes in one 2 m cell centred
 on the origin, built by `placeholder_builder.gd` at the proportions of
 [[MEGASTRUCTURE_CONCEPT]] section 3: slab 0.6 thick at the bottom of the cell
@@ -165,7 +165,7 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 
 | id | horizontal faces | vertical faces |
 | --- | --- | --- |
-| 0 | `0s` open: nothing that must continue, including a slab edge, a tunnel mouth and a wall side | `0i` open: a slab top or bottom lying on the plane, and thin columns and ladders |
+| 0 | `0s` open: nothing that must continue, including a slab edge, a tunnel mouth, a wall side, the end of a parapet or catwalk and a portal frame's jamb | `0i` open: a slab top or bottom lying on the plane, open space under an open floor, open stair or portal frame, and thin columns and ladders |
 | 1 | `1s` rock: solid, a stair's high end, a tunnel side, the wall a catwalk or ladder is fixed to | `1i` rock: solid, under a floor, slab edge, stair or tunnel, and over a tunnel |
 | 2 | `2` / `2f` parapet line along a slab edge (asymmetric) | – |
 | 3 | `3s` wall end, 0.7 m centred | `3_R` wall stack, R the run direction |
@@ -186,6 +186,13 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | `ladder` | two rails and five rungs off the `+z` face | `0s 0s 0i 0i 1s 0s` | 4 | ladder | 0.5 |
 | `tunnel` | slab and 0.3 m side walls along x, rock above | `0s 0s 1i 1i 1s 1s` | 2 | tunnel | 1 |
 | `portal_opening` | two 0.2 m jambs, a 1.6 m gap in a wall | `3s 3s 3_0 0i 0s 0s` | 2 | portal opening | 0.5 |
+| `floor_open` | slab over open space | `0s 0s 0i 0i 0s 0s` | 1 | floor | 1 |
+| `slab_edge_end` | slab, parapet along `+z` from `+x` stopping 0.2 m short of `-x` | `2 0s 0i 1i 0s 0s` | 4 | floor | 0.5 |
+| `slab_edge_end_f` | the same parapet from `-x` stopping short of `+x` | `0s 2f 0i 1i 0s 0s` | 4 | floor | 0.5 |
+| `stair_open` | the five treads as 0.1 m plates, open below | `0s 0s 0i 0i 0s 0s` | 4 | stair | 0.5 |
+| `catwalk_end` | catwalk deck from `+x` stopping 0.2 m short of `-x`, railing across its end | `4 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
+| `catwalk_end_f` | the same deck from `-x` | `0s 4f 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
+| `portal_frame` | slab, two 0.2 m jambs and a lintel, free-standing | `0s 0s 0i 0i 0s 0s` | 2 | portal opening | 0.5 |
 
 Read a row as "what may touch this face": a floor lies on rock and has open
 space above and around it; a stair is cut into rock, climbing out of open
@@ -193,7 +200,16 @@ space towards rock that carries the next flight or the landing; a wall
 continues along its run and upwards, and a wall stack ends at the bottom in a
 doorway or a portal opening, which stand on any open face; a catwalk and a
 ladder hang on rock; a tunnel runs through rock and opens at both ends.
-Weights favour air, solid and floor. Two approximations are open decisions:
+The last seven prototypes make real sectors tileable (#161): an open floor,
+an open stair and a portal frame stand over open space and need no wall, so
+walks can stack in a stratum without rock columns down to the grid bottom
+and a portal on a sector face pulls no wall plane to the grid boundary; the
+end pieces let a parapet or catwalk run stop instead of crossing the whole
+grid, which is what made most 24³ attempts contradict. They come after the
+original prototypes, so the original tile indices 0 to 29 are unchanged.
+End pieces keep their geometry 0.02 m off the faces whose socket is
+symmetric, so `tiles-check` sees no lopsided profile there. Weights favour
+air, solid and floor. Two approximations are open decisions:
 slab edges, columns and ladders are open instead of having floor-level
 variants and stacking ids (#153), and the doorway, stair and tunnel are clipped
 to one cell (#154). The worked reference, with the placement histogram and
@@ -241,7 +257,7 @@ why these choices keep contradictions down, is
   `validate(true)` reports anything. `mise run tiles-check-placeholder` (part
   of `mise run check`) runs `tiles-check` on it.
 - `mise run shot scenes/tile_contact_sheet.tscn
-  docs/images/placeholder-tileset.png --resolution 1280x1080` renders the
+  docs/images/placeholder-tileset.png --resolution 1280x1950` renders the
   contact sheet; the labels are `Label3D`, so no `--ui` is needed. The scene
   also runs in `mise run smoke`. Set its `tileset` to see another set.
 - Open a fixture in the editor (`mise run editor`, then double-click the
