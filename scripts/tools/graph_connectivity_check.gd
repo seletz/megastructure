@@ -48,11 +48,18 @@ const VARIANTS: Array = [
 	["void_walls_last", WalkableGraph.BoundaryScheme.PER_FACE, true],
 	["region_pair_void_walls_last", WalkableGraph.BoundaryScheme.PER_REGION_PAIR, true],
 ]
+## With `--quick` (the `check` tier): only the default variant, the first
+## QUICK_SEEDS seeds, and strict 5^3 windows at every QUICK_STRIDE-th offset.
+const QUICK_SEEDS := 3
+const QUICK_STRIDE := 2
 
 var _failures := 0
 var _n := 0
 ## Names of the variants to run, from `--variants=a,b` after `--`; all when empty.
 var _only := PackedStringArray()
+var _quick := false
+var _seeds: Array[int] = SEEDS
+var _stride := 1
 
 
 ## Remembers sector types, as regions read their neighbours' face layers again
@@ -81,6 +88,10 @@ func _init() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--variants="):
 			_only = arg.trim_prefix("--variants=").split(",", false)
+		if arg == "--quick":
+			_quick = true
+			_seeds = SEEDS.slice(0, QUICK_SEEDS)
+			_stride = QUICK_STRIDE
 	var summaries := PackedStringArray()
 	var open_ok := 0
 	var strict := 0
@@ -89,6 +100,8 @@ func _init() -> void:
 		var name: String = variant[0]
 		var is_default: bool = variant[1] == defaults.boundary_scheme and variant[2] == defaults.void_wall_tunnels_last
 		if not _only.is_empty() and not _only.has(name):
+			continue
+		if _quick and not is_default:
 			continue
 		var start := Time.get_ticks_msec()
 		for sample in SAMPLES:
@@ -101,7 +114,7 @@ func _init() -> void:
 			var kinds := PackedInt32Array()
 			kinds.resize(WalkableGraph.EDGE_KIND_NAMES.size())
 			var random := sample == "random"
-			for seed_value in SEEDS:
+			for seed_value in _seeds:
 				var graph := WalkableGraph.new(seed_value, CachingSkeleton.new(), variant[1], variant[2])
 				var fresh := WalkableGraph.new(seed_value, CachingSkeleton.new(), variant[1], variant[2])
 				var base := _random_base(seed_value) if random else _chasm_base(graph)
@@ -253,9 +266,9 @@ func _check_seed(graph: WalkableGraph, fresh: WalkableGraph, name: String, base:
 	var strict_ok := 0
 	var max_components := 0
 	if with_strict:
-		for x in _n - WINDOW + 1:
-			for y in _n - WINDOW + 1:
-				for z in _n - WINDOW + 1:
+		for x in range(0, _n - WINDOW + 1, _stride):
+			for y in range(0, _n - WINDOW + 1, _stride):
+				for z in range(0, _n - WINDOW + 1, _stride):
 					var components := _components(Vector3i(x, y, z), WINDOW, _neighbours)
 					strict += 1
 					if components <= 1:
