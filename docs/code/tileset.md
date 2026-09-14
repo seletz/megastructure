@@ -38,11 +38,16 @@ status: current
 - `tests/fixtures/tilesets/fixture_tileset.tres`: solid, air, floor and wall
   as `BoxMesh` placeholders; valid.
 - `tests/fixtures/tilesets/broken_tileset.tres`: a tileset with one of each
-  mistake, for the check.
-- `scripts/tools/tileset_check.gd` and `scripts/tools/adjacency_check.gd`:
-  the checks behind `mise run tileset-check` and `mise run
-  adjacency-check` (which also serves `adjacency-dump`), listed in
-  [[tools-and-tasks]].
+  format mistake, for the format check.
+- `tests/fixtures/tilesets/dead_socket_tileset.tres`: a tileset that
+  validates but cannot be placed well: solid and air plus a pipe with a dead
+  `+x` socket, an island that matches only itself and a plug dead on `+x`
+  and `-x`, for the validation task.
+- `scripts/tools/tileset_check.gd`, `scripts/tools/adjacency_check.gd` and
+  `scripts/tools/tiles_check.gd`: the checks behind `mise run
+  tileset-check`, `mise run adjacency-check` (which also serves
+  `adjacency-dump`) and `mise run tiles-check` (which also serves
+  `tiles-check-fixtures`), listed in [[tools-and-tasks]].
 
 Both scripts are `@tool`, so the inspector shows `family` as a drop-down of
 the `EdgeRasteriser.TileFamily` names plus None.
@@ -124,8 +129,11 @@ print(library.dump())
 | `sockets_match(a, b)` (static) | Whether two parsed sockets on opposite faces match: `Ns`–`Ns`, `N`–`Nf`, `N_R`–`N_R`, `Ni`–`Ni`, equal ids. |
 | `socket_key(socket)`, `partner_key(socket)` (static) | Integer name of a socket and of the one socket that matches it; the table groups tiles by these. |
 
-Checking reachability, dead sockets and mesh symmetry is #87; the real
-placeholder tileset, which should pass `validate(true)`, is #88.
+A tileset that validates can still be unusable: a socket nothing matches, a
+tile no chain of neighbours connects to air or solid, an `Ns` face whose
+mesh is lopsided, a tile the placement never picks. `mise run tiles-check`
+finds those (below). The real placeholder tileset, which should pass
+`validate(true)` and `tiles-check`, is #88.
 
 ## How to run or check it
 
@@ -146,14 +154,29 @@ placeholder tileset, which should pass `validate(true)`, is #88.
   0.6 ms, 66 tiles about 7 ms) and the fixture dump.
 - `mise run adjacency-dump res://path/to/tileset.tres` prints any tileset's
   tiles and table, or its validation errors (exit 1).
+- `mise run tiles-check <tileset.tres> [--max-contradiction-rate R] [--runs
+  N] [--seed N]` validates any tileset, `res://` or project-relative path:
+  dead sockets, directions with no allowed tile, tiles unreachable from air
+  and solid, `Ns` faces whose mesh profile is not mirror-symmetric (meshes
+  without vertex data are skipped with a warning), and a 100-run 6³
+  placement histogram with the contradiction rate. Every finding is one
+  `FAIL  <category>: <message>` line; exit 1 on any. The algorithm and both
+  fixtures' output are in [[socket-adjacency#Validation]].
+- `mise run tiles-check-fixtures` (part of `mise run check`) runs the tool's
+  self-test: the fixture passes with contradiction rate 0; the dead socket
+  fixture fails with exactly dead sockets, empty directions, an unreachable
+  tile and a never-placed tile; placement repeats for a seed, changes with
+  the seed and fails a threshold below its rate; and a `BoxMesh`, the same
+  box as an `ArrayMesh`, that box shifted off-centre and an empty
+  `ArrayMesh` pass, pass, fail on `±x` and warn.
 - Open a fixture in the editor (`mise run editor`, then double-click the
   `.tres`) to see the inspector layout.
 
 ## References
 
 - [[socket-adjacency]]: the socket grammar, the matching rules, the
-  expansion and derivation algorithm with worked examples, and the planned
-  validation.
+  expansion and derivation algorithm with worked examples, and the
+  validation checks and minimal placement.
 - [[edge-rasteriser]]: where tile families come from.
 - [[RESEARCH_WFC]], sections 2 and 7 (C1): the convention and the plan.
 - [[MEGASTRUCTURE_CONCEPT]], section 3: the tile vocabulary the real tileset
