@@ -130,6 +130,7 @@ print(library.dump())
 | `errors` | `Array[String]`, empty for a usable library. |
 | `tiles` | `Array[TileLibrary.Tile]`, index = bit position. Each has `index`, `prototype`, `prototype_index`, `rotation` (quarter turns), `sockets` (effective strings in face order), `weight` (the prototype's, unchanged; #146), `keys` and `label()` (`name@rotation`). |
 | `word_count` | `ceil(tile_count / 64)` words per bitset. |
+| `solid_tile`, `air_tile` | Index of the first rotation of the tileset's `solid_name` and `air_name` prototypes, or -1; the solver's degradation fills with `solid_tile` and solid and void sectors default to these. |
 | `tile_count()` | Number of tiles. |
 | `allowed(dir, tile)` | Copy of the bitset of tiles allowed next to `tile` in direction `dir` (a face index); bit `b` in word `b >> 6` at `b & 63`. Empty when an index is out of range. |
 | `is_allowed(dir, a, b)` | One bit of it; `false` out of range. The table is symmetric: `is_allowed(d, a, b) == is_allowed(d ^ 1, b, a)`. |
