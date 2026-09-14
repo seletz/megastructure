@@ -22,6 +22,11 @@ description = "Run the skeleton viewer scene (sector boxes around the camera); i
 depends = ["import"]
 run = "godot --path . scenes/skeleton_viewer.tscn"
 
+[tasks.run-walk]
+description = "Run the world walk scene at seed 0: the 3^3 sectors around the origin solved on worker threads and placed as GridMaps, a capsule to walk them (F free fly, V view); imports first"
+depends = ["import"]
+run = "godot --path . scenes/world_walk.tscn -- --seed 0"
+
 [tasks.import]
 description = "Import all assets headlessly (regenerates .godot/)"
 run = "godot --headless --path . --import"
@@ -39,7 +44,7 @@ find . -path ./.godot -prune -o -name '*.gd' -print0 \
 '''
 
 [tasks.smoke]
-description = "Run the main scene, the skeleton viewer and the tile contact sheet headlessly for 60 frames each and fail on any script or scene error"
+description = "Run the main scene, the skeleton viewer, the tile contact sheet and the world walk headlessly for 60 frames each and fail on any script or scene error"
 depends = ["import"]
 run = '''
 #!/usr/bin/env bash
@@ -54,7 +59,7 @@ patterns=(-e 'SCRIPT ERROR' -e 'ERROR:' -e 'Parse Error' -e 'invalid UID')
 allow=()
 
 # The main scene (no scene argument), then every other runnable scene.
-scenes=("" scenes/skeleton_viewer.tscn scenes/tile_contact_sheet.tscn)
+scenes=("" scenes/skeleton_viewer.tscn scenes/tile_contact_sheet.tscn scenes/world_walk.tscn)
 for scene in "${scenes[@]}"; do
 	echo "smoke: ${scene:-main scene}"
 	status=0
