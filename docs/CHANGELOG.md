@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- `SectorGridMap` places solved sectors as GridMaps with trimesh collision and pinned yaw orientation indices, and `mise run run-walk` opens a scene that places the 27 sectors around the origin as they solve, marks failed ones red and lets a capsule walk them, checked by `mise run gridmap-check` and `mise run walk-check`. (#172)
 - `SectorJobs` solves sectors on the WorkerThreadPool with their own graph and solver instances, starts the nearest to a focus first, supports cancel and clear, and hands plain tile data to the main thread, whose polls `mise run jobs-check` keeps under 4 ms while checking every result against a main-thread solve. (#170)
 - `mise run wfc-bench` times the first stratum sectors from the origin through the real pipeline, unconstrained and optionally through the face-first boundaries, and prints markdown tables with a verdict against the 1 s native threshold. (#167)
 - `SectorBoundaries` solves each sector's border corner, edges and faces from their own keys before its interior, so neighbouring sectors compute identical borders in any order, checked over 100 faces and 50 adjacent pairs by `mise run boundary-check`. (#164)
