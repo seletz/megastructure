@@ -117,10 +117,11 @@ func _check_placeholder() -> void:
 			"item %d is %s with a mesh and one trimesh shape" % [index, prototype.name])
 	_expect(mesh_library.get_item_list().size() == items, "%d items, one per prototype with a mesh" % items)
 
-	# A 2³ result: the four stair rotations on the bottom layer, air above.
+	# A 2³ result: the four rotations of the rock-cut stair on the bottom
+	# layer, air above (stair_open has no rock end to test).
 	var stairs: Array[int] = []
 	for tile in library.tiles:
-		if tile.prototype.family == EdgeRasteriser.TileFamily.STAIR:
+		if tile.prototype.name == "stair":
 			stairs.append(tile.index)
 	_expect(stairs.size() == 4, "placeholder has four stair rotations")
 	if stairs.size() != 4:

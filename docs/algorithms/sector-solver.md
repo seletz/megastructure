@@ -38,8 +38,8 @@ sources:
 > [[GLOSSARY#All-solid degradation|all-solid degradation]]. On the
 > placeholder tileset an 8³ grid takes about 19 ms and a 24³ attempt about
 > 0.63 s in typed GDScript; every unconstrained 24³ sector of seeds 0 to 19
-> solves within 4 attempts (mean 1.55), but most real sectors' records
-> cannot be tiled with this tileset yet (#159).
+> solves within 2 attempts, and every real stratum sector sampled reaches an
+> attempt, 18 of the 20 at seed 0 solving (#161).
 
 This is milestone 0.2.0 items D1 (the core) and D2 (pre-collapse and the
 restart policy) of [[RESEARCH_WFC]] section 7, following sections 3 and 4 of
@@ -123,8 +123,9 @@ turns one sector's inputs into the `domains` words:
    `error`.
 
 Starting domains that pass these checks can still be inconsistent across a
-few cells (a floor needs rock below, a bridge two cells below needs open
-space above it). The solver finds that when it propagates them.
+few cells (a tunnel needs rock below, a bridge two cells below needs open
+space above it, and no tile has open space below and rock above). The
+solver finds that when it propagates them.
 
 ## Restart policy
 
@@ -218,38 +219,43 @@ first (fewest tiles, lowest priority among equals).
 
 ## Worked example: records, restarts and degradation
 
-**Tiles.** The placeholder library numbers its 30 tiles air 0, solid 1,
+**Tiles.** The placeholder library numbers its 53 tiles air 0, solid 1,
 floor 2, slab_edge 3 to 6, column 7, wall 8 and 9, wall_doorway 10 and 11,
 stair 12 to 15, bridge 16 and 17, catwalk 18 to 21, ladder 22 to 25, tunnel
-26 and 27, portal_opening 28 and 29.
+26 and 27, portal_opening 28 and 29, floor_open 30, slab_edge_end 31 to 34,
+slab_edge_end_f 35 to 38, stair_open 39 to 42, catwalk_end 43 to 46,
+catwalk_end_f 47 to 50, portal_frame 51 and 52.
 
-**Record masks.** A stair record with yaw 1 (climbing −z) matches only
-`stair@1`, bit 13: `(1 − (1 − 0)) mod 4 = 0`. A portal opening on the +x
-face has yaw 0: `(r − (0 − 3)) mod 2 = (r + 3) mod 2 = 0` holds for `r = 1`,
-so it matches `portal_opening@1`, bit 29, the wall along z with its passage
-along x. On the −z face (yaw 1) it matches bit 28. A floor record matches
-bits 2 to 6, floor and every slab edge.
+**Record masks.** A stair record with yaw 1 (climbing −z) matches
+`stair@1` and `stair_open@1`, bits 13 and 40: `(1 − (1 − 0)) mod 4 = 0`. A
+portal opening on the +x face has yaw 0: `(r − (0 − 3)) mod 2 = (r + 3) mod
+2 = 0` holds for `r = 1`, so it matches `portal_opening@1` and
+`portal_frame@1`, bits 29 and 52, with their passage along x. On the −z
+face (yaw 1) it matches bits 28 and 51. A floor record matches bits 2 to 6
+and 30 to 38: floor, open floor and every slab edge and slab edge end.
 
-**Record pair.** A floor at (2, 2, 2) under a stair at (2, 3, 2): the
-floor tiles' `+y` sockets are all `0i`, so their union in `+y` holds only
-tiles with `0i` below (air, column, bridge, catwalk, ladder, wall_doorway,
-portal_opening), and every stair has `1i` below. The intersection is empty,
-so `build` returns `Record((2, 2, 2) floor 0 …) and Record((2, 3, 2) stair 0
-…) cannot touch across +y` without touching the solver.
+**Record pair.** A bridge at (2, 2, 2) under a tunnel at (2, 3, 2): the
+bridge tiles' `+y` sockets are `0i`, so their union in `+y` holds only
+tiles with `0i` below, and both tunnels have `1i` below. The intersection
+is empty, so `build` returns `Record((2, 2, 2) bridge 0 …) and
+Record((2, 3, 2) tunnel 0 …) cannot touch across +y` without touching the
+solver.
 
-**Inconsistent across cells.** A bridge at (4, 2, 4) and a floor at
+**Inconsistent across cells.** A bridge at (4, 2, 4) and a tunnel at
 (4, 4, 4) are not neighbours, so the pair check passes. Propagating them
 narrows (4, 3, 4) to tiles with open space below (for the bridge) and rock
-on top (for the floor): none. The solve returns `FAILED` with `attempts 0`
+on top (for the tunnel): none. The solve returns `FAILED` with `attempts 0`
 and `inconsistent starting domains: cell (4, 2, 4) is left empty by
-propagating them` in about half a millisecond.
+propagating them` in a few milliseconds.
 
-**Restarts.** An unconstrained 8³ grid at seed 14: attempt 0 uses `s =
-hash3_u(14, (0, 0, 0), 9100)` and contradicts after 234 observations,
-attempt 1 (salt 9101) too; attempt 2 (salt 9102) solves. With the default
-8 attempts the result is `SOLVED`, `attempts 3`, `restarts 2`, and `steps`
-counts the observations of all three. With `max_attempts = 2` it is
-`DEGRADED`: 512 cells of tile 1, `attempts 2`, `restarts 2`.
+**Restarts.** An unconstrained 8³ grid at seed 36: attempt 0 uses `s =
+hash3_u(36, (0, 0, 0), 9100)` and contradicts after 84 observations;
+attempt 1 (salt 9101) solves. With the default 8 attempts the result is
+`SOLVED`, `attempts 2`, `restarts 1`, and `steps` (479) counts the
+observations of both. With `max_attempts = 1` it is `DEGRADED`: 512 cells
+of tile 1, `attempts 1`, `restarts 1`. Seed 36 is the first seed that
+restarts at all on the 53-tile set; none of seeds 0 to 2 999 needs a third
+attempt.
 
 ## Propagation design: AC-3, not AC-4
 
@@ -258,7 +264,7 @@ counts the observations of all three. With `max_attempts = 2` it is
 here because an observation removes nearly every tile of a cell at once,
 and AC-4 pays per removed tile: every cell of a solved grid loses
 `tiles − 1` tiles, and each removal visits the supports in six directions.
-On the placeholder set (30 tiles, on average 12.2 allowed per direction)
+On the first placeholder set (30 tiles, on average 12.2 allowed per direction)
 a 24³ sector is `13 824 × 29 × 6 × 12.2 ≈ 29 million` counter updates, each
 an interpreted GDScript step, plus `13 824 × 30 × 6 ≈ 2.5 MB` of counters
 to fill per solve. Bitset AC-3 pays per changed cell instead: a solved 24³
@@ -306,9 +312,9 @@ bytes:
 
 ## Measurements
 
-Placeholder tileset (13 prototypes, 30 tiles, one word), `mise run
-solver-check` and a 20-seed run on the development machine, Godot 4.7.2,
-headless:
+Placeholder tileset as first measured (13 prototypes, 30 tiles, one word),
+`mise run solver-check` and a 20-seed run on the development machine, Godot
+4.7.2, headless:
 
 | Grid | Heuristic | Solved (seeds 0–19) | Mean / max time of solved | Mean steps / queue pops |
 | --- | --- | --- | --- | --- |
@@ -321,25 +327,50 @@ Failed attempts stop at the contradiction, so they are faster. The table
 counts single attempts (`max_attempts = 1`); the time is the first input to
 the native threshold (#138) and the benchmark (#93).
 
+On the 20-prototype set (53 tiles, still one word, #161) the same single
+attempts solve 20 / 20 at 8³ with MRV and with entropy (379 and 329 mean
+steps), and 16 / 20 (MRV) and 17 / 20 (entropy) at 24³ (9 909 and 9 255
+mean steps). Measured back to back with the 30-tile set on the same loaded
+machine, an 8³ solve takes about 1.3 times as long (145 ms against 110 ms
+there), from the longer tile loops.
+
 With restarts (default 8 attempts, MRV):
 
 | Run | Solved | Degraded | Failed before an attempt | Attempts |
 | --- | --- | --- | --- | --- |
-| 8³ unconstrained, seeds 0–19 | 20 | 0 | 0 | 17 at the first, 2 at the second, 1 at the third |
-| 24³ unconstrained, seeds 0–19 | 20 | 0 | 0 | 11 × 1, 8 × 2, 1 × 4; mean 1.55, 793 ms mean per sector |
-| 20 real stratum sectors with records, seed 0 | 6 | 0 | 14 | 4, 2, 6, 8, 3, 2; mean 4.17 over the solved |
+| 8³ unconstrained, 30 tiles, seeds 0–19 | 20 | 0 | 0 | 17 at the first, 2 at the second, 1 at the third |
+| 24³ unconstrained, 30 tiles, seeds 0–19 | 20 | 0 | 0 | 11 × 1, 8 × 2, 1 × 4; mean 1.55, 793 ms mean per sector |
+| 20 real stratum sectors with records, 30 tiles, seed 0 | 6 | 0 | 14 | 4, 2, 6, 8, 3, 2; mean 4.17 over the solved |
+| 8³ unconstrained, 53 tiles, seeds 0–19 | 20 | 0 | 0 | all at the first |
+| 24³ unconstrained, 53 tiles, seeds 0–19 | 20 | 0 | 0 | 16 × 1, 4 × 2; mean 1.2 |
+| 20 real stratum sectors with records, 53 tiles, seed 0 | 18 | 2 | 0 | mean 3.10 over the 20 searched |
 
-Of the 14 real sectors that fail, 4 are rejected by the record pair check
-(a floor beside a portal opening's wall side, a floor over a stair, a stair
-beside a portal's wall side) and 10 empty a cell when their records
-propagate, mostly on a sector face where a portal opening's wall plane meets
-another record. Records need about three times the attempts of an empty
-grid. Sampled solid, shaft, cavity and chasm sectors all fail before an
-attempt (tunnel corners, walls beside portal openings, catwalks and ladders
-beside openings). These are mismatches between the rasteriser and the
-placeholder tileset, not solver failures (#159). `mise run solver-check`
-prints the real-sector table; `mise run solver-sector <x> <y> <z>`
-reproduces one sector.
+**Real sectors (#161).** On the 30-tile set, 14 of the 20 real sectors of
+seed 0, and 71 of the 100 of seeds 0 to 4, failed before an attempt. `mise
+run solver-real` classifies each by the record pair `SectorDomains` rejects
+or a minimal record set whose propagation empties a cell:
+
+| Cause | Seed 0 | Seeds 0–4 | Fix |
+| --- | ---: | ---: | --- |
+| Two side portal openings, or a portal and a floor, in crossing wall planes: a portal opening pulls a wall stack to the grid top and wall ends along the face to the grid edge | 9 | 39 | `portal_frame` |
+| A floor or stair beside a portal opening's wall side (the walk reaches the portal along the face) | 3 | 15 | `portal_frame` |
+| A floor directly over or under a stair cell, or beside a stair's high end, which is the cell under the next step | 1 | 8 | headroom rule in the rasteriser |
+| A floor or stair above an open-topped record in its column: rock only rests on rock, so every floor and stair needs rock down to the grid bottom | 1 | 9 | `floor_open`, `stair_open` |
+
+With the portal frame and a soffit tile alone, 16 of the 100 still failed:
+the 8 floor over or under stair pairs and 8 stair flights whose rock under
+the run cannot end against open space, fixed by the rasteriser rule and
+`stair_open`. Every
+sector then reached an attempt but all 100 degraded: with a soffit tile (open
+below, rock above) in place of the open floor, rock blobs could float and
+their edges have no closing tile; with the open floor instead, 11 of 20
+solved at seed 0, and adding end pieces for parapets and catwalks raised
+the single-attempt success from 12 % to 56 %
+([[socket-adjacency#Worked example: the placeholder tileset]]). Over seeds 0
+to 4, 18, 19, 19, 20 and 19 of the 20 sectors solve; the rest degrade.
+Solid, shaft, cavity and chasm sectors are not sampled yet. `mise run
+solver-check` prints the seed 0 table and checks that seeds 1 to 4 reach an
+attempt; `mise run solver-sector <x> <y> <z>` reproduces one sector.
 
 `mise run wfc-bench --boundaries` (#93) at seed 0, the first 10 stratum
 sectors walking outwards from the origin, on an Intel i9-9880H shared with
@@ -413,9 +444,12 @@ counting up from 9300 into salts nothing else uses.
 - **MRV or entropy** (#137): entropy solved 16 of 20 sectors against 11
   of 20 at 24³ on the placeholder set, at 20 % more mean time.
 - **The solid policy** (#136): restarts solve every unconstrained sector
-  measured; records raise the attempts to about 4 per solved sector.
-- **Records against the tileset** (#159): most real sectors fail before an
-  attempt.
+  measured; records raise the attempts to about 3 per sector.
+- **Records against the tileset** (#159): every sampled real stratum sector
+  reaches an attempt and 18 of 20 solve at seed 0 (#161); tunnels are the
+  largest remaining source of contradictions, and the look of the added
+  tiles (open floors and stairs, free-standing portal frames, weights) is
+  still open.
 - **What degradation keeps** and whether inconsistent sectors degrade
   instead of failing (#157).
 - **Default domains** of solid and void sectors (#158).

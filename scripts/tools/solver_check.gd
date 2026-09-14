@@ -8,9 +8,9 @@ extends SceneTree
 ## unsatisfiable one fails, then prints the tile histogram, steps and time
 ## per seed and the time of a 24³ solve with restarts.
 ##
-## Restarts and pre-collapse: seed 14 fails its first two 8³ attempts, so it
-## degrades to all solid with one or two attempts allowed and solves on the
-## third by default, the same on a second instance. Records that cannot hold
+## Restarts and pre-collapse: seed 36 fails its first 8³ attempt, so it
+## degrades to all solid with one attempt allowed and solves on the second
+## by default, the same on a second instance. Records that cannot hold
 ## fail fast with a clear error, in `SectorDomains` (two records, a bad
 ## orientation, a record outside the grid, face-neighbour records with no
 ## allowed pair) and in the solver (records whose propagation empties a cell
@@ -31,8 +31,10 @@ const SEEDS: Array[int] = [0, 1, 2, 3, 4]
 ## 24³ solve or real sectors.
 const QUICK_SEEDS: Array[int] = [0, 1]
 const SECTOR := Vector3i.ZERO
-## An 8³ seed whose first two attempts hit a contradiction.
-const RESTART_SEED := 14
+## An 8³ seed whose attempts before RESTART_ATTEMPTS hit a contradiction.
+const RESTART_SEED := 36
+## The attempt RESTART_SEED solves at.
+const RESTART_ATTEMPTS := 2
 ## Real stratum sectors the pipeline runs at seed 0.
 const REAL_SECTORS := 20
 const REAL_RANGE := 1000
@@ -87,6 +89,7 @@ func _init() -> void:
 	if not quick:
 		_time_large(library)
 		_run_real_sectors(library)
+		_check_real_sectors_reach_an_attempt(library)
 
 	print("solver check: %s" % ("ok" if _failures == 0 else "%d failure(s)" % _failures))
 	quit(0 if _failures == 0 else 1)
@@ -143,12 +146,12 @@ func _check_domains(library: TileLibrary) -> void:
 	_expect(not result.ok and result.outcome == SectorSolver.Outcome.FAILED and result.attempts == 0 and result.contradiction_cell >= 0, "domains: floor above air fails without an attempt (%s)" % result.error)
 
 
-## Seed RESTART_SEED degrades with one or two attempts and solves on the
-## third; a second instance repeats every outcome.
+## Seed RESTART_SEED degrades with fewer than RESTART_ATTEMPTS attempts and
+## solves at attempt RESTART_ATTEMPTS; a second instance repeats every outcome.
 func _check_restarts(library: TileLibrary) -> void:
 	var solver := SectorSolver.new(library, SMALL)
 	var twin := SectorSolver.new(library, SMALL)
-	for limit in [1, 2]:
+	for limit in range(1, RESTART_ATTEMPTS):
 		solver.max_attempts = limit
 		twin.max_attempts = limit
 		var result := solver.solve(RESTART_SEED, SECTOR)
@@ -166,7 +169,7 @@ func _check_restarts(library: TileLibrary) -> void:
 	var result := solver.solve(RESTART_SEED, SECTOR)
 	var again := twin.solve(RESTART_SEED, SECTOR)
 	_expect(
-		result.outcome == SectorSolver.Outcome.SOLVED and not result.degraded and result.attempts == 3 and result.restarts == 2,
+		result.outcome == SectorSolver.Outcome.SOLVED and not result.degraded and result.attempts == RESTART_ATTEMPTS and result.restarts == RESTART_ATTEMPTS - 1,
 		"restarts: seed %d solves at attempt %d of %d" % [RESTART_SEED, result.attempts, solver.max_attempts],
 	)
 	_expect(result.cells == again.cells and result.steps == again.steps, "restarts: restarted solve repeats on a second instance")
@@ -180,7 +183,7 @@ func _check_inconsistent(library: TileLibrary) -> void:
 		["two records at one cell", [_record(Vector3i(1, 1, 1), family.FLOOR, 0), _record(Vector3i(1, 1, 1), family.FLOOR, 0)], "a second record at the same cell"],
 		["a record outside the grid", [_record(Vector3i(8, 1, 1), family.FLOOR, 0)], "cell outside the"],
 		["a stair without a yaw", [_record(Vector3i(1, 1, 1), family.STAIR, EdgeRasteriser.ORIENTATION_UP)], "a stair needs a yaw"],
-		["a floor directly under a stair", [_record(Vector3i(2, 2, 2), family.FLOOR, 0), _record(Vector3i(2, 3, 2), family.STAIR, 0)], "cannot touch across +y"],
+		["a tunnel directly over a bridge", [_record(Vector3i(2, 2, 2), family.BRIDGE, 0), _record(Vector3i(2, 3, 2), family.TUNNEL, 0)], "cannot touch across +y"],
 	]
 	for case in cases:
 		var records: Array[EdgeRasteriser.Record] = []
@@ -190,11 +193,12 @@ func _check_inconsistent(library: TileLibrary) -> void:
 		var usec := Time.get_ticks_usec() - started
 		_expect(built.error.contains(case[2]) and built.words.is_empty(), "inconsistent: %s is rejected in %.1f ms: %s" % [case[0], usec / 1000.0, built.error])
 
-	# A floor needs rock below and a bridge open space above: a cell of that
-	# column is empty once the records propagate, before any attempt.
-	var records: Array[EdgeRasteriser.Record] = [_record(Vector3i(4, 2, 4), family.BRIDGE, 0), _record(Vector3i(4, 4, 4), family.FLOOR, 0)]
+	# A tunnel needs rock below and a bridge open space above, and no tile has
+	# open space below and rock above: a cell of that column is empty once the
+	# records propagate, before any attempt.
+	var records: Array[EdgeRasteriser.Record] = [_record(Vector3i(4, 2, 4), family.BRIDGE, 0), _record(Vector3i(4, 4, 4), family.TUNNEL, 0)]
 	var built := SectorDomains.build(library, SMALL, Skeleton.SectorType.STRATUM, records)
-	_expect(built.error.is_empty(), "inconsistent: a bridge two cells under a floor passes the record checks")
+	_expect(built.error.is_empty(), "inconsistent: a bridge two cells under a tunnel passes the record checks")
 	var solver := SectorSolver.new(library, SMALL)
 	var result := solver.solve(0, SECTOR, built.words)
 	_expect(
@@ -414,3 +418,27 @@ func _expect(condition: bool, message: String) -> void:
 	else:
 		_failures += 1
 		printerr("  FAIL  %s" % message)
+
+
+## Tileability (#161): the REAL_SECTORS real stratum sectors of each of
+## world seeds 1 to 4 (seed 0 is solved above) build their starting domains
+## and propagate them without emptying a cell, so every one reaches an
+## attempt. Only the starting domains are propagated
+## (`SolverSectorRun.empty_cell`); nothing is solved.
+func _check_real_sectors_reach_an_attempt(library: TileLibrary) -> void:
+	for seed in [1, 2, 3, 4]:
+		var rasteriser := EdgeRasteriser.new(WalkableGraph.new(seed))
+		var sectors := SolverSectorRun.real_sectors(rasteriser, REAL_SECTORS)
+		var failed := PackedStringArray()
+		for sector in sectors:
+			var built := SectorDomains.for_sector(library, rasteriser, sector)
+			if not built.error.is_empty():
+				failed.append("%s: %s" % [sector, built.error])
+				continue
+			var n := rasteriser.graph.cells_per_sector()
+			var empty := SolverSectorRun.empty_cell(library, Vector3i(n, n, n), built.words)
+			if empty >= 0:
+				failed.append("%s: cell %s empties" % [sector, SolverSectorRun.position(Vector3i(n, n, n), empty)])
+		_expect(sectors.size() == REAL_SECTORS and failed.is_empty(), "real sectors: seed %d, %d stratum sectors reach an attempt, %d fail before%s" % [
+			seed, sectors.size() - failed.size(), failed.size(), "" if failed.is_empty() else " (%s)" % "; ".join(failed),
+		])

@@ -50,10 +50,12 @@ status: current
   boundary-check`, listed in [[tools-and-tasks]].
 - `scripts/tools/jobs_check.gd`: the script behind `mise run jobs-check`,
   listed in [[tools-and-tasks]].
-- `scripts/tools/solver_check.gd`, `scripts/tools/solver_sector.gd` and
+- `scripts/tools/solver_check.gd`, `scripts/tools/solver_sector.gd`,
+  `scripts/tools/solver_real.gd` and
   `scripts/tools/solver_sector_run.gd` (`class_name SolverSectorRun`, the
-  pipeline shared by both): the scripts behind `mise run solver-check` and
-  `mise run solver-sector`, listed in [[tools-and-tasks]].
+  pipeline shared by them): the scripts behind `mise run solver-check`,
+  `mise run solver-sector` and `mise run solver-real`, listed in
+  [[tools-and-tasks]].
 - `scripts/tools/wfc_bench.gd`: the script behind `mise run wfc-bench`,
   listed in [[tools-and-tasks]].
 - [[solver_reference_seed0]]: the recorded SHA-256 of the seed 0 output,
@@ -185,15 +187,24 @@ was chosen over AC-4 are in [[sector-solver]].
 
 ## How to run or check it
 
-- `mise run solver-check` (part of `mise run check`, about 11 s) solves an
+- `mise run solver-check` (part of `mise run check`, a few minutes) solves an
   8³ grid with the placeholder tileset at seeds 0 to 4 on two instances and
   fails unless every solve succeeds at the first attempt, both agree, every
   adjacency is allowed and seed 0 matches [[solver_reference_seed0]]; checks
   the entropy flag and a `domains` restriction; checks restarts and the
-  degradation on seed 14, inconsistent records failing fast with their
+  degradation on seed 36, inconsistent records failing fast with their
   error, consistent records holding in every solved result and a fixed
-  face; times a 24³ solve with restarts; and runs 20 real stratum sectors at
-  seed 0, printing solved, degraded and failed counts and mean attempts.
+  face; times a 24³ solve with restarts; runs 20 real stratum sectors at
+  seed 0, printing solved, degraded and failed counts and mean attempts;
+  and requires the 20 real stratum sectors of seeds 1 to 4 to reach an
+  attempt.
+- `mise run solver-real [--seeds 0,1,2,3,4] [--count N] [--no-solve]
+  [--min-solved N]` runs those real sectors per world seed and explains every
+  one that fails before an attempt: the record pair `SectorDomains` rejects,
+  or a minimal set of records (dropped in halving chunks while the rest
+  still fail) whose starting domains propagate to an empty cell, relative to
+  the first. With `--no-solve` it only propagates the starting domains
+  (about 10 s per seed); solving all five seeds takes about 10 minutes.
 - `mise run solver-sector <x> <y> <z> [--seed N]` runs one real sector
   through skeleton, graph, rasteriser, domains and solver and prints the
   sector type, records, outcome, attempts, time, a family histogram and

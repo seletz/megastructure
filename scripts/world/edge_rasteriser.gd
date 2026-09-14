@@ -264,7 +264,10 @@ func _candidates(sector: Vector3i, edge: WalkableGraph.Edge, hub: Vector3i, surf
 ## Horizontal edges: the path reaches the portal `p` along the edge axis
 ## (across the face) or along the face wall; catwalks prefer the wall. A
 ## level change sits next to the portal: a stair run leaving `p` in that
-## direction, or in a shaft or chasm a ladder in the cell before `p`.
+## direction, or in a shaft or chasm a ladder in the cell before `p`. A level
+## walk last tries detours: along the edge axis to the line `d` cells in from
+## the face (d = 1 to n - 1), along the face to the portal's column, then
+## across to `p`.
 func _horizontal_candidates(edge: WalkableGraph.Edge, hub: Vector3i, surface: TileFamily, n: int, portal: Record, by_ladder: bool, cells: Dictionary, result: Array[Array]) -> void:
 	var ref := portal.edge_ref
 	var p := portal.cell
@@ -305,6 +308,23 @@ func _horizontal_candidates(edge: WalkableGraph.Edge, hub: Vector3i, surface: Ti
 			if not stair.is_empty():
 				stair.append(portal)
 				result.append(stair)
+	if p.y != hub.y:
+		return
+	# Detours, last: across the face along a line `d` cells in from the face,
+	# so a level walk can step around the column of another edge's stair.
+	var inward := -1 if p[edge.axis] == n - 1 else 1
+	for d in range(1, n):
+		var line := p[edge.axis] + inward * d
+		var first := hub
+		first[edge.axis] = line
+		var second := first
+		second[face_axis] = p[face_axis]
+		var detour: Array[Record] = []
+		_append_route(detour, hub, first, edge.axis, surface, ref, false)
+		_append_route(detour, first, second, face_axis, surface, ref, false)
+		_append_route(detour, second, p, edge.axis, surface, ref, false)
+		detour.append(portal)
+		result.append(detour)
 
 
 ## Vertical edges: the portal cell is at the top of the lower sector
@@ -379,7 +399,7 @@ func _stair_run(end: Vector3i, hub: Vector3i, first_dir: Vector3i, surface: Tile
 func _flights(cursor: Vector3i, h: int, dir: Vector3i, first_dir: Vector3i, up: int, remaining: int, surface: TileFamily, ref: Vector4i, n: int, cells: Dictionary, outward: Array[Record], budget: Array[int]) -> bool:
 	if remaining == 0:
 		var landing := Record.make(Vector3i(cursor.x + dir.x, h, cursor.z + dir.z), surface, 0, ref)
-		if not _free(cells, landing):
+		if not _free(cells, landing) or not _headroom(cells, outward, landing):
 			return false
 		outward.append(landing)
 		return true
@@ -409,8 +429,10 @@ func _flights(cursor: Vector3i, h: int, dir: Vector3i, first_dir: Vector3i, up: 
 			cell.y = h + k - 1 if up > 0 else h - k
 			laid.append(Record.make(cell, TileFamily.STAIR, yaw_of(d if up > 0 else -d), ref))
 		var free := true
+		var pending: Array[Record] = outward.duplicate()
+		pending.append_array(laid)
 		for record in laid:
-			free = free and _free(cells, record)
+			free = free and _free(cells, record) and _headroom(cells, pending, record)
 		if not free:
 			continue
 		var mark := outward.size()
@@ -426,6 +448,20 @@ func _flights(cursor: Vector3i, h: int, dir: Vector3i, first_dir: Vector3i, up: 
 static func _free(cells: Dictionary, record: Record) -> bool:
 	var existing: Record = cells.get(record.cell)
 	return existing == null or (existing.family == record.family and existing.orientation == record.orientation)
+
+
+## True when `record` keeps the headroom rule against the records in `cells`
+## and in `pending`: nothing directly above or below a stair cell.
+static func _headroom(cells: Dictionary, pending: Array[Record], record: Record) -> bool:
+	for step in [_UP, -_UP]:
+		var next: Vector3i = record.cell + step
+		var other: Record = cells.get(next)
+		for candidate in pending:
+			if candidate.cell == next:
+				other = candidate
+		if other != null and (record.family == TileFamily.STAIR or other.family == TileFamily.STAIR):
+			return false
+	return true
 
 
 ## Surface cells from `from` to `to` (same height), along `first_axis`, then
@@ -453,7 +489,9 @@ static func _append_ladder(out: Array[Record], column: Vector3i, from_y: int, to
 		out.append(Record.make(Vector3i(column.x, y, column.z), TileFamily.LADDER, ORIENTATION_UP, ref))
 
 
-## Merges records into a copy of `cells`; null on the first conflict.
+## Merges records into a copy of `cells`; null on the first conflict or when
+## the result breaks the headroom rule at one of the records' cells (a stair
+## cell with a record directly above or below it).
 static func _merge_all(cells: Dictionary, records: Array[Record]) -> Variant:
 	var result := cells.duplicate()
 	for record in records:
@@ -465,6 +503,9 @@ static func _merge_all(cells: Dictionary, records: Array[Record]) -> Variant:
 		if merged == null:
 			return null
 		result[record.cell] = merged
+	for record in records:
+		if not _headroom(result, [], result[record.cell]):
+			return null
 	return result
 
 

@@ -9,6 +9,13 @@ const STEPS: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
 	Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
 ]
+## Real sectors are sampled within this many sectors of the origin.
+const REAL_RANGE := 1000
+## Samples `real_sectors` looks at before it gives up.
+const REAL_SEARCH_LIMIT := 10000
+## Salt of the real sector sample, the one `solver-check` uses; outside the
+## grammar's salt range.
+const SALT_REAL_SECTORS := 905
 
 var sector: Vector3i
 var type: Skeleton.SectorType
@@ -81,3 +88,105 @@ static func histogram(library: TileLibrary, cells: PackedInt32Array) -> String:
 	for key in order:
 		parts.append("%s %d" % [key, counts[key]])
 	return ", ".join(parts)
+
+
+## The `index`-th real sector candidate `solver-check` samples: a sector
+## within +-`REAL_RANGE` of the origin, hashed with `SALT_REAL_SECTORS`.
+static func real_sector(index: int) -> Vector3i:
+	var axes := Vector3i.ZERO
+	for axis in 3:
+		axes[axis] = Hash.hash3_u(0, Vector3i(index, axis, 0), SALT_REAL_SECTORS) % (2 * REAL_RANGE + 1) - REAL_RANGE
+	return axes
+
+
+## The first `count` sampled sectors that are stratum sectors with records at
+## the rasteriser's world seed (fewer when `REAL_SEARCH_LIMIT` runs out).
+static func real_sectors(rasteriser: EdgeRasteriser, count: int) -> Array[Vector3i]:
+	var graph := rasteriser.graph
+	var found: Array[Vector3i] = []
+	var i := 0
+	while found.size() < count and i < REAL_SEARCH_LIMIT:
+		var sector := real_sector(i)
+		i += 1
+		if graph.skeleton.sector_type(graph.world_seed, sector) != Skeleton.SectorType.STRATUM:
+			continue
+		if rasteriser.records_for_sector(sector).is_empty():
+			continue
+		found.append(sector)
+	return found
+
+
+## Propagates `words` (as `SectorDomains` builds them) to arc consistency
+## and returns the first cell left without a tile, or -1 when none is.
+static func empty_cell(library: TileLibrary, grid: Vector3i, words: PackedInt64Array) -> int:
+	var wc := library.word_count
+	var tiles := library.tile_count()
+	var domains := words.duplicate()
+	var cell_count := grid.x * grid.y * grid.z
+	var tables: Array[PackedInt64Array] = []
+	for dir in TilePrototype.FACE_COUNT:
+		var table := PackedInt64Array()
+		for tile in tiles:
+			table.append_array(library.allowed(dir, tile))
+		tables.append(table)
+	var full := PackedInt64Array()
+	full.resize(wc)
+	full.fill(0)
+	for tile in tiles:
+		full[tile >> 6] |= 1 << (tile & 63)
+	# A cell that may still hold every tile restricts nothing, so only the
+	# restricted cells start in the queue.
+	var queued := PackedByteArray()
+	queued.resize(cell_count)
+	queued.fill(0)
+	var stack := PackedInt32Array()
+	for cell in range(cell_count - 1, -1, -1):
+		for w in wc:
+			if domains[cell * wc + w] != full[w]:
+				queued[cell] = 1
+				stack.append(cell)
+				break
+	# Union of the allowed tiles by domain and direction; domains repeat.
+	var supports := {}
+	var support := PackedInt64Array()
+	while not stack.is_empty():
+		var cell := stack[-1]
+		stack.remove_at(stack.size() - 1)
+		queued[cell] = 0
+		var position := Vector3i(cell % grid.x, (cell / grid.x) % grid.y, cell / (grid.x * grid.y))
+		for dir in TilePrototype.FACE_COUNT:
+			var next := position + STEPS[dir]
+			if next.x < 0 or next.y < 0 or next.z < 0 or next.x >= grid.x or next.y >= grid.y or next.z >= grid.z:
+				continue
+			var key: Variant = domains[cell * wc] * 6 + dir if wc == 1 else [domains.slice(cell * wc, (cell + 1) * wc), dir]
+			if supports.has(key):
+				support = supports[key]
+			else:
+				support = PackedInt64Array()
+				support.resize(wc)
+				support.fill(0)
+				for tile in tiles:
+					if (domains[cell * wc + (tile >> 6)] >> (tile & 63)) & 1 == 1:
+						for w in wc:
+							support[w] |= tables[dir][tile * wc + w]
+				supports[key] = support
+			var other := next.x + grid.x * (next.y + grid.y * next.z)
+			var changed := false
+			var left := false
+			for w in wc:
+				var before := domains[other * wc + w]
+				var after := before & support[w]
+				domains[other * wc + w] = after
+				changed = changed or after != before
+				left = left or after != 0
+			if not left:
+				return other
+			if changed and queued[other] == 0:
+				queued[other] = 1
+				stack.append(other)
+	return -1
+
+
+## A cell index as a grid position.
+static func position(grid: Vector3i, cell: int) -> Vector3i:
+	return Vector3i(cell % grid.x, (cell / grid.x) % grid.y, cell / (grid.x * grid.y))

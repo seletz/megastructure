@@ -127,7 +127,8 @@ built backwards from `E`, leaving it in a given direction:
    way, turn back. Take the first choice whose flight and the cell after it
    fit in the sector and whose cells are free (empty, or holding the same
    family and orientation; the portal cells and the walks of earlier edges
-   are already placed). If later flights find no free choice, undo and try
+   are already placed) and keep the headroom rule (step 7) against the
+   records placed so far and the run's own earlier flights. If later flights find no free choice, undo and try
    the next choice: a depth-first search, capped at `RUN_SEARCH_LIMIT` = 64
    flights per run.
 3. Each stair cell faces the way up. The flat cell after the last flight, at
@@ -153,6 +154,10 @@ the hub first, then away from it.
    a stair run leaving `P` inwards (across) or along the wall.
 3. Different levels, in a shaft or chasm: the L to the cell before `P`, a
    ladder there from the hub's level to `P.y`, then `P`.
+4. Same level, last: **detours**. Along the edge axis from the hub to the
+   line `d` cells in from the face, along the face to `P`'s column, then
+   across to `P`, for `d = 1` to 23 in turn. A level walk whose L would pass
+   directly under another edge's stair steps around its column this way.
 
 ### 6. Vertical edges
 
@@ -184,6 +189,13 @@ Records are merged cell by cell with `EdgeRasteriser.merge`:
 | two different surface families | conflict |
 | stairs of different orientation, stair and ladder | conflict |
 | portal opening and stair or ladder, up or down opening and any other opening | conflict |
+
+**Headroom rule.** No record lies directly above or below a stair cell. A
+stair's walker needs the cell above it open, and a floor directly under a
+stair has 1.4 m of headroom, so a flat cell over or under a stair (or two
+stacked stair cells) describes geometry no tile pair can hold. A routing
+whose merged records break the rule at one of its cells is dropped like a
+conflict, and stair runs check the rule as they search (step 4).
 
 The rule is commutative, so the result does not depend on which record came
 first. A stair or ladder wins over a flat cell where a walkway crosses the
@@ -275,26 +287,32 @@ every sample sector against a rasteriser on a fresh graph.
 ## Measured shape
 
 `mise run raster-check`, 1 000 random sectors within ±100 000 sectors, 200
-per seed 0 to 4: 689 have edges (1 593 edges), 47.2 records per sector with
-edges (0.3 % of its cells), 32.5 over all sampled sectors. One edge takes a
-fallback routing, none is rejected, every walk passes the level rule and
-every sector's records are one 26-connected group. The check runs in about
-17 s.
+per seed 0 to 4: 698 have edges (1 606 edges), 47.0 records per sector with
+edges (0.34 % of its cells), 32.8 over all sampled sectors. 37 edges take a
+fallback routing, none is rejected, no record lies directly above or below
+a stair cell, every walk passes the level rule and every sector's records
+are one 26-connected group.
 
 | Family | Records |
 | --- | ---: |
-| floor | 17 152 |
-| stair | 6 191 |
-| bridge | 2 424 |
-| catwalk | 2 468 |
-| tunnel | 1 589 |
-| portal opening | 1 588 |
-| ladder | 1 124 |
+| floor | 17 245 |
+| stair | 6 154 |
+| bridge | 2 278 |
+| catwalk | 2 486 |
+| tunnel | 1 898 |
+| portal opening | 1 601 |
+| ladder | 1 134 |
 
-Level changes: 578 horizontal edge ends change level. They produce 3 978
-stair cells; vertical edges add 2 213 stair cells, ladders 1 124 cells
-(counted along the walks, before merging) and turning runs 100 landing
+Level changes: 576 horizontal edge ends change level. They produce 3 957
+stair cells; vertical edges add 2 197 stair cells, ladders 1 134 cells
+(counted along the walks, before merging) and turning runs 112 landing
 cells.
+
+**Headroom rule (#161).** Without it the same sample had 52 record pairs
+directly above or below a stair cell (4, 12, 13, 11 and 12 for seeds 0 to
+4), 1 fallback routing and 100 landings. The rule moves 36 more edges to a
+later routing (a turned stair run or a detour) and adds 12 landings; floor,
+bridge and tunnel cells change by under 2 % and stair cells not at all.
 
 **Portal level rule (#132).** Before portals on x and z faces took the lower
 sector's hub level, their heights were hashed on their own and both ends of
@@ -317,9 +335,10 @@ landings; with hashed portal heights it had 105 327 stair cells.
 
 ## Open questions
 
-- Walks are one cell wide, with no headroom cells. Whether the solver needs
-  air above stairs and walkways, or a two-cell corridor, is for the tileset
-  (C4) and D2 to decide.
+- Walks are one cell wide. The headroom rule keeps records out of the cells
+  directly above and below stairs, but walkways still have no reserved air
+  above them; whether the solver needs it, or a two-cell corridor, is for
+  the tileset (C4) and D2 to decide.
 - A stair next to a portal can make the walkway pass beside or under the
   stair and double back (a switchback). It is walkable but not the shortest
   path.
