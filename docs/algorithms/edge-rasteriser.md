@@ -252,11 +252,12 @@ The solver turns a headroom record into a domain of every tile whose mesh
 leaves the lowest 1.8 m of the cell empty (`TileLibrary.HEADROOM_CLEAR`,
 [[sector-solver#Starting domains]]): a 1.8 m walker on a floor reaches
 0.4 m into the cell above and on the top tread of a stair 1.8 m. On the
-placeholder tileset that is air and the wall doorway under its lintel. An
-open floor, a portal frame and a column are not: their slab or jambs start
-at the cell bottom. Tunnels need rock above (`1i`) and no headroom tile has
-it, so a tunnel with headroom cannot build its domains; on the placeholder
-tileset tunnels through rock failed before an attempt already.
+placeholder tileset that is air, the wall doorway under its lintel and,
+in rock, the vaults and stairwells of #182, which keep that band empty under
+a ceiling or ledges. An open floor, a portal frame and a column are not:
+their slab or jambs start at the cell bottom. Tunnels need rock above
+(`1i`): the vault over a tunnel has it, and the stairwell over a stair in
+rock opens to the vault above it ([[tileset#The placeholder tileset]]).
 
 **Portal cells.** A portal opening's own cell needs a walking surface. Its
 record takes `portal_opening` (two jambs in a wall, no slab) and
@@ -441,15 +442,14 @@ landings; with hashed portal heights it had 105 327 stair cells.
 - Walks are one cell wide. Headroom reserves the cells above them, but not
   the cells beside them; a walker brushing a column in the next cell is
   possible.
-- Bridge and catwalk records still take tiles with a parapet or railing on
-  one side, which blocks a walk turning in that cell; floor records drop
-  tiles that block a face their walk crosses (#173). `walk-check` covers
-  stratum sectors only.
+- Catwalk records still take tiles with a railing on one side, which
+  blocks a walk turning in that cell (#187); floor, bridge and tunnel
+  records drop tiles that block a face their walk crosses (#173, #182).
+  `walk-check` covers stratum sectors and, with `--tunnel`, one solid
+  sector.
 - Where only the merge-rule pass (step 3) or a side-entry routing (step 5,
   item 5) fits, the walk is kept but cannot be walked; raster-check counts
   those among the fallbacks, not separately.
-- Tunnels need a headroom tile with rock above (a tunnel vault) before a
-  solid sector with records can build its domains.
 - A stair next to a portal can make the walkway pass beside or under the
   stair and double back (a switchback). It is walkable but not the shortest
   path.

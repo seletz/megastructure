@@ -382,6 +382,11 @@ adds chunks of 3³ cells as shapes of 8 bodies per sector over frames,
   horizontal edge back along that edge's records to the hub and out along
   the last edge's records to its portal, with the same failure rules and a
   print of the tiles around the feet when it fails.
+- `mise run walk-check --tunnel [--seed N]` does the same in rock: it takes
+  the solid sectors within three sectors of the origin nearest first, solves
+  the ones with a kept horizontal tunnel edge whose records build until one
+  solves, and walks from that edge's portal to the hub, and on to a second
+  portal when the sector has one (#182).
 - `mise run streaming-check [--quick]` (`--quick` part of `check`, the full
   walk of `check-full`) walks a frozen capsule through 10 streamed sectors
   and back (2 with `--quick`) and checks the load and unload rule, holes at
@@ -430,6 +435,15 @@ before. Of the five
 sectors listed in #171, (-1, 1, -1), (2, 1, -3) and (3, 2, 0) walk, and
 (-2, -1, -3) and (-2, 1, -1) now degrade. The real-sector walk still runs on
 demand only (decision #171, question 2).
+
+**Tunnels after #182.** With the tunnel, vault and stairwell pieces
+([[tileset#The placeholder tileset]]) `mise run walk-check --tunnel` walks
+on both placements at seeds 0 to 4: at seed 0 sector (0, 0, 0) from its +x
+portal through three corners to its +z portal, 39 cells; at seed 2 sector
+(0, 1, 2) down a flight of six stairs in rock from a portal whose door cell
+is a stairwell, 39 cells; at seed 3 sector (1, 0, 1) up six stairs, 25 cells
+and 30 step-ups. The stratum run is unchanged: `--all-solving` at seed 0
+still solves and walks 84 of 84.
 
 ## References
 

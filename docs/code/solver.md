@@ -111,7 +111,7 @@ match result.outcome:
 | `SectorDomains` member | Meaning |
 | --- | --- |
 | `for_sector(library, rasteriser, sector, faces)` (static) | The domains of a real 24³ sector: its type from the graph's skeleton, its records from the rasteriser. |
-| `build(library, size, type, records, faces)` (static) | The domains of any grid: record masks, support cells beside records (the fill tile plus the free tiles a record needs there), the sector's fill tile (solid in a solid sector, air elsewhere) in every other cell, fixed faces. `faces` is empty or six `PackedInt32Array`s in face order, each empty or one tile index (or -1) per boundary cell at `u + size_u * v`, u and v the other two axes in xyz order. |
+| `build(library, size, type, records, faces)` (static) | The domains of any grid: record masks (floor, bridge, tunnel and side portal records without the tiles that block a face their walk crosses), support cells beside records (the fill tile plus the free tiles a record needs there; none for a record with a tile that stands in fill alone), the sector's fill tile (solid in a solid sector, air elsewhere) in every other cell, fixed faces. `faces` is empty or six `PackedInt32Array`s in face order, each empty or one tile index (or -1) per boundary cell at `u + size_u * v`, u and v the other two axes in xyz order. |
 | `words` | `cell_count * word_count` words for `solve`; empty on error. |
 | `record_cells` | Cell index of every record, ascending. |
 | `support_cells` | Cell index of every support cell, ascending. |
@@ -120,6 +120,8 @@ match result.outcome:
 | `tile_matches(tile, family, orientation)` (static) | Whether a tile may stand in a record's cell: same family, and for a stair or side portal opening the matching rotation; for `HEADROOM` any tile whose `headroom` is set. |
 | `family_mask(library, family, orientation)` (static) | The tiles `tile_matches` accepts, as words. |
 | `orientation_error(family, orientation)` (static) | Why an orientation does not suit a family, or "". |
+| `steps_to(by_cell, record, dir)` (static) | Whether a walk steps from a floor, bridge, tunnel or portal opening record across side face `dir` to a record in `by_cell` (cell to record): along the passage of a side portal; any record but headroom from a floor or bridge; a tunnel, a side portal along `dir` or a stair climbing away from a tunnel; a stair one lower climbing into the cell from either. |
+| `FACE_FILTERED` | The families whose records drop blocking tiles: floor, bridge, tunnel, portal opening. |
 | `AUTHORED_YAW` | Stair 0 and portal opening 3. |
 
 | `SectorBoundaries` member | Meaning |
@@ -194,7 +196,7 @@ was chosen over AC-4 are in [[sector-solver]].
   fails unless every solve succeeds at the first attempt, both agree, every
   adjacency is allowed and seed 0 matches [[solver_reference_seed0]]; checks
   the entropy flag and a `domains` restriction; checks restarts and the
-  degradation on seed 374, inconsistent records failing fast with their
+  degradation on seed 1502, inconsistent records failing fast with their
   error, consistent records holding in every solved result and a fixed
   face; times a 24³ solve with restarts; runs 20 real stratum sectors and
   2 each of shaft, cavity and chasm sectors at seed 0, printing solved,
@@ -202,8 +204,11 @@ was chosen over AC-4 are in [[sector-solver]].
   walk-family tile outside a record cell in a solved sector (#180);
   and requires the 20 real stratum sectors of seeds 1 to 4 to reach an
   attempt.
-- `mise run solver-real [--seeds 0,1,2,3,4] [--count N] [--no-solve]
-  [--min-solved N]` runs those real sectors per world seed and explains every
+- `mise run solver-real [--seeds 0,1,2,3,4] [--count N] [--solid N]
+  [--no-solve] [--min-solved N]` runs those real sectors (and with
+  `--solid N` the first N solid sectors with tunnel records) per world seed,
+  fails on a solved sector whose floor, bridge, tunnel or portal tile blocks a face
+  its walk crosses, and explains every
   one that fails before an attempt: the record pair `SectorDomains` rejects,
   or a minimal set of records (dropped in halving chunks while the rest
   still fail) whose starting domains propagate to an empty cell, relative to

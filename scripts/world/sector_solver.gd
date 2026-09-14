@@ -432,6 +432,7 @@ func _observe(cell: int, attempt_seed: int, step: int) -> void:
 func _propagate(result: Result) -> int:
 	var words := _words
 	var slices := _slices_used[0]
+	var slices_second := _slices_used[1] if words > 1 else 0
 	var propagations := 0
 	var top := _stack.size()
 	while top > 0:
@@ -466,6 +467,38 @@ func _propagate(result: Result) -> int:
 				changed = true
 				empty = false
 				_wave[neighbour_base] = narrowed
+			elif words == 2:
+				# Two words unrolled, as tilesets past 64 tiles take them.
+				var first := _wave[base]
+				var second := _wave[base + 1]
+				var mask_first := 0
+				var mask_second := 0
+				var table := dir * 2 * SLICES * 256
+				for s in slices:
+					var t := (table + ((first >> (s * 8)) & 255)) * 2
+					mask_first |= _union[t]
+					mask_second |= _union[t + 1]
+					table += 256
+				table = (dir * 2 + 1) * SLICES * 256
+				for s in slices_second:
+					var t := (table + ((second >> (s * 8)) & 255)) * 2
+					mask_first |= _union[t]
+					mask_second |= _union[t + 1]
+					table += 256
+				var old_first := _wave[neighbour_base]
+				var old_second := _wave[neighbour_base + 1]
+				var narrowed_first := old_first & mask_first
+				var narrowed_second := old_second & mask_second
+				if narrowed_first == old_first and narrowed_second == old_second:
+					continue
+				if narrowed_first == 0 and narrowed_second == 0:
+					_stack.resize(top)
+					result.propagations += propagations
+					return neighbour
+				changed = true
+				empty = false
+				_wave[neighbour_base] = narrowed_first
+				_wave[neighbour_base + 1] = narrowed_second
 			else:
 				_mask.fill(0)
 				for w in words:
@@ -493,6 +526,16 @@ func _propagate(result: Result) -> int:
 				var count := 0
 				for s in slices:
 					count += _popcount[(narrowed_word >> (s * 8)) & 255]
+				_counts[neighbour] = count
+				_primary[neighbour] = count
+			elif words == 2 and not use_entropy:
+				var first_word := _wave[neighbour_base]
+				var second_word := _wave[neighbour_base + 1]
+				var count := 0
+				for s in slices:
+					count += _popcount[(first_word >> (s * 8)) & 255]
+				for s in slices_second:
+					count += _popcount[(second_word >> (s * 8)) & 255]
 				_counts[neighbour] = count
 				_primary[neighbour] = count
 			else:

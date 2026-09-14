@@ -78,6 +78,25 @@ static func count_walk_tiles_outside(library: TileLibrary, grid: Vector3i, cell_
 	return outside
 
 
+## Side faces a walk crosses (`SectorDomains.steps_to`) from a record of a
+## `SectorDomains.FACE_FILTERED` family whose tile in `cells` blocks them
+## (`TileLibrary.Tile.blocked_faces`): 0 when no parapet or wall stands
+## across a walk.
+static func count_blocked_walk_faces(library: TileLibrary, grid: Vector3i, cell_records: Array[EdgeRasteriser.Record], cells: PackedInt32Array) -> int:
+	var by_cell := {}
+	for record in cell_records:
+		by_cell[record.cell] = record
+	var blocked := 0
+	for record in cell_records:
+		if not record.family in SectorDomains.FACE_FILTERED:
+			continue
+		var tile := library.tiles[cells[record.cell.x + grid.x * (record.cell.y + grid.y * record.cell.z)]]
+		for dir in TilePrototype.FACE_COUNT:
+			if not TilePrototype.is_vertical(dir) and tile.blocked_faces & (1 << dir) != 0 and SectorDomains.steps_to(by_cell, record, dir):
+				blocked += 1
+	return blocked
+
+
 ## Face-neighbour pairs of `cells` that the adjacency table forbids.
 static func bad_adjacencies(library: TileLibrary, grid: Vector3i, cells: PackedInt32Array) -> int:
 	var bad := 0

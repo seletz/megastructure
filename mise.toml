@@ -214,11 +214,11 @@ flag "--seed <n>" default="0" help="World seed and solve seed"
 
 [tasks.solver-real]
 depends = ["import"]
-description = "Run the real stratum sectors solver-check samples through the fill pipeline per world seed and explain every sector that fails before an attempt: the record pair SectorDomains rejects, or a minimal set of records whose starting domains propagate to an empty cell; print solved, degraded and failed counts per seed; fail on any sector failing before an attempt or, with --min-solved, on a seed with fewer solved. Usage: mise run solver-real [--seeds 0,1,2,3,4] [--count N] [--no-solve] [--min-solved N] (headless)"
+description = "Run the real stratum sectors solver-check samples through the fill pipeline per world seed and explain every sector that fails before an attempt: the record pair SectorDomains rejects, or a minimal set of records whose starting domains propagate to an empty cell; print solved, degraded and failed counts per seed; with --solid N also the first N solid sectors with tunnel records; fail on any sector failing before an attempt or, with --min-solved, on a seed with fewer strata solved. Usage: mise run solver-real [--seeds 0,1,2,3,4] [--count N] [--solid N] [--no-solve] [--min-solved N] (headless)"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-args=(--seeds "${usage_seeds:-0,1,2,3,4}" --count "${usage_count:-20}")
+args=(--seeds "${usage_seeds:-0,1,2,3,4}" --count "${usage_count:-20}" --solid "${usage_solid:-0}")
 [[ "${usage_no_solve:-false}" == "true" ]] && args+=(--no-solve)
 [[ -n "${usage_min_solved:-}" ]] && args+=(--min-solved "${usage_min_solved}")
 godot --headless --path . --script res://scripts/tools/solver_real.gd -- "${args[@]}"
@@ -226,6 +226,7 @@ godot --headless --path . --script res://scripts/tools/solver_real.gd -- "${args
 usage = '''
 flag "--seeds <seeds>" default="0,1,2,3,4" help="Comma-separated world seeds (each also the solve seed)"
 flag "--count <n>" default="20" help="Real stratum sectors with records per seed"
+flag "--solid <n>" default="0" help="Real solid sectors with tunnel records per seed, run after the strata"
 flag "--no-solve" help="Only build and propagate the starting domains"
 flag "--min-solved <n>" help="Fail when a seed solves fewer sectors without degradation"
 '''
@@ -295,20 +296,22 @@ run = "godot --headless --path . --script res://scripts/tools/gridmap_check.gd"
 
 [tasks.walk-check]
 depends = ["import"]
-description = "Walk the Player capsule through a sector placed as a SectorMultiMesh and then as a SectorGridMap with move_and_slide, one physics step per frame, and fail when it falls below the floor, gets stuck or ends over 1 m from the goal. Default: a hand-laid course of placeholder tiles (floor, a flight up onto a landing, a turn, a flight down). --sector x,y,z [--seed N] solves a real sector and walks from one portal to another along the edge rasteriser's records; --all-solving [--seed N] does that for every stratum sector within 3 sectors of the origin that solves and reports how many walk portal to portal; --placement multimesh|gridmap walks one placement only (headless)"
+description = "Walk the Player capsule through a sector placed as a SectorMultiMesh and then as a SectorGridMap with move_and_slide, one physics step per frame, and fail when it falls below the floor, gets stuck or ends over 1 m from the goal. Default: a hand-laid course of placeholder tiles (floor, a flight up onto a landing, a turn, a flight down). --sector x,y,z [--seed N] solves a real sector and walks from one portal to another along the edge rasteriser's records; --all-solving [--seed N] does that for every stratum sector within 3 sectors of the origin that solves and reports how many walk portal to portal; --tunnel [--seed N] walks the nearest solving solid sector along a tunnel edge from its portal to the hub (and on to a second portal); --placement multimesh|gridmap walks one placement only (headless)"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 args=()
 [[ -n "${usage_sector:-}" ]] && args+=(--sector "${usage_sector}" --seed "${usage_seed:-0}")
 [[ "${usage_all_solving:-false}" == "true" ]] && args+=(--all-solving --seed "${usage_seed:-0}")
+[[ "${usage_tunnel:-false}" == "true" ]] && args+=(--tunnel --seed "${usage_seed:-0}")
 [[ -n "${usage_placement:-}" ]] && args+=(--placement "${usage_placement}")
 godot --headless --fixed-fps 60 --path . --script res://scripts/tools/walk_check.gd -- "${args[@]}"
 '''
 usage = '''
 flag "--sector <x,y,z>" help="Walk this real sector portal to portal instead of the hand-laid course, e.g. -1,1,-1"
 flag "--all-solving" help="Walk every solving stratum sector within 3 sectors of the origin portal to portal"
-flag "--seed <n>" default="0" help="World seed and solve seed of --sector or --all-solving"
+flag "--tunnel" help="Walk the nearest solving solid sector within 3 sectors of the origin along a tunnel edge"
+flag "--seed <n>" default="0" help="World seed and solve seed of --sector, --all-solving or --tunnel"
 flag "--placement <placement>" help="Walk only this placement: multimesh or gridmap (default: both)" {
   choices "multimesh" "gridmap"
 }

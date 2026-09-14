@@ -153,7 +153,7 @@ finds those (below). The placeholder tileset passes `validate(true)` and
 ![Every rotated tile of the placeholder tileset with its sockets](../images/placeholder-tileset.png)
 
 `resources/tilesets/placeholder.tres` is the first tileset meant for the
-solver: 22 prototypes, 61 tiles, every `EdgeRasteriser.TileFamily` plus free
+solver: 40 prototypes, 118 tiles (two bitset words), every `EdgeRasteriser.TileFamily` plus free
 tiles. Every mesh is a handful of axis-aligned boxes in one 2 m cell centred
 on the origin, built by `placeholder_builder.gd` at the proportions of
 [[MEGASTRUCTURE_CONCEPT]] section 3: slab 0.6 thick at the bottom of the cell
@@ -167,8 +167,8 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 
 | id | horizontal faces | vertical faces |
 | --- | --- | --- |
-| 0 | `0s` open: nothing that must continue, including a slab edge, a tunnel mouth, a wall side, the end of a parapet or catwalk and a portal frame's jamb | `0i` open: a slab top or bottom lying on the plane, open space under an open floor, open stair or portal frame, and thin columns and ladders |
-| 1 | `1s` rock: solid, a stair's high end, a tunnel side, the wall a catwalk or ladder is fixed to, a backing plate's face | `1i` rock: solid, under a floor, slab edge, stair or tunnel, and over a tunnel |
+| 0 | `0s` open: nothing that must continue, including a slab edge, a tunnel mouth or the passage along a vault, a wall side, the end of a parapet or catwalk and a portal frame's jamb | `0i` open: a slab top or bottom lying on the plane, open space under an open floor, open stair or portal frame, and thin columns and ladders |
+| 1 | `1s` rock: solid, a stair's high end, a tunnel, vault or stairwell side, the wall a catwalk or ladder is fixed to, a backing plate's face | `1i` rock: solid, under a floor, slab edge, stair or tunnel, over a tunnel, and above and below a vault (the passage in rock, open to the tunnel or stairwell under it) |
 | 2 | `2` / `2f` parapet line along a slab edge (asymmetric) | – |
 | 3 | `3s` wall end, 0.7 m centred | `3_R` wall stack, R the run direction |
 | 4 | `4` / `4f` catwalk deck along a wall (asymmetric) | – |
@@ -197,13 +197,26 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | `portal_frame` | slab and two 0.2 m jambs, free-standing, open at the top | `0s 0s 0i 0i 0s 0s` | 2 | portal opening | 0.5 |
 | `catwalk_short` | catwalk deck and railing stopping 0.02 m short of `+x` and `-x`, open at both ends | `0s 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
 | `backing` | 0.3 m full-height plate on `-z`, 0.02 m short of `+x` and `-x` | `0s 0s 0i 0i 0s 1s` | 4 | none | 0.5 |
+| `tunnel_corner` | slab, 0.3 m walls on `-x` and `-z`, open to `+x` and `+z` | `0s 1s 1i 1i 0s 1s` | 4 | tunnel | 0.25 |
+| `tunnel_t` | slab, wall on `-z`, open to `+x`, `-x` and `+z` | `0s 0s 1i 1i 0s 1s` | 4 | tunnel | 0.25 |
+| `tunnel_cross` | slab, open on every side | `0s 0s 1i 1i 0s 0s` | 1 | tunnel | 0.25 |
+| `tunnel_end` | slab, walls on `-x`, `+z` and `-z`, open to `+x` | `0s 1s 1i 1i 1s 1s` | 4 | tunnel | 0.25 |
+| `vault` | 0.2 m ceiling above the 1.8 m head-room band, passage along x | `0s 0s 1i 1i 1s 1s` | 2 | none | 0.25 |
+| `vault_corner`, `vault_t`, `vault_cross`, `vault_end` | the same ceiling, open where the tunnel shape of the same name is | as the tunnel shape | 4, 4, 1, 4 | none | 0.25 |
+| `bridge_corner`, `bridge_t`, `bridge_cross`, `bridge_end` | slab, parapets on the sides the tunnel shape of the same name closes | `0s 0s 0i 0i 0s 0s` | 4, 4, 1, 4 | bridge | 0.25 |
+| `stair_tunnel` | the five treads between 0.3 m walls on `+z` and `-z` | `1s 0s 0i 1i 1s 1s` | 4 | stair | 0.25 |
+| `stairwell` | 0.3 m ledges along `+z` and `-z` above 1.8 m, open below and along x | `0s 0s 1i 0i 1s 1s` | 2 | none | 0.25 |
+| `stairwell_end` | the ledges and one on `-x`, open to `+x` | `0s 1s 1i 0i 1s 1s` | 4 | none | 0.25 |
+| `portal_tunnel` | slab, walls on `+x` and `-x`, passage along z | `1s 1s 1i 1i 0s 0s` | 2 | portal opening | 0.25 |
+| `portal_tunnel_end` | slab, walls on `+x`, `-x` and `-z`, open to `+z` | `1s 1s 1i 1i 0s 1s` | 4 | portal opening | 0.25 |
 
 Read a row as "what may touch this face": a floor lies on rock and has open
 space above and around it; a stair is cut into rock, climbing out of open
 space towards rock that carries the next flight or the landing; a wall
 continues along its run and upwards, and a wall stack ends at the bottom in a
 doorway or a portal opening, which stand on any open face; a catwalk and a
-ladder hang on rock; a tunnel runs through rock and opens at both ends.
+ladder hang on rock; a tunnel runs through rock and opens at both ends, and
+the vault over it is open below its ceiling.
 The seven prototypes after the first thirteen make real sectors tileable
 (#161): an open floor,
 an open stair and a portal frame stand over open space and need no wall, so
@@ -219,6 +232,33 @@ cells beside such a record, and `catwalk_short` is a catwalk cell that
 continues into no neighbour, for a catwalk walk one cell long (a door cell,
 the foot of a ladder), which before took a catwalk tile outside the record.
 It has no end railings, so a walk steps on and off along it.
+The eighteen prototypes after `backing` (#182) are passages through rock
+and bridge turns. A tunnel's walk turns, meets other walks at the hub and
+ends at stairs and portals, so the straight `tunnel` gets a corner, a T, a
+cross and an end. Above every tunnel cell is a headroom record, and no
+earlier head-room tile had rock above it, so every solid sector with
+records was rejected: a `vault` is empty in the lowest 1.8 m with a ceiling
+above, `1i` on top and bottom (the tunnel's own top is `1i`), `1s` on its
+closed sides and `0s` along the passage, in the same five shapes. The vault
+meshes are identical, since only rock beside them differs. A stair in rock
+is `stair_tunnel`, with rock sockets on both sides; its first head-room cell
+is a `stairwell`, open below (`0i` on the stair's `0i` top) and to the vault
+above, so the top tread keeps two cells of room, and a `stairwell_end` over
+the first stair from a floor or ceiling portal, which reserves no head room
+and leaves rock on the stair's low side. `portal_tunnel` is a tunnel through
+a side face (passage along z, the authored portal yaw), and
+`portal_tunnel_end` sits under a floor or ceiling portal, open to the stair
+beside it; turned onto a side face its open end would face out of the
+sector, so the face filter drops it there. The walls of these pieces run out to
+a side face only where the wall across from them does too, otherwise they
+stop 0.02 m short, so every `0s` and `1s` face stays mirror-symmetric.
+`bridge_corner`, `bridge_t`, `bridge_cross` and `bridge_end` put the
+straight bridge's parapets only on the sides their shape closes; before,
+a bridge walk turning in a cell took a straight bridge whose parapet stood
+across the turn (#181). `SectorDomains` keeps bridge, tunnel and side portal
+records off tiles that block a face their walk crosses, as for floors, so
+`portal_tunnel_end` never stands in a side portal.
+
 The portal frame has no lintel since #173: the lintel left 1.2 m over its
 slab, too little for the 1.8 m walker, and the cell above a portal is
 headroom (air or a doorway, whose own lintel starts 1.8 m up). A parapet
@@ -274,7 +314,7 @@ why these choices keep contradictions down, is
   `validate(true)` reports anything. `mise run tiles-check-placeholder` (part
   of `mise run check`) runs `tiles-check` on it.
 - `mise run shot scenes/tile_contact_sheet.tscn
-  docs/images/placeholder-tileset.png --resolution 1280x1950` renders the
+  docs/images/placeholder-tileset.png --resolution 1280x3600` renders the
   contact sheet; the labels are `Label3D`, so no `--ui` is needed. The scene
   also runs in `mise run smoke`. Set its `tileset` to see another set.
 - Open a fixture in the editor (`mise run editor`, then double-click the

@@ -17,10 +17,10 @@ extends RefCounted
 ## every other family (and a portal opening in the floor or ceiling) takes any
 ## rotation. A headroom record takes every tile that leaves a walker's head
 ## room (`TileLibrary.Tile.headroom`: air, and on the placeholder tileset the
-## wall doorway under its lintel). A floor record also drops the tiles that
-## block a side face (`TileLibrary.Tile.blocked_faces`, a parapet) towards a
-## face-neighbour record a walker may step to: any record but headroom at the
-## same height, or a stair one lower climbing into the floor. Cells without a
+## wall doorway under its lintel and the vaults and stairwells in rock). A
+## floor, bridge, tunnel or side portal record also drops the tiles that
+## block a side face (`TileLibrary.Tile.blocked_faces`, a parapet or wall)
+## a walker crosses (`steps_to`). Cells without a
 ## record take the sector's fill tile, solid in a solid sector and air in
 ## every other (#180), except the support cells: a cell across a face of a
 ## record where no tile of the record allows the fill tile (on the placeholder
@@ -35,6 +35,11 @@ extends RefCounted
 ## `error` instead. Steps and a worked example are in
 ## docs/algorithms/sector-solver.md.
 
+## Families whose records drop the tiles that block a face a walk crosses.
+const FACE_FILTERED: Array[EdgeRasteriser.TileFamily] = [
+	EdgeRasteriser.TileFamily.FLOOR, EdgeRasteriser.TileFamily.BRIDGE, EdgeRasteriser.TileFamily.TUNNEL,
+	EdgeRasteriser.TileFamily.PORTAL_OPENING,
+]
 ## Grid step of each face index, +x, -x, +y, -y, +z, -z.
 const STEPS: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
@@ -110,22 +115,18 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 		masks[cell] = mask
 		by_cell[cell] = record
 
-	# A floor keeps its faces towards walkable neighbours open.
+	# A floor, bridge, tunnel or side portal keeps its faces towards walkable
+	# neighbours open.
 	for record in records:
-		if record.family != EdgeRasteriser.TileFamily.FLOOR:
+		if not record.family in FACE_FILTERED:
 			continue
 		for dir in TilePrototype.FACE_COUNT:
 			if TilePrototype.is_vertical(dir):
 				continue
-			var next: Vector3i = record.cell + STEPS[dir]
-			var level: EdgeRasteriser.Record = by_cell.get(next)
-			var below: EdgeRasteriser.Record = by_cell.get(next + Vector3i.DOWN)
-			var steps_to := level != null and level.family != EdgeRasteriser.TileFamily.HEADROOM
-			steps_to = steps_to or (below != null and below.family == EdgeRasteriser.TileFamily.STAIR)
-			if steps_to:
+			if steps_to(by_cell, record, dir):
 				masks[record.cell] = _without_blocked(library, masks[record.cell], dir)
 		if _is_empty(masks[record.cell]):
-			built.error = "%s: every floor tile blocks a face a walk crosses" % record
+			built.error = "%s: every %s tile blocks a face a walk crosses" % [record, EdgeRasteriser.family_name(record.family)]
 			return built
 
 	# Face-neighbour records must admit at least one allowed tile pair.
@@ -141,8 +142,12 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 
 	# A cell beside a record also takes the free tiles a tile of the record
 	# needs there: what it allows across a face where it does not allow fill.
+	# A record with a tile that stands in fill alone needs none (#182: a stair
+	# between rock walls must not bring backing plates beside stratum stairs).
 	var supports := {}
 	for record in records:
+		if _fits_in_fill(library, masks[record.cell], fill):
+			continue
 		for dir in TilePrototype.FACE_COUNT:
 			var next: Vector3i = record.cell + STEPS[dir]
 			if next.x < 0 or next.y < 0 or next.z < 0 or next.x >= size.x or next.y >= size.y or next.z >= size.z:
@@ -293,6 +298,57 @@ static func _needed(library: TileLibrary, dir: int, from: PackedInt64Array, fill
 		for w in library.word_count:
 			result[w] |= allowed[w]
 	return result
+
+
+## Whether some tile of `mask` allows a tile of `fill` across all six faces,
+## so the record it restricts stands in fill alone and needs no support.
+static func _fits_in_fill(library: TileLibrary, mask: PackedInt64Array, fill: PackedInt64Array) -> bool:
+	for tile in library.tile_count():
+		if (mask[tile >> 6] >> (tile & 63)) & 1 == 0:
+			continue
+		var fits := true
+		for dir in TilePrototype.FACE_COUNT:
+			var allowed := library.allowed(dir, tile)
+			var takes_fill := false
+			for w in library.word_count:
+				takes_fill = takes_fill or allowed[w] & fill[w] != 0
+			fits = fits and takes_fill
+		if fits:
+			return true
+	return false
+
+
+## Whether a walker on the floor, bridge, tunnel or portal opening `record`
+## steps across side face `dir` to a record in `by_cell`. Through a side
+## portal opening: along its passage, into the neighbour sector and the door
+## cell, whatever that holds (a stair one lower climbs into it under a
+## stairwell). From a floor or bridge: to any record but headroom at the
+## same height (#173). From a tunnel, whose closed sides are rock:
+## to a tunnel, to a side portal opening whose passage runs along `dir`, or
+## to a stair climbing away from it. From either: to a stair one lower
+## climbing into it, whose head room the walker crosses.
+static func steps_to(by_cell: Dictionary, record: EdgeRasteriser.Record, dir: int) -> bool:
+	var next: Vector3i = record.cell + STEPS[dir]
+	var yaw := EdgeRasteriser.yaw_of(STEPS[dir])
+	if record.family == EdgeRasteriser.TileFamily.PORTAL_OPENING:
+		return record.orientation < EdgeRasteriser.ORIENTATION_UP and record.orientation % 2 == yaw % 2
+	var below: EdgeRasteriser.Record = by_cell.get(next + Vector3i.DOWN)
+	if below != null and below.family == EdgeRasteriser.TileFamily.STAIR:
+		if record.family != EdgeRasteriser.TileFamily.TUNNEL or below.orientation == (yaw + 2) % 4:
+			return true
+	var level: EdgeRasteriser.Record = by_cell.get(next)
+	if level == null or level.family == EdgeRasteriser.TileFamily.HEADROOM:
+		return false
+	if record.family != EdgeRasteriser.TileFamily.TUNNEL:
+		return true
+	match level.family:
+		EdgeRasteriser.TileFamily.TUNNEL:
+			return true
+		EdgeRasteriser.TileFamily.PORTAL_OPENING:
+			return level.orientation < EdgeRasteriser.ORIENTATION_UP and level.orientation % 2 == yaw % 2
+		EdgeRasteriser.TileFamily.STAIR:
+			return level.orientation == yaw
+	return false
 
 
 ## Whether `p` comes before `q` in cell index order, so each pair is checked once.

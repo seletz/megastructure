@@ -8,7 +8,7 @@ extends SceneTree
 ## unsatisfiable one fails, then prints the tile histogram, steps and time
 ## per seed and the time of a 24³ solve with restarts.
 ##
-## Restarts and pre-collapse: seed 374 fails its first 8³ attempt, so it
+## Restarts and pre-collapse: seed 1502 fails its first 8³ attempt, so it
 ## degrades to all solid with one attempt allowed and solves on the second
 ## by default, the same on a second instance. Records that cannot hold
 ## fail fast with a clear error, in `SectorDomains` (two records, a bad
@@ -16,7 +16,8 @@ extends SceneTree
 ## allowed pair) and in the solver (records whose propagation empties a cell
 ## between them). Consistent records on an 8³ stratum grid, with headroom
 ## above the walk, hold in every solved result over seeds 0 to 9, the
-## placeholder's headroom tiles are air and the wall doorway, and fixed faces
+## placeholder's headroom tiles are air, the wall doorway, the vaults and the
+## stairwells (#182), and fixed faces
 ## restrict the boundary cells. Last, `REAL_SECTORS` real stratum sectors and
 ## `REAL_VOID_SECTORS` shaft, cavity and chasm sectors each at seed 0 run
 ## through the whole pipeline; every solved one must keep its records and
@@ -35,7 +36,7 @@ const SEEDS: Array[int] = [0, 1, 2, 3, 4]
 const QUICK_SEEDS: Array[int] = [0, 1]
 const SECTOR := Vector3i.ZERO
 ## An 8³ seed whose attempts before RESTART_ATTEMPTS hit a contradiction.
-const RESTART_SEED := 374
+const RESTART_SEED := 1502
 ## The attempt RESTART_SEED solves at.
 const RESTART_ATTEMPTS := 2
 ## Real stratum sectors the pipeline runs at seed 0.
@@ -225,7 +226,11 @@ func _check_consistent(library: TileLibrary) -> void:
 	for tile in library.tiles:
 		if tile.headroom:
 			headroom.append(tile.label())
-	_expect(headroom == PackedStringArray(["air@0", "wall_doorway@0", "wall_doorway@1"]), "consistent: the headroom tiles are air and the wall doorway: %s" % ", ".join(headroom))
+	var expected := PackedStringArray(["air@0", "wall_doorway@0", "wall_doorway@1"])
+	for tile in library.tiles:
+		if tile.prototype.name.begins_with("vault") or tile.prototype.name.begins_with("stairwell"):
+			expected.append(tile.label())
+	_expect(headroom == expected, "consistent: the headroom tiles are air, the wall doorway, the vaults and the stairwells: %s" % ", ".join(headroom))
 	var records: Array[EdgeRasteriser.Record] = []
 	for x in range(1, 4):
 		records.append(_record(Vector3i(x, 2, 4), family.FLOOR, 0))
