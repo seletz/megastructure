@@ -370,6 +370,45 @@ sockets = PackedStringArray("0s", "0s", "0i", "0i", "0s", "0s")
 rotations = 2
 exclusions = PackedStringArray()
 
+[sub_resource type="ArrayMesh" id="mesh_catwalk_short"]
+_surfaces = [{
+"aabb": AABB(-0.98, -0.6, 0, 1.96, 1.3000001, 0.8),
+"format": 34359738375,
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 72,
+"vertex_data": PackedByteArray("SOF6P5qZGb/NzEw/SOF6P83MzL4AAAAASOF6P5qZGb8AAAAASOF6P5qZGb/NzEw/SOF6P83MzL7NzEw/SOF6P83MzL4AAAAASOF6v5qZGb8AAAAASOF6v83MzL7NzEw/SOF6v5qZGb/NzEw/SOF6v5qZGb8AAAAASOF6v83MzL4AAAAASOF6v83MzL7NzEw/SOF6v83MzL7NzEw/SOF6P83MzL4AAAAASOF6P83MzL7NzEw/SOF6v83MzL7NzEw/SOF6v83MzL4AAAAASOF6P83MzL4AAAAASOF6v5qZGb8AAAAASOF6P5qZGb/NzEw/SOF6P5qZGb8AAAAASOF6v5qZGb8AAAAASOF6v5qZGb/NzEw/SOF6P5qZGb/NzEw/SOF6v5qZGb/NzEw/SOF6P83MzL7NzEw/SOF6P5qZGb/NzEw/SOF6v5qZGb/NzEw/SOF6v83MzL7NzEw/SOF6P83MzL7NzEw/SOF6P5qZGb8AAAAASOF6v83MzL4AAAAASOF6v5qZGb8AAAAASOF6P5qZGb8AAAAASOF6P83MzL4AAAAASOF6v83MzL4AAAAASOF6P83MzL6PwnU9SOF6PzQzMz8AAAAASOF6P83MzL4AAAAASOF6P83MzL6PwnU9SOF6PzQzMz+PwnU9SOF6PzQzMz8AAAAASOF6v83MzL4AAAAASOF6vzQzMz+PwnU9SOF6v83MzL6PwnU9SOF6v83MzL4AAAAASOF6vzQzMz8AAAAASOF6vzQzMz+PwnU9SOF6vzQzMz+PwnU9SOF6PzQzMz8AAAAASOF6PzQzMz+PwnU9SOF6vzQzMz+PwnU9SOF6vzQzMz8AAAAASOF6PzQzMz8AAAAASOF6v83MzL4AAAAASOF6P83MzL6PwnU9SOF6P83MzL4AAAAASOF6v83MzL4AAAAASOF6v83MzL6PwnU9SOF6P83MzL6PwnU9SOF6v83MzL6PwnU9SOF6PzQzMz+PwnU9SOF6P83MzL6PwnU9SOF6v83MzL6PwnU9SOF6vzQzMz+PwnU9SOF6PzQzMz+PwnU9SOF6P83MzL4AAAAASOF6vzQzMz8AAAAASOF6v83MzL4AAAAASOF6P83MzL4AAAAASOF6PzQzMz8AAAAASOF6vzQzMz8AAAAA////f/9//7////9//3//v////3//f/+/////f/9//7////9//3//v////3//f/+/AAD/f/9//78AAP9//3//vwAA/3//f/+/AAD/f/9//78AAP9//3//vwAA/3//f/+//3///wAA/7//f///AAD/v/9///8AAP+//3///wAA/7//f///AAD/v/9///8AAP+//38AAAAA/7//fwAAAAD/v/9/AAAAAP+//38AAAAA/7//fwAAAAD/v/9/AAAAAP+//3//f/9/AID/f/9//38AgP9//3//fwCA/3//f/9/AID/f/9//38AgP9//3//fwCA//////9/AID//////38AgP//////fwCA//////9/AID//////38AgP//////fwCA////f/9//7////9//3//v////3//f/+/////f/9//7////9//3//v////3//f/+/AAD/f/9//78AAP9//3//vwAA/3//f/+/AAD/f/9//78AAP9//3//vwAA/3//f/+//3///wAA/7//f///AAD/v/9///8AAP+//3///wAA/7//f///AAD/v/9///8AAP+//38AAAAA/7//fwAAAAD/v/9/AAAAAP+//38AAAAA/7//fwAAAAD/v/9/AAAAAP+//3//f/9/AID/f/9//38AgP9//3//fwCA/3//f/9/AID/f/9//38AgP9//3//fwCA//////9/AID//////38AgP//////fwCA//////9/AID//////38AgP//////fwCA")
+}]
+
+[sub_resource type="Resource" id="prototype_catwalk_short"]
+script = ExtResource("1_fc8qr")
+name = "catwalk_short"
+mesh = SubResource("mesh_catwalk_short")
+weight = 0.25
+family = 3
+sockets = PackedStringArray("0s", "0s", "0i", "0i", "1s", "0s")
+rotations = 4
+exclusions = PackedStringArray()
+
+[sub_resource type="ArrayMesh" id="mesh_backing"]
+_surfaces = [{
+"aabb": AABB(-0.98, -1, -1, 1.96, 2, 0.3),
+"format": 34359738375,
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 36,
+"vertex_data": PackedByteArray("SOF6PwAAgL8zMzO/SOF6PwAAgD8AAIC/SOF6PwAAgL8AAIC/SOF6PwAAgL8zMzO/SOF6PwAAgD8zMzO/SOF6PwAAgD8AAIC/SOF6vwAAgL8AAIC/SOF6vwAAgD8zMzO/SOF6vwAAgL8zMzO/SOF6vwAAgL8AAIC/SOF6vwAAgD8AAIC/SOF6vwAAgD8zMzO/SOF6vwAAgD8zMzO/SOF6PwAAgD8AAIC/SOF6PwAAgD8zMzO/SOF6vwAAgD8zMzO/SOF6vwAAgD8AAIC/SOF6PwAAgD8AAIC/SOF6vwAAgL8AAIC/SOF6PwAAgL8zMzO/SOF6PwAAgL8AAIC/SOF6vwAAgL8AAIC/SOF6vwAAgL8zMzO/SOF6PwAAgL8zMzO/SOF6vwAAgL8zMzO/SOF6PwAAgD8zMzO/SOF6PwAAgL8zMzO/SOF6vwAAgL8zMzO/SOF6vwAAgD8zMzO/SOF6PwAAgD8zMzO/SOF6PwAAgL8AAIC/SOF6vwAAgD8AAIC/SOF6vwAAgL8AAIC/SOF6PwAAgL8AAIC/SOF6PwAAgD8AAIC/SOF6vwAAgD8AAIC/////f/9//7////9//3//v////3//f/+/////f/9//7////9//3//v////3//f/+/AAD/f/9//78AAP9//3//vwAA/3//f/+/AAD/f/9//78AAP9//3//vwAA/3//f/+//3///wAA/7//f///AAD/v/9///8AAP+//3///wAA/7//f///AAD/v/9///8AAP+//38AAAAA/7//fwAAAAD/v/9/AAAAAP+//38AAAAA/7//fwAAAAD/v/9/AAAAAP+//3//f/9/AID/f/9//38AgP9//3//fwCA/3//f/9/AID/f/9//38AgP9//3//fwCA//////9/AID//////38AgP//////fwCA//////9/AID//////38AgP//////fwCA")
+}]
+
+[sub_resource type="Resource" id="prototype_backing"]
+script = ExtResource("1_fc8qr")
+name = "backing"
+mesh = SubResource("mesh_backing")
+weight = 0.5
+sockets = PackedStringArray("0s", "0s", "0i", "0i", "0s", "1s")
+rotations = 4
+exclusions = PackedStringArray()
+
 [resource]
 script = ExtResource("2_mves8")
-prototypes = Array[ExtResource("1_fc8qr")]([SubResource("prototype_air"), SubResource("prototype_solid"), SubResource("prototype_floor"), SubResource("prototype_slab_edge"), SubResource("prototype_column"), SubResource("prototype_wall"), SubResource("prototype_wall_doorway"), SubResource("prototype_stair"), SubResource("prototype_bridge"), SubResource("prototype_catwalk"), SubResource("prototype_ladder"), SubResource("prototype_tunnel"), SubResource("prototype_portal_opening"), SubResource("prototype_floor_open"), SubResource("prototype_slab_edge_end"), SubResource("prototype_slab_edge_end_f"), SubResource("prototype_stair_open"), SubResource("prototype_catwalk_end"), SubResource("prototype_catwalk_end_f"), SubResource("prototype_portal_frame")])
+prototypes = Array[ExtResource("1_fc8qr")]([SubResource("prototype_air"), SubResource("prototype_solid"), SubResource("prototype_floor"), SubResource("prototype_slab_edge"), SubResource("prototype_column"), SubResource("prototype_wall"), SubResource("prototype_wall_doorway"), SubResource("prototype_stair"), SubResource("prototype_bridge"), SubResource("prototype_catwalk"), SubResource("prototype_ladder"), SubResource("prototype_tunnel"), SubResource("prototype_portal_opening"), SubResource("prototype_floor_open"), SubResource("prototype_slab_edge_end"), SubResource("prototype_slab_edge_end_f"), SubResource("prototype_stair_open"), SubResource("prototype_catwalk_end"), SubResource("prototype_catwalk_end_f"), SubResource("prototype_portal_frame"), SubResource("prototype_catwalk_short"), SubResource("prototype_backing")])

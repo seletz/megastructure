@@ -21,7 +21,7 @@ order `x + 8 * (y + 8 * z)`. Generated file: only the `sha256:` line is
 compared.
 
 ```
-sha256: 31e321da4112c7140f114ebdba1fa591af2c86acd6d85957e86e177420be4f22
+sha256: 505a570b20c1054e9a16ec3439fee7c4a737c71cb33afa63e613568cbb6e4f13
 ```
 
 ## References
