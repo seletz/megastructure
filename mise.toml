@@ -154,7 +154,7 @@ run = "godot --headless --path . --script res://scripts/tools/tiles_check.gd -- 
 
 [tasks.solver-check]
 depends = ["import"]
-description = "Check the sector solver on the placeholder tileset: unconstrained 8^3 solves at seeds 0..4 succeed at the first attempt, repeat byte for byte on a second solver instance, allow every adjacency and match the seed 0 reference in docs/solver_reference_seed0.md; the entropy flag and domain restrictions work; restarts and the all-solid degradation, inconsistent records failing fast with a clear error, consistent records holding in every solved result and fixed faces; print the tile histogram, steps and time per seed, a 24^3 solve with restarts and the solved, degraded and failed counts and mean attempts of 20 real stratum sectors at seed 0 (headless). --update rewrites the reference"
+description = "Check the sector solver on the placeholder tileset: unconstrained 8^3 solves at seeds 0..4 succeed at the first attempt, repeat byte for byte on a second solver instance, allow every adjacency and match the seed 0 reference in docs/solver_reference_seed0.md; the entropy flag and domain restrictions work; restarts and the all-solid degradation, inconsistent records failing fast with a clear error, consistent records holding in every solved result and fixed faces; print the tile histogram, steps and time per seed, a 24^3 solve with restarts and the solved, degraded and failed counts and mean attempts of 20 real stratum sectors at seed 0, and that the 20 real stratum sectors of seeds 1..4 each reach an attempt (headless). --update rewrites the reference"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
