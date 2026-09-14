@@ -70,6 +70,10 @@ var errors: Array[String] = []
 var tiles: Array[Tile] = []
 ## Words per bitset, ceil(tile_count / 64).
 var word_count := 0
+## Index of the tileset's solid tile (its first rotation), or -1.
+var solid_tile := -1
+## Index of the tileset's air tile (its first rotation), or -1.
+var air_tile := -1
 ## Per direction, `tile_count * word_count` words: tile a's bitset starts at
 ## `a * word_count`.
 var _allowed: Array[PackedInt64Array] = []
@@ -197,6 +201,10 @@ func _expand(tileset: TileSet3D) -> void:
 			for face in TilePrototype.FACE_COUNT:
 				tile.keys[face] = socket_key(TilePrototype.parse_socket(tile.sockets[face], face))
 			tiles.append(tile)
+			if rotation == 0 and prototype.name == tileset.solid_name:
+				solid_tile = tile.index
+			if rotation == 0 and prototype.name == tileset.air_name:
+				air_tile = tile.index
 
 
 func _derive(tileset: TileSet3D) -> void:
