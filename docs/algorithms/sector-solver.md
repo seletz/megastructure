@@ -71,7 +71,7 @@ var result := solver.solve(seed, sector, built.words)
   first attempt. It is the entry point for
   [[GLOSSARY#Pre-collapsed cell|pre-collapsed cells]] and fixed sector
   faces; `SectorDomains` builds it (below), and the face-first boundary
-  solve (#92) will feed the faces.
+  solve ([[face-first-boundaries]]) feeds the faces.
 - **Outcomes.** `SOLVED`: an attempt filled every cell. `DEGRADED`: all
   `max_attempts` attempts hit a contradiction and every cell holds the solid
   tile (`ok` and `degraded` are true). `FAILED`: bad arguments or starting
@@ -411,6 +411,8 @@ counting up from 9300 into salts nothing else uses.
 - [[socket-adjacency]]: where the allowed bitsets come from.
 - [[RESEARCH_WFC]], sections 1, 3, 4 and 7 (D1, D2).
 - [[edge-rasteriser]]: the records the starting domains come from.
+- [[face-first-boundaries]]: corners, edges and faces solved before the
+  interior, each a solve of this solver with fixed faces.
 - [[0010-near-universal-solid-tile-with-seeded-restarts]],
   [[0011-typed-gdscript-solver-first]].
 - Papers: [[gumin-2016-wavefunctioncollapse]],

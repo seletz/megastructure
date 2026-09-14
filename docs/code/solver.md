@@ -19,10 +19,14 @@ status: current
 > type's default elsewhere (solid in solid sectors, air in voids), and
 > optionally to what fits next to a neighbour sector's fixed face. When an
 > attempt paints itself into a corner the solver starts over with the next
-> seed, up to 8 times, then fills the sector with solid and says so. A check
+> seed, up to 8 times, then fills the sector with solid and says so. The
+> border cells between sectors are solved first: each belongs to the lower
+> sector and is solved corner, edges, faces, then interior, so both sides of
+> a border get the same tiles whatever order sectors load in. A check
 > task solves small grids twice, compares them with a recorded reference,
 > tests restarts and records, and runs 20 real sectors; a second task runs
-> the whole pipeline for any one sector.
+> the whole pipeline for any one sector; a third checks that borders agree
+> from both sides and that neighbouring sectors fit together.
 
 ## Files
 
@@ -32,6 +36,12 @@ status: current
 - [sector_domains.gd](../../scripts/world/sector_domains.gd) (`class_name
   SectorDomains`, a `RefCounted`): the starting domains from records, sector
   type and fixed faces.
+- [sector_boundaries.gd](../../scripts/world/sector_boundaries.gd)
+  (`class_name SectorBoundaries`, a `RefCounted`): the face-first,
+  order-independent sector borders, with the inner classes `Piece` and
+  `SectorResult` and the enums `Kind` and `Level`.
+- `scripts/tools/boundary_check.gd`: the script behind `mise run
+  boundary-check`, listed in [[tools-and-tasks]].
 - `scripts/tools/solver_check.gd`, `scripts/tools/solver_sector.gd` and
   `scripts/tools/solver_sector_run.gd` (`class_name SolverSectorRun`, the
   pipeline shared by both): the scripts behind `mise run solver-check` and
@@ -99,6 +109,30 @@ match result.outcome:
 | `orientation_error(family, orientation)` (static) | Why an orientation does not suit a family, or "". |
 | `SUPPORT_RADIUS`, `AUTHORED_YAW` | 1; stair 0 and portal opening 3. |
 
+| `SectorBoundaries` member | Meaning |
+| --- | --- |
+| `new(library, world_seed, rasteriser, cells)` | Boundaries over a valid library. With a `rasteriser` pieces use its graph's records and sector types and its cells per sector; without one every cell starts free on a `cells`³ grid (default 24). |
+| `solve_sector(seed, sector)` | Solves or reads from the cache every piece `sector` uses (8 corners, 12 edges, 6 faces, its interior) and returns a `SectorResult`. A new seed clears the cache. |
+| `face(sector, dir)` | The `n × n` border layer across face `dir`, indexed `u + n * v` (u, v the other axes in xyz order); owned by the lower sector, so `face(s, +x) == face(s + x, -x)`. |
+| `edge(sector, axis)` | The `n` cells of `sector` along `axis` whose other coordinates are `n − 1`, the corner last. |
+| `corner(sector)` | The tile at `(n − 1, n − 1, n − 1)`. |
+| `clear_cache()` | Forgets pieces and domains. |
+| `level_of(cell)` | 0 corner, 1 edge, 2 face, 3 interior, by how many coordinates are `n − 1`. |
+| `seed`, `cells_per_sector` | The seed of every piece solve; `n`. |
+| `level_solves`, `level_usec`, `level_outcomes` | Per level: solves, microseconds and outcome counts (`[level * 3 + outcome]`) since construction. |
+| `PIECE_SALT`, `STEPS`, `LEVEL_NAMES` | 9000 (+ `Kind`); the six face steps; level names. |
+
+| `SectorResult` field | Meaning |
+| --- | --- |
+| `cells` | `n³` tile indices, `x + n * (y + n * z)`. |
+| `solved` | Every piece the sector uses was `SOLVED`. |
+| `degraded`, `failed`, `errors` | Pieces that degraded or failed (their cells are solid) and the failed pieces' errors. |
+| `interior` | The interior `Piece` (`cells`, `outcome`, `attempts`, `error`, `time_usec`, `origin`, `size`). |
+| `level_usec` | Time this call spent per level; cached pieces cost nothing. |
+
+A `SectorBoundaries` holds solvers and caches, so like a solver it belongs
+to one thread.
+
 A solver holds its working arrays between solves, so one instance must not
 run two solves at once; give each worker thread its own. Salts, the
 algorithm, the record rules, the restart policy, measurements and why AC-3
@@ -121,14 +155,24 @@ was chosen over AC-4 are in [[sector-solver]].
   whether every record and adjacency holds.
   Negative coordinates work as they are: `mise run solver-sector -159 -47
   -548`.
+- `mise run boundary-check` (part of `mise run check`, about three
+  minutes) computes 100 random faces at seeds 0 to 4 from both sides on
+  separate instances and requires them identical, composes one sector on a
+  second instance, solves 50 unconstrained 8³ adjacent pairs, 2 24³ pairs
+  and 50 real 24³ pairs whose records build, and requires no socket mismatch
+  in every pair that solved (and every unconstrained pair to solve); prints
+  outcome counts and the corner, edge, face and interior time of a 24³
+  sector.
 - After an intended change of the output (solver, hash, tileset or
   adjacency), run `mise run solver-check --update` and commit the reference.
 
 ## References
 
 - [[sector-solver]]: the algorithm, worked example, complexity and salts.
+- [[face-first-boundaries]]: the border pieces, their order, the open
+  boundary rule and measurements.
 - [[wave-function-collapse]]: the idea behind it.
 - [[tileset]]: the tile library it consumes.
 - [[edge-rasteriser]]: the records the domains come from.
-- [[RESEARCH_WFC]], sections 3, 4 and 7 (D1, D2);
+- [[RESEARCH_WFC]], sections 1, 3, 4 and 7 (D1 to D3);
   [[0011-typed-gdscript-solver-first]].
