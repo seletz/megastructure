@@ -159,6 +159,19 @@ In this project: `WalkableGraph.boundary_edges`.
 
 See also: [[walkable-graph-connectivity]], Region, Tunnel edge.
 
+### Boundary piece
+
+One of the parts a sector's border cells are split into so that they can be
+solved before the sector itself: a corner (one cell), an edge (a line of
+cells) or a face (a square of cells). Each piece is solved from its own hash
+key, after the pieces of lower levels it touches.
+
+In this project: `SectorBoundaries` solves the corner `(23, 23, 23)`, the
+three 23-cell edges and the three 23 × 23 faces a sector owns, then its 23³
+interior.
+
+See also: [[face-first-boundaries]], Face-first boundary solve, Owner sector.
+
 ### Branch workflow
 
 The rule that every issue is worked on in its own branch named
@@ -471,11 +484,15 @@ See also: [[socket-adjacency#Validation]], Symmetry tag.
 
 ### Face-first boundary solve
 
-The planned scheme for sector borders: solve shared edges first, then shared
-faces, then each sector's interior. Both neighbours compute the same face
+The scheme for sector borders: solve shared edges first, then shared faces,
+then each sector's interior. Both neighbours compute the same face
 independently, so sectors can be generated in any order.
 
-See also: [[RESEARCH_WFC]].
+In this project: `SectorBoundaries` (#92), with corners as a level below the
+edges and each border owned by the lower sector.
+
+See also: [[face-first-boundaries]], [[model-synthesis-and-sectors]],
+[[RESEARCH_WFC]], Boundary piece.
 
 ### Fill
 
@@ -500,10 +517,11 @@ A sector boundary face whose neighbour tiles are already known, so the
 boundary cells may only hold tiles those neighbours accept.
 
 In this project: an optional argument of `SectorDomains.build`, one tile
-index or -1 per boundary cell of each of the six faces; the face-first
-boundary solve (#92) will provide it.
+index or -1 per boundary cell of each of the six faces. `SectorBoundaries`
+feeds every piece's lower-level neighbours through it.
 
-See also: [[sector-solver#Starting domains]], Face-first boundary solve.
+See also: [[sector-solver#Starting domains]], [[face-first-boundaries]],
+Face-first boundary solve.
 
 ### Fog
 
@@ -827,6 +845,19 @@ sector.
 
 See also: [[RESEARCH_WFC]].
 
+### Open boundary rule
+
+A restriction on border cells: a cell without a record may only hold tiles
+that accept the air tile on every side that faces a cell solved later. Air
+there is then always a valid completion, so a border can never make the
+cells behind it unsolvable.
+
+In this project: applied to the corners, edges and faces of
+`SectorBoundaries`; on the placeholder tileset it keeps rock off the
+borders (decision #163).
+
+See also: [[face-first-boundaries#Steps]], Boundary piece.
+
 ### Opening
 
 A window-like hole punched into a facade, about half present and a few percent
@@ -843,6 +874,18 @@ reproduces them. It produces per-pixel labels, not tile placements.
 In this project: rejected in favour of the simple-tiled model.
 
 See also: [[RESEARCH_WFC]].
+
+### Owner sector
+
+The one sector of a pair (or of the four or eight sectors meeting at an
+edge or corner) whose cells hold the shared border: the lower one along
+every axis concerned.
+
+In this project: the face between `s` and `s + x` is the layer `x = 23` of
+`s`, solved from `s`'s key and records whichever sector asks (decision
+#162).
+
+See also: [[face-first-boundaries#What a boundary is]], Boundary piece.
 
 ## P
 

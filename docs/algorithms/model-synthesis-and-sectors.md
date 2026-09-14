@@ -4,7 +4,7 @@ tags:
   - wfc
   - streaming
   - milestone/0.2.0
-  - planned
+  - implemented
 status: current
 ---
 
@@ -20,8 +20,8 @@ status: current
 > parallel, the parts shared between sectors are solved first from their own
 > hash keys: edges, then faces, then the interior. Two neighbouring sectors
 > then compute the identical shared face without ever talking to each other,
-> which is exactly what streaming needs. Nothing is implemented yet; the
-> scheme comes from [[RESEARCH_WFC]].
+> which is exactly what streaming needs. The scheme comes from
+> [[RESEARCH_WFC]] and is implemented as [[face-first-boundaries]].
 
 ## Why plain WFC does not scale
 
@@ -141,16 +141,19 @@ so interesting geometry lives inside sectors rather than on their seams.
 
 - **What a face is.** Either the sectors share a layer of cells (each
   sector's outermost layer is the face and both keep it), or the face is a
-  plane of socket values between two cell layers. The first is simplest for
-  the solver; the second avoids duplicated cells. Decide before the
-  face-first solve is built.
-- **Corners.** A corner cell belongs to three edges and eight sectors, so
-  corners need their own level below edges, or a rule that fixes them to
-  solid.
+  plane of socket values between two cell layers. The face-first solve uses
+  a third reading: the lower sector's outermost layer, which the upper
+  sector sees as a fixed face ([[face-first-boundaries#What a boundary
+  is]]). Decision #162 is open.
+- **Corners.** A corner cell belongs to three edges and eight sectors. The
+  face-first solve gives corners their own level below the edges.
 - **Seams that look like seams.** Face solves see only the 2D face, not the
   rooms on either side. If sector borders become visible as walls of solid,
   faces may need hints from the skeleton (for example "both sides are
   stratum, keep the floor open").
+- **Rock on the seams.** On the placeholder tileset a border that must
+  always leave a solution keeps rock off the borders entirely (decision
+  #163, [[face-first-boundaries#Measurements]]).
 - **Block size.** 24³ is a guess. The tile correlation length from Punch Out
   Model Synthesis could tell whether the tileset needs larger or smaller
   blocks.
@@ -172,4 +175,4 @@ Related notes: [[wave-function-collapse]], [[socket-adjacency]],
 [[sector-skeleton-and-walkable-graph]], [[integer-hash]], [[RESEARCH_WFC]],
 [[MEGASTRUCTURE_CONCEPT]].
 
-Code: none yet.
+Code: [[face-first-boundaries]] (`SectorBoundaries`), [[solver]].
