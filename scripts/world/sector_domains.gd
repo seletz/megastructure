@@ -15,7 +15,12 @@ extends RefCounted
 ## (`tile_matches`): a stair's rotation is the yaw of the way up, a portal
 ## opening on a side face is turned so its passage points out of the sector,
 ## every other family (and a portal opening in the floor or ceiling) takes any
-## rotation. Cells without a record take the sector type's default: free in a
+## rotation. A headroom record takes every tile that leaves a walker's head
+## room (`TileLibrary.Tile.headroom`: air, and on the placeholder tileset the
+## wall doorway under its lintel). A floor record also drops the tiles that
+## block a side face (`TileLibrary.Tile.blocked_faces`, a parapet) towards a
+## face-neighbour record a walker may step to: any record but headroom at the
+## same height, or a stair one lower climbing into the floor. Cells without a record take the sector type's default: free in a
 ## stratum, solid only in a solid sector, air only in a shaft, cavity or chasm,
 ## except in the support columns, the full-height columns within
 ## `support_radius` (Chebyshev, in x and z) of a record's column, which stay
@@ -117,6 +122,24 @@ static func build(library: TileLibrary, size: Vector3i, type: Skeleton.SectorTyp
 				if x >= 0 and z >= 0 and x < size.x and z < size.z:
 					support[x + size.x * z] = 1
 
+	# A floor keeps its faces towards walkable neighbours open.
+	for record in records:
+		if record.family != EdgeRasteriser.TileFamily.FLOOR:
+			continue
+		for dir in TilePrototype.FACE_COUNT:
+			if TilePrototype.is_vertical(dir):
+				continue
+			var next: Vector3i = record.cell + STEPS[dir]
+			var level: EdgeRasteriser.Record = by_cell.get(next)
+			var below: EdgeRasteriser.Record = by_cell.get(next + Vector3i.DOWN)
+			var steps_to := level != null and level.family != EdgeRasteriser.TileFamily.HEADROOM
+			steps_to = steps_to or (below != null and below.family == EdgeRasteriser.TileFamily.STAIR)
+			if steps_to:
+				masks[record.cell] = _without_blocked(library, masks[record.cell], dir)
+		if _is_empty(masks[record.cell]):
+			built.error = "%s: every floor tile blocks a face a walk crosses" % record
+			return built
+
 	# Face-neighbour records must admit at least one allowed tile pair.
 	for record in records:
 		for dir in TilePrototype.FACE_COUNT:
@@ -211,7 +234,10 @@ static func orientation_error(family: EdgeRasteriser.TileFamily, orientation: in
 ## Whether a tile may stand in a cell holding a record of `family` and
 ## `orientation`: same family, and for a stair or a portal opening on a side
 ## face a rotation that turns the prototype's forward yaw onto the record's.
+## For HEADROOM: any tile with head room, whatever its family.
 static func tile_matches(tile: TileLibrary.Tile, family: EdgeRasteriser.TileFamily, orientation: int) -> bool:
+	if family == EdgeRasteriser.TileFamily.HEADROOM:
+		return tile.headroom
 	if tile.prototype.family != family:
 		return false
 	if not AUTHORED_YAW.has(family) or orientation >= EdgeRasteriser.ORIENTATION_UP:
@@ -247,6 +273,15 @@ static func _before(p: Vector3i, q: Vector3i) -> bool:
 	if p.y != q.y:
 		return p.y < q.y
 	return p.x < q.x
+
+
+## `mask` without the tiles that block side face `dir`.
+static func _without_blocked(library: TileLibrary, mask: PackedInt64Array, dir: int) -> PackedInt64Array:
+	var result := mask.duplicate()
+	for tile in library.tiles:
+		if tile.blocked_faces & (1 << dir) != 0:
+			result[tile.index >> 6] &= ~(1 << (tile.index & 63))
+	return result
 
 
 ## `word_count` words with only `tile` set (none for -1).

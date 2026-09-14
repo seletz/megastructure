@@ -35,6 +35,17 @@ extends RefCounted
 ## position `b & 63`. Steps, a worked example and complexity are in
 ## docs/algorithms/socket-adjacency.md.
 
+## Metres above the bottom of its cell below which a tile must hold no
+## geometry to count as head room (`Tile.headroom`): a 1.8 m walker standing
+## on the top tread of a stair, flush with the top of the cell below, reaches
+## this high into the cell above (decision #171).
+const HEADROOM_CLEAR := 1.8
+## Half the width, in metres, of the strip from a cell's centre to one of its
+## side faces a walker crossing that face sweeps: the capsule radius.
+const PASSAGE_HALF_WIDTH := 0.3
+## Height above the cell bottom from which geometry in that strip blocks a
+## walker: just over the 0.6 m slab top.
+const PASSAGE_BOTTOM := 0.65
 ## Face a socket moves to after one quarter turn about +y, by face index.
 const QUARTER_TURN: Array[int] = [5, 4, 2, 3, 0, 1]
 ## Bits per bitset word.
@@ -58,6 +69,15 @@ class Tile:
 	var weight: float
 	## `socket_key` of each face.
 	var keys: PackedInt64Array
+	## Whether a walker's head fits in the cell: no mesh, or a mesh whose
+	## bounds start at least HEADROOM_CLEAR above the cell bottom. The same
+	## for every rotation; read by `SectorDomains` for HEADROOM records.
+	var headroom: bool
+	## Bit f set when geometry stands in the passage strip to side face f
+	## (`PASSAGE_HALF_WIDTH`, `PASSAGE_BOTTOM`), so a walker on the tile
+	## cannot cross that face: a parapet, a jamb, a wall. Vertical faces are
+	## never set.
+	var blocked_faces: int
 
 	## "name@rotation", as the dump prints it.
 	func label() -> String:
@@ -153,6 +173,47 @@ static func partner_key(socket: TilePrototype.Socket) -> int:
 	return socket_key(partner)
 
 
+## Whether a prototype leaves a walker's head room (see `Tile.headroom`).
+## Meshes are centred on their 2 m cell.
+static func has_headroom(prototype: TilePrototype) -> bool:
+	if prototype.mesh == null:
+		return true
+	return prototype.mesh.get_aabb().position.y >= -WalkableGraph.CELL_SIZE * 0.5 + HEADROOM_CLEAR - 0.001
+
+
+## Per face index of the unrotated prototype, whether its mesh blocks a
+## walker crossing that side face (see `Tile.blocked_faces`). A triangle
+## blocks when its bounds overlap the strip from the centre to the face,
+## `PASSAGE_HALF_WIDTH` either side and from `PASSAGE_BOTTOM` to the top.
+static func blocked_prototype_faces(prototype: TilePrototype) -> Array[bool]:
+	var result: Array[bool] = [false, false, false, false, false, false]
+	if prototype.mesh == null:
+		return result
+	var h := WalkableGraph.CELL_SIZE * 0.5
+	var eps := 0.001
+	var faces := prototype.mesh.get_faces()
+	for face in TilePrototype.FACE_COUNT:
+		if TilePrototype.is_vertical(face):
+			continue
+		var axis := face >> 1
+		var across := Vector3i.AXIS_Z if axis == Vector3i.AXIS_X else Vector3i.AXIS_X
+		var outward := 1.0 if face & 1 == 0 else -1.0
+		var probe := AABB()
+		probe.position.y = -h + PASSAGE_BOTTOM
+		probe.size.y = 2 * h - PASSAGE_BOTTOM
+		probe.position[axis] = 0.0 if outward > 0 else -h
+		probe.size[axis] = h
+		probe.position[across] = -PASSAGE_HALF_WIDTH
+		probe.size[across] = 2 * PASSAGE_HALF_WIDTH
+		probe = probe.grow(-eps)
+		for i in range(0, faces.size(), 3):
+			var bounds := AABB(faces[i], Vector3.ZERO).expand(faces[i + 1]).expand(faces[i + 2])
+			if bounds.intersects(probe) or probe.encloses(bounds):
+				result[face] = true
+				break
+	return result
+
+
 func tile_count() -> int:
 	return tiles.size()
 
@@ -189,6 +250,7 @@ func dump() -> String:
 func _expand(tileset: TileSet3D) -> void:
 	for prototype_index in tileset.prototypes.size():
 		var prototype := tileset.prototypes[prototype_index]
+		var blocked := blocked_prototype_faces(prototype)
 		for rotation in prototype.rotations:
 			var tile := Tile.new()
 			tile.index = tiles.size()
@@ -197,6 +259,10 @@ func _expand(tileset: TileSet3D) -> void:
 			tile.rotation = rotation
 			tile.sockets = rotate_sockets(prototype.sockets, rotation)
 			tile.weight = prototype.weight
+			tile.headroom = has_headroom(prototype)
+			for face in TilePrototype.FACE_COUNT:
+				if blocked[rotate_face(face, -rotation)]:
+					tile.blocked_faces |= 1 << face
 			tile.keys.resize(TilePrototype.FACE_COUNT)
 			for face in TilePrototype.FACE_COUNT:
 				tile.keys[face] = socket_key(TilePrototype.parse_socket(tile.sockets[face], face))
