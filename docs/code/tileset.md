@@ -17,8 +17,10 @@ status: current
 > touch. A **tileset** is the list of prototypes plus the names of its solid
 > and air tiles. Both are Godot resources, saved as `.tres` and edited in
 > the inspector. A validator lists every mistake as one line of text, so a
-> broken tileset fails a check before the solver ever sees it. Matching the
-> sockets and building the adjacency table come later
+> broken tileset fails a check before the solver ever sees it. A **tile
+> library** is built from a valid tileset once at load: every prototype
+> turned into its rotations, and for each tile and each of the six
+> directions a bitset of the tiles allowed next to it
 > ([[socket-adjacency]]).
 
 ## Files
@@ -30,12 +32,17 @@ status: current
   `Resource`): the prototypes, `solid_name`, `air_name` and the validator.
   Named `TileSet3D` because Godot's own `TileSet` is the 2D tile map
   resource.
+- [tile_library.gd](../../scripts/world/tile_library.gd) (`class_name
+  TileLibrary`, a `RefCounted`): rotation expansion, socket matching and
+  the adjacency bitsets, with the inner class `Tile`.
 - `tests/fixtures/tilesets/fixture_tileset.tres`: solid, air, floor and wall
   as `BoxMesh` placeholders; valid.
 - `tests/fixtures/tilesets/broken_tileset.tres`: a tileset with one of each
   mistake, for the check.
-- `scripts/tools/tileset_check.gd`: the check behind `mise run
-  tileset-check`, listed in [[tools-and-tasks]].
+- `scripts/tools/tileset_check.gd` and `scripts/tools/adjacency_check.gd`:
+  the checks behind `mise run tileset-check` and `mise run
+  adjacency-check` (which also serves `adjacency-dump`), listed in
+  [[tools-and-tasks]].
 
 Both scripts are `@tool`, so the inspector shows `family` as a drop-down of
 the `EdgeRasteriser.TileFamily` names plus None.
@@ -89,11 +96,36 @@ Every message starts with `prototype "<name>":` when it belongs to one
 prototype, so a long list still reads per tile. The order is fixed, which
 lets the check compare the broken fixture's list line by line.
 
-The resources only store and validate. Matching sockets, expanding
-rotations, applying exclusions and building `allowed[dir][tile]` bitsets
-are issue #86; checking reachability, dead sockets and mesh symmetry is
-#87; the real placeholder tileset, which should pass
-`validate(true)`, is #88.
+The resources only store and validate. `TileLibrary` does the rest:
+
+```gdscript
+var library := TileLibrary.build(tileset)
+if not library.errors.is_empty():          # the tileset's validate() messages
+	return
+for tile in library.tiles:                 # prototype order, then quarter turns
+	print(tile.index, " ", tile.label(), " ", tile.sockets)   # 4 wall@1 ["3s", "3s", "3_1", ...]
+var above := library.allowed(TilePrototype.FACE_POS_Y, 0)       # PackedInt64Array, word_count words
+print(library.is_allowed(TilePrototype.FACE_POS_Y, 0, 2))       # true: floor may sit on solid
+print(library.dump())
+```
+
+| `TileLibrary` member | Meaning |
+| --- | --- |
+| `build(tileset)` (static) | The library; on an invalid or null tileset `errors` holds the messages and there are no tiles. |
+| `errors` | `Array[String]`, empty for a usable library. |
+| `tiles` | `Array[TileLibrary.Tile]`, index = bit position. Each has `index`, `prototype`, `prototype_index`, `rotation` (quarter turns), `sockets` (effective strings in face order), `weight` (the prototype's, unchanged; #146), `keys` and `label()` (`name@rotation`). |
+| `word_count` | `ceil(tile_count / 64)` words per bitset. |
+| `tile_count()` | Number of tiles. |
+| `allowed(dir, tile)` | Copy of the bitset of tiles allowed next to `tile` in direction `dir` (a face index); bit `b` in word `b >> 6` at `b & 63`. Empty when an index is out of range. |
+| `is_allowed(dir, a, b)` | One bit of it; `false` out of range. The table is symmetric: `is_allowed(d, a, b) == is_allowed(d ^ 1, b, a)`. |
+| `dump()` | One header line and one line per tile: index, label, weight, sockets and the allowed indices per direction as ranges (`+y:0,2 -y:1-2`). |
+| `QUARTER_TURN` | Face index to face index after one quarter turn: `[5, 4, 2, 3, 0, 1]`, `+x`→`-z`, `-z`→`-x`, `-x`→`+z`, `+z`→`+x`. |
+| `rotate_face(face, steps)`, `rotate_socket(socket, steps)`, `rotate_sockets(sockets, steps)` (static) | The face permutation, one socket turned (vertical index + steps mod 4, horizontal unchanged) and six strings turned. |
+| `sockets_match(a, b)` (static) | Whether two parsed sockets on opposite faces match: `Ns`–`Ns`, `N`–`Nf`, `N_R`–`N_R`, `Ni`–`Ni`, equal ids. |
+| `socket_key(socket)`, `partner_key(socket)` (static) | Integer name of a socket and of the one socket that matches it; the table groups tiles by these. |
+
+Checking reachability, dead sockets and mesh symmetry is #87; the real
+placeholder tileset, which should pass `validate(true)`, is #88.
 
 ## How to run or check it
 
@@ -104,13 +136,24 @@ are issue #86; checking reachability, dead sockets and mesh symmetry is
   errors, keep its names, meshes, weights, rotations and sockets, and miss
   exactly the six families other than floor; and loads the broken fixture,
   whose errors must equal the expected 14 lines in order.
+- `mise run adjacency-check` (part of `mise run check`) checks the matching
+  rules on 28 socket pairs, a hand-computed quarter and half turn and the
+  face permutation against `Basis(Vector3.UP, PI / 2)`, the A/B/C worked
+  example, an exclusion in every direction and rotation, the fixture's 5
+  tiles and full table, the word layout of a 66-tile set (bits 63 and 64,
+  out-of-range arguments), and that every table it builds equals the
+  pairwise rule and is symmetric. It prints the build times (fixture about
+  0.6 ms, 66 tiles about 7 ms) and the fixture dump.
+- `mise run adjacency-dump res://path/to/tileset.tres` prints any tileset's
+  tiles and table, or its validation errors (exit 1).
 - Open a fixture in the editor (`mise run editor`, then double-click the
   `.tres`) to see the inspector layout.
 
 ## References
 
-- [[socket-adjacency]]: the socket grammar, the matching rules, rotation
-  expansion and the planned validation.
+- [[socket-adjacency]]: the socket grammar, the matching rules, the
+  expansion and derivation algorithm with worked examples, and the planned
+  validation.
 - [[edge-rasteriser]]: where tile families come from.
 - [[RESEARCH_WFC]], sections 2 and 7 (C1): the convention and the plan.
 - [[MEGASTRUCTURE_CONCEPT]], section 3: the tile vocabulary the real tileset
