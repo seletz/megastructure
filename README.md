@@ -55,6 +55,27 @@ can be tuned live; `mise run skeleton-stats` checks a tuning against the
 acceptance rules. How the grammar works is described in
 [`docs/algorithms/sector-skeleton-and-walkable-graph.md`](docs/algorithms/sector-skeleton-and-walkable-graph.md).
 
+### Placeholder tileset
+
+![Every rotated tile of the placeholder tileset with its socket strings](docs/images/placeholder-tileset.png)
+
+Sectors will be filled with 2 m tiles by a wave function collapse solver.
+Until real meshes exist it uses a placeholder tileset of boxes at the
+concept's proportions: air, solid, floor slab, slab edge with parapet,
+column, wall, doorway, stair, bridge, catwalk, ladder, tunnel and portal
+opening. The contact sheet above shows every rotation of every tile with the
+six socket strings that decide what may sit next to it. The tileset is
+generated from code and validated with:
+
+```sh
+mise run tileset-build
+mise run tiles-check-placeholder
+mise run shot scenes/tile_contact_sheet.tscn docs/images/placeholder-tileset.png --resolution 1280x1080
+```
+
+The tiles and their sockets are described in
+[`docs/code/tileset.md`](docs/code/tileset.md).
+
 ## Controls
 
 | Key              | Action                                               |
