@@ -4,11 +4,20 @@ extends Node3D
 ## box of sectors, drawn from the node of sector `a` to the portal and on to
 ## the node of sector `b`, so a path reads node -> portal -> node.
 ##
+## Nothing is drawn as a slope. Each half of an edge is a horizontal run at
+## the node's level to the point straight above or below the portal, then a
+## vertical segment on the portal's side up or down to the portal, in
+## STAIR_COLOR. The rasteriser's stair run or ladder starts at the portal
+## cell, so the vertical segment marks where the level change begins. An x
+## or z portal is at the level of its lower sector's hub, so that half has
+## no vertical segment.
+##
 ## One MeshInstance3D per EdgeKind holds an ArrayMesh with one PRIMITIVE_LINES
-## surface: the edge segments and a short cross at every portal, all in the
-## kind's colour. A further mesh holds grey crosses at the interior nodes.
-## Solid sectors have no interior node, so tunnels bend at the sector centre;
-## those crosses go into the tunnel mesh. Every material is unshaded,
+## surface with vertex colours: the edge segments and a short cross at every
+## portal in the kind's colour, the vertical segments in STAIR_COLOR. A
+## further mesh holds grey crosses at the interior nodes. Solid sectors have
+## no interior node, so tunnels bend at the sector centre (at the hub level
+## the rasteriser uses); those crosses go into the tunnel mesh. Every material is unshaded,
 ## translucent at full alpha, without depth write and with a render priority
 ## above the viewer's boxes, so the lines are blended last and stay crisp.
 ##
@@ -33,6 +42,8 @@ const KIND_COLORS: Array[Color] = [
 	Color(1.0, 0.25, 1.0),
 ]
 const NODE_COLOR := Color(0.75, 0.75, 0.75)
+## Colour of the vertical segments, the stair and ladder colour.
+const STAIR_COLOR := Color(1.0, 0.9, 0.2)
 ## Above the viewer's box priorities (0 to 2).
 const RENDER_PRIORITY := 10
 
@@ -88,9 +99,9 @@ class CachedSkeleton:
 
 func _ready() -> void:
 	for kind in WalkableGraph.EdgeKind.size():
-		_kind_instances.append(_add_instance(WalkableGraph.edge_kind_name(kind).capitalize(), KIND_COLORS[kind]))
+		_kind_instances.append(_add_instance(WalkableGraph.edge_kind_name(kind).capitalize()))
 		_kind_instances[kind].visible = _kind_visible[kind]
-	_node_instance = _add_instance("Nodes", NODE_COLOR)
+	_node_instance = _add_instance("Nodes")
 	visible = show_graph
 
 
@@ -167,9 +178,13 @@ func rebuild(skeleton: Skeleton, world_seed: int, min_cell: Vector3i, max_cell: 
 	_boundary_cache = boundaries
 
 	var lines: Array[PackedVector3Array] = []
+	var colors: Array[PackedColorArray] = []
 	for kind in WalkableGraph.EdgeKind.size():
 		lines.append(PackedVector3Array())
+		colors.append(PackedColorArray())
 	var node_lines := PackedVector3Array()
+	var node_colors := PackedColorArray()
+	var tunnel := WalkableGraph.EdgeKind.TUNNEL as int
 	var half := marker_size * 0.5
 	for edge in edges:
 		var kind := edge.kind as int
@@ -182,36 +197,44 @@ func rebuild(skeleton: Skeleton, world_seed: int, min_cell: Vector3i, max_cell: 
 			if not nodes.has(cell):
 				nodes[cell] = node
 				if half > 0.0:
-					_cross(lines[WalkableGraph.EdgeKind.TUNNEL] if node[1] else node_lines, node[0], half)
-			lines[kind].append(node[0])
-			lines[kind].append(portal)
+					if node[1]:
+						_cross(lines[tunnel], colors[tunnel], node[0], half, KIND_COLORS[tunnel])
+					else:
+						_cross(node_lines, node_colors, node[0], half, NODE_COLOR)
+			var from: Vector3 = node[0]
+			var corner := Vector3(portal.x, from.y, portal.z)
+			_segment(lines[kind], colors[kind], from, corner, KIND_COLORS[kind])
+			if corner.y != portal.y:
+				_segment(lines[kind], colors[kind], corner, portal, STAIR_COLOR)
 		if half > 0.0:
-			_cross(lines[kind], portal, half)
+			_cross(lines[kind], colors[kind], portal, half, KIND_COLORS[kind])
 	_node_cache = nodes
 
 	for kind in WalkableGraph.EdgeKind.size():
-		_set_lines(_kind_instances[kind], lines[kind])
-	_set_lines(_node_instance, node_lines)
+		_set_lines(_kind_instances[kind], lines[kind], colors[kind])
+	_set_lines(_node_instance, node_lines, node_colors)
 	last_rebuild_usec = Time.get_ticks_usec() - start
 
 
-## [position, is_solid]: the interior node, or the centre of a solid sector.
+## [position, is_solid]: the interior node, or the centre of a solid sector
+## at its hub level.
 func _node_point(cell: Vector3i) -> Array:
 	var node := _graph.interior_node(cell)
 	if node != null:
 		return [node.position, false]
 	var n := _graph.cells_per_sector()
-	return [(Vector3(cell) * n + Vector3.ONE * floorf(n * 0.5)) * WalkableGraph.CELL_SIZE, true]
+	var centre := Vector3(n / 2, _graph.centre_level(), n / 2)
+	return [(Vector3(cell) * n + centre) * WalkableGraph.CELL_SIZE, true]
 
 
-func _add_instance(instance_name: String, color: Color) -> MeshInstance3D:
+func _add_instance(instance_name: String) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	instance.name = instance_name
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	instance.mesh = ArrayMesh.new()
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = color
+	material.vertex_color_use_as_albedo = true
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 	material.render_priority = RENDER_PRIORITY
@@ -220,7 +243,7 @@ func _add_instance(instance_name: String, color: Color) -> MeshInstance3D:
 	return instance
 
 
-static func _set_lines(instance: MeshInstance3D, vertices: PackedVector3Array) -> void:
+static func _set_lines(instance: MeshInstance3D, vertices: PackedVector3Array, vertex_colors: PackedColorArray) -> void:
 	var mesh := instance.mesh as ArrayMesh
 	mesh.clear_surfaces()
 	if vertices.is_empty():
@@ -228,16 +251,24 @@ static func _set_lines(instance: MeshInstance3D, vertices: PackedVector3Array) -
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_COLOR] = vertex_colors
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
 
 
+## One segment from `from` to `to` in `color`.
+static func _segment(vertices: PackedVector3Array, vertex_colors: PackedColorArray, from: Vector3, to: Vector3, color: Color) -> void:
+	vertices.append(from)
+	vertices.append(to)
+	vertex_colors.append(color)
+	vertex_colors.append(color)
+
+
 ## Three axis-aligned segments of length 2 * half through `point`.
-static func _cross(vertices: PackedVector3Array, point: Vector3, half: float) -> void:
+static func _cross(vertices: PackedVector3Array, vertex_colors: PackedColorArray, point: Vector3, half: float, color: Color) -> void:
 	for axis in 3:
 		var offset := Vector3.ZERO
 		offset[axis] = half
-		vertices.append(point - offset)
-		vertices.append(point + offset)
+		_segment(vertices, vertex_colors, point - offset, point + offset, color)
 
 
 static func _in_box(cell: Vector3i, lo: Vector3i, hi: Vector3i) -> bool:
