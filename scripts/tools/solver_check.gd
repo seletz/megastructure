@@ -8,7 +8,7 @@ extends SceneTree
 ## unsatisfiable one fails, then prints the tile histogram, steps and time
 ## per seed and the time of a 24³ solve with restarts.
 ##
-## Restarts and pre-collapse: seed 1502 fails its first 8³ attempt, so it
+## Restarts and pre-collapse: seed 2135 fails its first 8³ attempt, so it
 ## degrades to all solid with one attempt allowed and solves on the second
 ## by default, the same on a second instance. Records that cannot hold
 ## fail fast with a clear error, in `SectorDomains` (two records, a bad
@@ -36,7 +36,7 @@ const SEEDS: Array[int] = [0, 1, 2, 3, 4]
 const QUICK_SEEDS: Array[int] = [0, 1]
 const SECTOR := Vector3i.ZERO
 ## An 8³ seed whose attempts before RESTART_ATTEMPTS hit a contradiction.
-const RESTART_SEED := 1502
+const RESTART_SEED := 2135
 ## The attempt RESTART_SEED solves at.
 const RESTART_ATTEMPTS := 2
 ## Real stratum sectors the pipeline runs at seed 0.
