@@ -27,8 +27,9 @@ extends Node3D
 ## the regions it newly overlaps, and the graph reads sector types through a
 ## CachedSkeleton, since edges_in_region asks for the boundary layers of its
 ## neighbours again and again; `invalidate` clears every cache after a seed or
-## grammar change. The per-kind toggles only hide a mesh; `show_graph` and
-## `marker_size` emit `changed` so the owner refreshes.
+## grammar change. The per-kind toggles only hide a mesh; `show_graph`,
+## `marker_size`, `boundary_scheme` and `void_wall_tunnels_last` emit
+## `changed` so the owner refreshes, the last two after dropping the caches.
 
 signal changed
 
@@ -61,6 +62,20 @@ const _UNITS: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(0, 1, 0), Vector3i(
 @export_range(0.0, 12.0, 0.5) var marker_size := 3.0:
 	set(value):
 		marker_size = maxf(value, 0.0)
+		changed.emit()
+
+## WalkableGraph.boundary_scheme for the drawn graph: 0 per face, 1 per
+## region pair, 2 skip solid faces.
+@export_range(0, 2) var boundary_scheme: int = WalkableGraph.BoundaryScheme.PER_FACE:
+	set(value):
+		boundary_scheme = clampi(value, 0, WalkableGraph.BoundaryScheme.size() - 1)
+		invalidate()
+		changed.emit()
+## WalkableGraph.void_wall_tunnels_last for the drawn graph.
+@export var void_wall_tunnels_last := false:
+	set(value):
+		void_wall_tunnels_last = value
+		invalidate()
 		changed.emit()
 
 ## Edges of each kind drawn by the last rebuild.
@@ -143,7 +158,7 @@ func rebuild(skeleton: Skeleton, world_seed: int, min_cell: Vector3i, max_cell: 
 	if _graph == null or _graph.world_seed != world_seed or _skeleton != skeleton:
 		invalidate()
 		_skeleton = skeleton
-		_graph = WalkableGraph.new(world_seed, CachedSkeleton.new(skeleton.grammar))
+		_graph = WalkableGraph.new(world_seed, CachedSkeleton.new(skeleton.grammar), boundary_scheme as WalkableGraph.BoundaryScheme, void_wall_tunnels_last)
 
 	var region_min := WalkableGraph.region_of(min_cell)
 	var region_max := WalkableGraph.region_of(max_cell)
