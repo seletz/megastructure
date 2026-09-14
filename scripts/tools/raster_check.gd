@@ -20,12 +20,15 @@ extends SceneTree
 
 const SEEDS: Array[int] = [0, 1, 2, 3, 4]
 const SECTORS_PER_SEED := 200
+## Sectors per seed with `--quick` (the `check` tier).
+const QUICK_SECTORS_PER_SEED := 40
 const RANGE := 100000
 const CELLS := 24
 ## Salt for picking the sample sectors; outside the grammar's salt range.
 const SALT_TEST_RASTER := 904
 
 var _failures := 0
+var _sectors_per_seed := SECTORS_PER_SEED
 
 
 ## Remembers sector types, as neighbouring sample sectors share regions.
@@ -42,6 +45,8 @@ class CachingSkeleton:
 
 
 func _init() -> void:
+	if "--quick" in OS.get_cmdline_user_args():
+		_sectors_per_seed = QUICK_SECTORS_PER_SEED
 	_check_merge()
 	var families := PackedInt32Array()
 	families.resize(EdgeRasteriser.TileFamily.size())
@@ -51,7 +56,7 @@ func _init() -> void:
 	var parts := PackedStringArray()
 	for f in families.size():
 		parts.append("%s %d" % [EdgeRasteriser.FAMILY_NAMES[f], families[f]])
-	_expect(totals.sectors == SEEDS.size() * SECTORS_PER_SEED, "%d sectors checked" % totals.sectors)
+	_expect(totals.sectors == SEEDS.size() * _sectors_per_seed, "%d sectors checked" % totals.sectors)
 	print("all seeds:")
 	print("  %d sectors, %d with edges, %d edges, %d on a fallback routing, %d rejected" % [totals.sectors, totals.with_edges, totals.edges, totals.fallbacks, totals.rejected])
 	print("  families: %s" % ", ".join(parts))
@@ -74,7 +79,7 @@ func _check_seed(seed_value: int, families: PackedInt32Array, totals: Dictionary
 	var with_edges := 0
 	var records := 0
 	var edges := 0
-	for i in SECTORS_PER_SEED:
+	for i in _sectors_per_seed:
 		var sector := Vector3i(_random(seed_value, i, 0), _random(seed_value, i, 1), _random(seed_value, i, 2))
 		var raster := _raster(rasteriser, rasters, sector)
 		if not _same(raster, fresh.rasterise(sector)):
@@ -97,16 +102,16 @@ func _check_seed(seed_value: int, families: PackedInt32Array, totals: Dictionary
 		if _components(raster) > 1:
 			bad.split += 1
 
-	_expect(bad.fresh == 0, "%s a fresh graph rasterises all %d sectors identically, %d differ" % [label, SECTORS_PER_SEED, bad.fresh])
+	_expect(bad.fresh == 0, "%s a fresh graph rasterises all %d sectors identically, %d differ" % [label, _sectors_per_seed, bad.fresh])
 	_expect(bad.bounds == 0 and bad.duplicate == 0, "%s %d records inside 0..%d with one record per cell, %d outside, %d duplicate cells" % [label, records, CELLS - 1, bad.bounds, bad.duplicate])
 	_expect(bad.headroom == 0, "%s no record directly above or below a stair cell, %d pairs" % [label, bad.headroom / 2])
-	_expect(bad.conflict == 0, "%s no conflicting records in %d sectors, %d conflicts" % [label, SECTORS_PER_SEED, bad.conflict])
+	_expect(bad.conflict == 0, "%s no conflicting records in %d sectors, %d conflicts" % [label, _sectors_per_seed, bad.conflict])
 	_expect(bad.endpoint == 0, "%s both endpoint sectors of all %d edges have the portal opening, %d miss it" % [label, edges, bad.endpoint])
 	_expect(bad.rejected == 0, "%s no edge rejected, %d are" % [label, bad.rejected])
 	_expect(bad.walk == 0, "%s every routing walks from the hub to its portal with explicit stairs and ladders, %d do not" % [label, bad.walk])
 	_expect(bad.split == 0, "%s the records of every sector are one 26-connected group, %d sectors are split" % [label, bad.split])
-	print("  info  %s %d of %d sectors have edges, %.1f records per sector with edges, %.2f %% of their cells" % [label, with_edges, SECTORS_PER_SEED, float(records) / maxi(with_edges, 1), 100.0 * records / maxi(with_edges * CELLS ** 3, 1)])
-	totals.sectors += SECTORS_PER_SEED
+	print("  info  %s %d of %d sectors have edges, %.1f records per sector with edges, %.2f %% of their cells" % [label, with_edges, _sectors_per_seed, float(records) / maxi(with_edges, 1), 100.0 * records / maxi(with_edges * CELLS ** 3, 1)])
+	totals.sectors += _sectors_per_seed
 	totals.with_edges += with_edges
 	totals.records += records
 	totals.edges += edges

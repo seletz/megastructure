@@ -29,6 +29,9 @@ flowchart LR
     W --> S[socket-adjacency]
     S --> V[sector-solver]
     W --> M[model-synthesis-and-sectors]
+    V --> F[face-first-boundaries]
+    M --> F
+    F --> J[sector-jobs]
 ```
 
 Start with the hash: everything else draws its decisions from it. Then
@@ -54,7 +57,9 @@ either follow the renderer (left) or the generator (right).
 | [[sector-skeleton-and-walkable-graph]] | The hashed sector grammar (implemented, with its rules, salts and parameters) and the path graph: portals and interior nodes. Draft. |
 | [[walkable-graph-connectivity]] | Edges of the walkable graph (implemented): Kruskal with hashed weights per 3³ region, tunnels through solid, boundary edges between regions, loops, and why region-aligned windows are connected. |
 | [[sector-solver]] | The solver core (implemented): bitset wave, AC-3 with byte-sliced tables, minimum remaining values in an indexed heap with a hashed tie-break, integer weighted draws from the hash, and measured times and failure rates. |
+| [[face-first-boundaries]] | Order-independent sector borders (implemented): corners, edges and faces owned by the lower sector, each solved from its own key with lower levels as fixed faces, then the interior; the open boundary rule and why the placeholder tileset keeps rock off the borders. |
 | [[edge-rasteriser]] | The fill contract (implemented): each sector's edges as walks of tile family records from the hub to the portals, explicit stair runs and ladders at every level change, and the merge rule that keeps records from conflicting. |
+| [[sector-jobs]] | Solving sectors on worker threads (implemented): one WorkerThreadPool task per sector on objects of its own, a mutex-protected outbox, polling that never blocks, priority by distance, cancellation, and measured poll times and throughput. |
 
 ## Related
 

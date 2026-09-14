@@ -4,9 +4,13 @@ on:
   pull_request:
   push:
     branches: [develop]
+  schedule:
+    # Nightly full tier on the default branch.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
 
 concurrency:
-  group: check-${{ github.ref }}
+  group: check-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -27,5 +31,12 @@ jobs:
         with:
           cache: true
 
+      # Pull requests run the quick tier; pushes to develop, the nightly
+      # schedule and manual runs run the full tier.
       - name: mise run check
+        if: github.event_name == 'pull_request'
         run: mise run check
+
+      - name: mise run check-full
+        if: github.event_name != 'pull_request'
+        run: mise run check-full

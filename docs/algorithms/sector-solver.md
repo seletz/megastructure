@@ -71,7 +71,7 @@ var result := solver.solve(seed, sector, built.words)
   first attempt. It is the entry point for
   [[GLOSSARY#Pre-collapsed cell|pre-collapsed cells]] and fixed sector
   faces; `SectorDomains` builds it (below), and the face-first boundary
-  solve (#92) will feed the faces.
+  solve ([[face-first-boundaries]]) feeds the faces.
 - **Outcomes.** `SOLVED`: an attempt filled every cell. `DEGRADED`: all
   `max_attempts` attempts hit a contradiction and every cell holds the solid
   tile (`ok` and `degraded` are true). `FAILED`: bad arguments or starting
@@ -372,6 +372,24 @@ Solid, shaft, cavity and chasm sectors are not sampled yet. `mise run
 solver-check` prints the seed 0 table and checks that seeds 1 to 4 reach an
 attempt; `mise run solver-sector <x> <y> <z>` reproduces one sector.
 
+`mise run wfc-bench --boundaries` (#93) at seed 0, the first 10 stratum
+sectors walking outwards from the origin, on an Intel i9-9880H shared with
+four other headless Godot runs:
+
+| Run | Searched | Mean / max time | Mean attempts | Contradictions | Degraded | Failed before an attempt |
+| --- | --- | --- | --- | --- | --- | --- |
+| real pipeline | 3 of 10 | 3 359 / 3 568 ms | 1.33 | 1 | 0 | 7 (5 rejected, 2 inconsistent) |
+| unconstrained 24³ | 10 of 10 | 3 869 / 5 638 ms | 1.20 | 2 | 0 | 0 |
+| face-first boundaries, cold | 10 of 10 | 700 / 861 ms | 10.2 pieces' attempts | 0 | 0 | 10 (every interior) |
+
+A single 24³ attempt took about 3.4 s there against 0.63 s in the table
+above, the same slowdown [[face-first-boundaries#Measurements]] saw, so the
+machine and its load dominate. Both runs are above the 1 s threshold of
+decision #138 as measured; scaled to the 0.63 s attempt above, 1.2 to 1.33
+mean attempts would be about 0.8 s, just below it. The boundaries run is
+only fast because every interior fails before an attempt. Re-run on an idle
+machine before deciding #138.
+
 ## Determinism
 
 - Every random value is `Hash.hash3_u`: the attempt seed from `(seed,
@@ -445,6 +463,8 @@ counting up from 9300 into salts nothing else uses.
 - [[socket-adjacency]]: where the allowed bitsets come from.
 - [[RESEARCH_WFC]], sections 1, 3, 4 and 7 (D1, D2).
 - [[edge-rasteriser]]: the records the starting domains come from.
+- [[face-first-boundaries]]: corners, edges and faces solved before the
+  interior, each a solve of this solver with fixed faces.
 - [[0010-near-universal-solid-tile-with-seeded-restarts]],
   [[0011-typed-gdscript-solver-first]].
 - Papers: [[gumin-2016-wavefunctioncollapse]],

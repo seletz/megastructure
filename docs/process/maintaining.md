@@ -96,7 +96,9 @@ seconds". It changes nothing.
    `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`, every 15 seconds.
    No run yet counts as pending, because the workflow needs a moment to start
    after a push. It stops on any conclusion other than `success` and after
-   `--timeout` seconds (default 900, 15 minutes).
+   `--timeout` seconds (default 900, 15 minutes). On a pull request that
+   check is the quick tier, `mise run check`, which finishes in a few
+   minutes including setup.
 6. `gh pr merge --merge --match-head-commit <sha>`: a merge commit, and only
    if the pull request head is still the commit that passed. The branch on
    GitHub is deleted automatically.
@@ -114,6 +116,42 @@ request, the refusals, the fetch, the current state of the check) and prints
 every other command instead of running it.
 
 The worktree stays after a merge; remove it with `wt:rm` once you are done.
+
+## After merging: the full check
+
+The pull request only ran the quick tier. The push of the merge commit to
+`develop` runs `mise run check-full` (about 10 minutes), and the same runs
+nightly. Look at it with `gh run list --workflow check.yml --branch develop`;
+a failure there means a merged change broke a full-size statistical check, so
+open an issue and fix it before merging more generator or solver work. For
+such changes, run `mise run check-full` in the worktree before `pr:merge`.
+
+## Benchmarking the solver
+
+`mise run wfc-bench [--seed N] [--sectors N] [--boundaries]` measures the
+sector solver against the native extension threshold of decision #138: a
+mean above 1 s per stratum sector in typed GDScript means porting
+`SectorSolver.solve()` to a native extension. It is not part of `check`.
+Run it after a change that could move solver time (the solver, the
+tileset, the domains or the boundaries) and before deciding #138:
+
+```sh
+mise run wfc-bench                          # seed 0, 10 sectors
+mise run wfc-bench --boundaries             # also cold face-first sectors
+mise run wfc-bench --seed 3 --sectors 20 > build/bench.md
+gh issue comment 138 --body-file build/bench.md
+```
+
+It takes the first stratum sectors walking outwards from the origin, so a
+seed always benchmarks the same sectors. The output is markdown: a table per
+run (real pipeline, the same sectors unconstrained, and cold boundaries),
+a summary table and a verdict line, ready to paste into an issue or pull
+request. Many real sectors still fail before an attempt because records
+and the placeholder tileset disagree (#159, #161); they show as `rejected`
+or `failed` and count under "failed before an attempt", and the verdict
+falls back to the unconstrained solves when no real sector ran one. Times
+depend on the machine and its load: close other Godot runs (checks in other
+worktrees) first, and note the processor line when comparing numbers.
 
 ## References
 

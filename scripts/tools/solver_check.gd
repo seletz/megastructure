@@ -27,6 +27,9 @@ const REFERENCE_PATH := "res://docs/solver_reference_seed0.md"
 const SMALL := Vector3i(8, 8, 8)
 const LARGE := Vector3i(24, 24, 24)
 const SEEDS: Array[int] = [0, 1, 2, 3, 4]
+## With `--quick` (the `check` tier): 8³ solves at these seeds only, and no
+## 24³ solve or real sectors.
+const QUICK_SEEDS: Array[int] = [0, 1]
 const SECTOR := Vector3i.ZERO
 ## An 8³ seed whose attempts before RESTART_ATTEMPTS hit a contradiction.
 const RESTART_SEED := 36
@@ -43,6 +46,7 @@ var _failures := 0
 
 func _init() -> void:
 	var update := "--update" in OS.get_cmdline_user_args()
+	var quick := "--quick" in OS.get_cmdline_user_args()
 	var library := TileLibrary.build(load(TILESET) as TileSet3D)
 	if not library.errors.is_empty():
 		_expect(false, "%s: %s" % [TILESET, library.errors])
@@ -53,7 +57,7 @@ func _init() -> void:
 	var first := SectorSolver.new(library, SMALL)
 	var second := SectorSolver.new(library, SMALL)
 	var reference_digest := ""
-	for seed in SEEDS:
+	for seed in QUICK_SEEDS if quick else SEEDS:
 		var result := first.solve(seed, SECTOR)
 		var again := second.solve(seed, SECTOR)
 		var solved := result.outcome == SectorSolver.Outcome.SOLVED
@@ -82,9 +86,10 @@ func _init() -> void:
 		else:
 			_compare_reference(reference_digest)
 
-	_time_large(library)
-	_run_real_sectors(library)
-	_check_real_sectors_reach_an_attempt(library)
+	if not quick:
+		_time_large(library)
+		_run_real_sectors(library)
+		_check_real_sectors_reach_an_attempt(library)
 
 	print("solver check: %s" % ("ok" if _failures == 0 else "%d failure(s)" % _failures))
 	quit(0 if _failures == 0 else 1)
