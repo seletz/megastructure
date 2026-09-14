@@ -387,6 +387,9 @@ adds chunks of 3³ cells as shapes of 8 bodies per sector over frames,
   the ones with a kept horizontal tunnel edge whose records build until one
   solves, and walks from that edge's portal to the hub, and on to a second
   portal when the sector has one (#182).
+- `mise run walk-check --catwalk [--seed N]` does the same in a shaft: it
+  takes only edges whose records before the portal are all catwalks, so no
+  ladder, and a route that turns, so the walk crosses a platform (#187).
 - `mise run streaming-check [--quick]` (`--quick` part of `check`, the full
   walk of `check-full`) walks a frozen capsule through 10 streamed sectors
   and back (2 with `--quick`) and checks the load and unload rule, holes at
@@ -444,6 +447,17 @@ portal through three corners to its +z portal, 39 cells; at seed 2 sector
 is a stairwell, 39 cells; at seed 3 sector (1, 0, 1) up six stairs, 25 cells
 and 30 step-ups. The stratum run is unchanged: `--all-solving` at seed 0
 still solves and walks 84 of 84.
+
+**Catwalks after #187.** With the catwalk railing 0.4 m off the walk line
+and platforms where a walk turns ([[tileset#The placeholder tileset]]),
+`mise run walk-check --catwalk` walks on both placements at seeds 0 to 4:
+at seed 0 shaft sector (2, -1, 0) from its portal through two corner
+platforms to its hub, 16 cells; at seed 1 sector (0, 1, 2), 33 cells over
+three corners; at seed 2 sector (-1, 3, 0), 9 cells over two corners and a
+T; at seed 3 sector (0, 0, 0), 25 cells; at seed 4 sector (-1, 0, 1), 32
+cells. Every step between a catwalk and a platform crosses the 0.02 m gap
+of the open end and the platform's 0.8 m gate; no step-ups, no falls.
+`--all-solving` at seed 0 still walks 84 of 84.
 
 ## References
 

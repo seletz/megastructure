@@ -153,7 +153,7 @@ finds those (below). The placeholder tileset passes `validate(true)` and
 ![Every rotated tile of the placeholder tileset with its sockets](../images/placeholder-tileset.png)
 
 `resources/tilesets/placeholder.tres` is the first tileset meant for the
-solver: 40 prototypes, 118 tiles (two bitset words), every `EdgeRasteriser.TileFamily` plus free
+solver: 43 prototypes, 127 tiles (two bitset words), every `EdgeRasteriser.TileFamily` plus free
 tiles. Every mesh is a handful of axis-aligned boxes in one 2 m cell centred
 on the origin, built by `placeholder_builder.gd` at the proportions of
 [[MEGASTRUCTURE_CONCEPT]] section 3: slab 0.6 thick at the bottom of the cell
@@ -167,7 +167,7 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 
 | id | horizontal faces | vertical faces |
 | --- | --- | --- |
-| 0 | `0s` open: nothing that must continue, including a slab edge, a tunnel mouth or the passage along a vault, a wall side, the end of a parapet or catwalk and a portal frame's jamb | `0i` open: a slab top or bottom lying on the plane, open space under an open floor, open stair or portal frame, and thin columns and ladders |
+| 0 | `0s` open: nothing that must continue, including a slab edge, a tunnel mouth or the passage along a vault, a wall side, the end of a parapet or catwalk, a platform's gate or backing plate and a portal frame's jamb | `0i` open: a slab top or bottom lying on the plane, open space under an open floor, open stair or portal frame, and thin columns and ladders |
 | 1 | `1s` rock: solid, a stair's high end, a tunnel, vault or stairwell side, the wall a catwalk or ladder is fixed to, a backing plate's face | `1i` rock: solid, under a floor, slab edge, stair or tunnel, over a tunnel, and above and below a vault (the passage in rock, open to the tunnel or stairwell under it) |
 | 2 | `2` / `2f` parapet line along a slab edge (asymmetric) | – |
 | 3 | `3s` wall end, 0.7 m centred | `3_R` wall stack, R the run direction |
@@ -184,7 +184,7 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | `wall_doorway` | 0.2 m lintel over a 2.0 × 1.8 m opening | `3s 3s 3_0 0i 0s 0s` | 2 | none | 0.5 |
 | `stair` | five treads climbing towards `+x`, 1.8 m wide | `1s 0s 0i 1i 0s 0s` | 4 | stair | 0.5 |
 | `bridge` | slab, parapets along `+z` and `-z` | `0s 0s 0i 0i 0s 0s` | 2 | bridge | 1 |
-| `catwalk` | 1 m deck along `+z` with a railing on its open side | `4 4f 0i 0i 1s 0s` | 4 | catwalk | 0.5 |
+| `catwalk` | 1.4 m deck along `+z` with a railing on its open side, 0.4 m off the walk line | `4 4f 0i 0i 1s 0s` | 4 | catwalk | 0.5 |
 | `ladder` | two rails and five rungs off the `+z` face | `0s 0s 0i 0i 1s 0s` | 4 | ladder | 0.5 |
 | `tunnel` | slab and 0.3 m side walls along x, rock above | `0s 0s 1i 1i 1s 1s` | 2 | tunnel | 1 |
 | `portal_opening` | two 0.2 m jambs, a 1.6 m gap in a wall | `3s 3s 3_0 0i 0s 0s` | 2 | portal opening | 0.5 |
@@ -192,7 +192,7 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | `slab_edge_end` | slab, parapet along `+z` from `+x` stopping 0.2 m short of `-x` | `2 0s 0i 1i 0s 0s` | 4 | floor | 0.5 |
 | `slab_edge_end_f` | the same parapet from `-x` stopping short of `+x` | `0s 2f 0i 1i 0s 0s` | 4 | floor | 0.5 |
 | `stair_open` | the five treads as 0.1 m plates, open below | `0s 0s 0i 0i 0s 0s` | 4 | stair | 0.5 |
-| `catwalk_end` | catwalk deck from `+x` stopping 0.2 m short of `-x`, railing across its end | `4 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
+| `catwalk_end` | catwalk deck and railing from `+x` stopping 0.02 m short of `-x`, open at its end | `4 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
 | `catwalk_end_f` | the same deck from `-x` | `0s 4f 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
 | `portal_frame` | slab and two 0.2 m jambs, free-standing, open at the top | `0s 0s 0i 0i 0s 0s` | 2 | portal opening | 0.5 |
 | `catwalk_short` | catwalk deck and railing stopping 0.02 m short of `+x` and `-x`, open at both ends | `0s 0s 0i 0i 1s 0s` | 4 | catwalk | 0.25 |
@@ -209,6 +209,7 @@ Socket ids of this set (the grammar is in [[socket-adjacency#Socket strings]]):
 | `stairwell_end` | the ledges and one on `-x`, open to `+x` | `0s 1s 1i 0i 1s 1s` | 4 | none | 0.25 |
 | `portal_tunnel` | slab, walls on `+x` and `-x`, passage along z | `1s 1s 1i 1i 0s 0s` | 2 | portal opening | 0.25 |
 | `portal_tunnel_end` | slab, walls on `+x`, `-x` and `-z`, open to `+z` | `1s 1s 1i 1i 0s 1s` | 4 | portal opening | 0.25 |
+| `catwalk_corner`, `catwalk_t`, `catwalk_cross` | platform: deck over the cell, 0.3 m full-height backing plates on the sides the tunnel shape of the same name closes, a railing either side of a 0.8 m gate on the sides it opens | `0s 0s 0i 0i 0s 0s` | 4, 4, 1 | catwalk | 0.25 |
 
 Read a row as "what may touch this face": a floor lies on rock and has open
 space above and around it; a stair is cut into rock, climbing out of open
@@ -258,6 +259,23 @@ a bridge walk turning in a cell took a straight bridge whose parapet stood
 across the turn (#181). `SectorDomains` keeps bridge, tunnel and side portal
 records off tiles that block a face their walk crosses, as for floors, so
 `portal_tunnel_end` never stands in a side portal.
+The last three prototypes (#187) are where a catwalk walk turns, branches
+or crosses. The straight catwalk's railing stood on the walk line of its
+cell (a 1 m deck), so it blocked its own run and a turn stepped across it;
+the deck is now 1.4 m and the railing 0.4 m off the walk line. A turn
+needs a deck not tied to one wall: `catwalk_corner`, `catwalk_t` and
+`catwalk_cross` are platforms with their own backing plate on every side
+the walk does not cross and a gate in the railing on every side it does,
+`0s` all round. The plates belong to the platform rather than to backing
+cells beside it, because two corners of a zigzag walk would otherwise ask
+for two plates in one cell. The `4`/`4f` profile runs along every straight
+run and breaks into `0s` at a platform, ladder or portal, which the
+catwalks meet with `catwalk_end` and `catwalk_end_f`, open at their end
+since #187. Platforms in place of `4`/`4f` corners, which would take about
+60 tiles and a third bitset word, are decision #190. `SectorDomains` keeps
+catwalk records off tiles that block a face their walk crosses and, where
+a tile can, on tiles that close every other side face with a railing or
+rock, so a platform never stands in a straight run.
 
 The portal frame has no lintel since #173: the lintel left 1.2 m over its
 slab, too little for the 1.8 m walker, and the cell above a portal is
@@ -314,7 +332,7 @@ why these choices keep contradictions down, is
   `validate(true)` reports anything. `mise run tiles-check-placeholder` (part
   of `mise run check`) runs `tiles-check` on it.
 - `mise run shot scenes/tile_contact_sheet.tscn
-  docs/images/placeholder-tileset.png --resolution 1280x3600` renders the
+  docs/images/placeholder-tileset.png --resolution 1280x3960` renders the
   contact sheet; the labels are `Label3D`, so no `--ui` is needed. The scene
   also runs in `mise run smoke`. Set its `tileset` to see another set.
 - Open a fixture in the editor (`mise run editor`, then double-click the

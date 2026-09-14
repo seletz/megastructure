@@ -41,7 +41,9 @@ sources:
 > solves within 2 attempts, and since voids stay open (#180) every sampled
 > real stratum sector of seeds 0 to 4 solves at the first attempt. With the
 > passages in rock of #182 (118 tiles, two bitset words, a real sector about
-> 1.07 s) every sampled solid sector solves too.
+> 1.07 s) every sampled solid sector solves too, and with the catwalk
+> platforms of #187 (127 tiles) every sampled shaft sector, with no railing
+> across a walk.
 
 This is milestone 0.2.0 items D1 (the core) and D2 (pre-collapse and the
 restart policy) of [[RESEARCH_WFC]] section 7, following sections 3 and 4 of
@@ -120,7 +122,14 @@ sector's inputs into the `domains` words:
    and enters from the door cell, even where that holds a stairwell over a
    stair climbing into the portal. These records are unoriented (or, for a
    portal, turned by the passage only), so this is how a parapet or tunnel
-   wall ends up beside a walk and not across it.
+   wall ends up beside a walk and not across it. A catwalk record drops the
+   tiles that block a face its walk crosses as a floor does (#187), then
+   keeps only the tiles that close every other side face, where any of
+   them do: a face is closed when the tile blocks it (a railing, a
+   platform's backing plate) or allows no fill there but a free tile (the
+   rock a `backing` closes). A `4`/`4f` run face allows neither and counts
+   as open. So a straight run takes a catwalk, a turn, branch or cross a
+   platform, and a dead end, which no tile closes, keeps every tile left.
 3. **Record pairs.** For every two records that are face neighbours, some
    tile of the first must allow some tile of the second in that direction
    (the byte union of step 6 below, done once per pair). Otherwise the
@@ -274,7 +283,8 @@ to 73, vault 74 and 75, vault_corner 76 to 79, vault_t 80 to 83,
 vault_cross 84, vault_end 85 to 88, bridge_corner 89 to 92, bridge_t 93 to
 96, bridge_cross 97, bridge_end 98 to 101, stair_tunnel 102 to 105,
 stairwell 106 and 107, stairwell_end 108 to 111, portal_tunnel 112 and 113,
-portal_tunnel_end 114 to 117. Tile `t` sits in word `t >> 6` at bit
+portal_tunnel_end 114 to 117. The 9 tiles of #187 end word 1:
+catwalk_corner 118 to 121, catwalk_t 122 to 125, catwalk_cross 126. Tile `t` sits in word `t >> 6` at bit
 `t & 63`, so tile 64 is bit 0 of word 1.
 
 **Record masks.** A stair record with yaw 1 (climbing −z) matches
@@ -288,7 +298,7 @@ headroom record matches bits 0, 10 and 11: air and both rotations of the
 wall doorway, whose lintel starts 1.8 m up.
 
 **Support cells.** A catwalk record at (5, 3, 5) in a shaft matches bits
-18 to 21, 43 to 50 and 53 to 56. `catwalk_short@0` (bit 53) has `1s` on
+18 to 21, 43 to 50, 53 to 56 and 118 to 126. `catwalk_short@0` (bit 53) has `1s` on
 `+z`, and air shows `0s` there, so it accepts no air at (5, 3, 6); what it
 does accept there is solid, the rock faces of other catwalks, ladders,
 stairs and tunnels, and `backing@0` (bit 57, its plate and `1s` on `−z`,
@@ -305,6 +315,19 @@ record at (5, 3, 6) drops every tile whose `blocked_faces` has `+z` (bit 4):
 whose parapet runs along `+z`. Floor and open floor block no face, so the
 mask is never empty.
 
+**Catwalk faces (#187).** A catwalk record at (5, 3, 5) with catwalk
+records at (4, 3, 5) and (5, 3, 6) turns there, so its walk crosses `-x`
+and `+z`. Dropping the tiles that block either leaves the twelve with no
+railing or plate there: `catwalk@0` and `@3`, the same rotations of
+`catwalk_end`, `catwalk_end_f` and `catwalk_short`, `catwalk_corner@3`,
+`catwalk_t@0` and `@3` and `catwalk_cross`, bits 18, 21, 43, 46, 47, 50,
+53, 56, 121, 122, 125 and 126. The closing step keeps the tiles that close
+`+x` and `-z` as well. `catwalk@3` blocks `+x` with its railing but shows
+`4f` on `-z`, an open run face; `catwalk@0` shows `4` on `+x`; the T pieces
+and the cross have a gate on one of them. Only `catwalk_corner@3`, whose
+plates block both faces, is left, so the turn takes the corner platform
+and the two catwalks beside it meet it with an open end.
+
 **Record pair.** A bridge at (2, 2, 2) under a tunnel at (2, 3, 2): the
 bridge tiles' `+y` sockets are `0i`, so their union in `+y` holds only
 tiles with `0i` below, and both tunnels have `1i` below. The intersection
@@ -320,15 +343,15 @@ removes. The solve returns `FAILED` with `attempts 0` and `inconsistent
 starting domains: cell (4, 4, 4) is left empty by propagating them` in a
 few milliseconds.
 
-**Restarts.** An unconstrained 8³ grid at seed 1502: attempt 0 uses `s =
-hash3_u(1502, (0, 0, 0), 9100)` and contradicts after 332 observations;
+**Restarts.** An unconstrained 8³ grid at seed 2135: attempt 0 uses `s =
+hash3_u(2135, (0, 0, 0), 9100)` and contradicts after 425 observations;
 attempt 1 (salt 9101) solves. With the default 8 attempts the result is
-`SOLVED`, `attempts 2`, `restarts 1`, and `steps` (839) counts the
+`SOLVED`, `attempts 2`, `restarts 1`, and `steps` (933) counts the
 observations of both. With `max_attempts = 1` it is `DEGRADED`: 512 cells
-of tile 1, `attempts 1`, `restarts 1`. Seed 1502 is the first seed that
-restarts at all on the 118-tile set of #182 (seed 374 was on the 61-tile set,
-seed 36 on the 53-tile set before #180); none of seeds 0 to 1717 needs a
-third attempt.
+of tile 1, `attempts 1`, `restarts 1`. Seed 2135 is the first seed that
+solves at its second attempt on the 127-tile set of #187 (seed 1502 was on
+the 118-tile set of #182, seed 374 on the 61-tile set, seed 36 on the
+53-tile set before #180).
 
 ## Propagation design: AC-3, not AC-4
 
@@ -514,6 +537,35 @@ the first 10 cavity and chasm sectors with records at seeds 0 and 1: all 20
 of each solve before and after, and the parapets that stood across a walk
 drop from 24 (cavity) and 7 (chasm) to 0.
 
+**Catwalk turns (#187).** `mise run solver-real --seeds 0,1 --count 0
+--shaft 10` runs the first 10 shaft sectors with records at seeds 0 and 1;
+blocked faces count catwalk records too (`count_blocked_walk_faces`, which
+follows `FACE_FILTERED`):
+
+| Tileset and domains | Shaft solved / at the first attempt | Failing before an attempt | Blocked walk faces |
+| --- | ---: | ---: | ---: |
+| before (118 tiles, 1 m catwalk deck, no catwalk face filter) | 20 / 15 | 0 | 1 427 |
+| platforms on backing cells (`1s` closed sides), face filter only | 20 / 20 | 0 | 0 |
+| platforms on backing cells, face and close filters | 17 / 16 | 3 | 0 |
+| platforms with their own plates, face and close filters (127 tiles, committed) | 20 / 19 | 0 | 0 |
+
+Most of the 1 427 faces were straight runs: the catwalk railing stood on the
+walk line of its cell. The record shapes of the sample are 752 straight
+cells, 164 T (a branch, a ladder or portal beside a run, or two runs side
+by side), 82 corners, 4 crosses and 2 dead ends. With the plates in
+backing cells, corners of a zigzag walk that touch diagonally ask for two
+plates in one cell and empty it. Without the close filter every sector
+solves, but a platform fits any catwalk record and fills straight runs.
+Over seeds 0 to 4, 20 sectors of each type (`mise run solver-real --solid
+20 --shaft 20`): strata 100 solved, 100 at the first attempt; solid 100,
+99; shafts 100, 99 (seed 1 (-786, -702, -33) at its third attempt), no
+sector failing before an attempt and no blocked walk face.
+`walk-check --all-solving` still walks 84 of 84 at seed 0, and
+`walk-check --catwalk` walks shaft sector (2, -1, 0) from its portal over
+two corner platforms to its hub. A real stratum sector takes about 1.11 s
+in `solver-check`, the 24³ unconstrained solve about 10.0 s, both within
+noise of the 118-tile set. Which corner look to keep is decision #190.
+
 The two-word tables cost time: a real stratum sector takes about 1.07 s in
 `solver-check` against 0.55 s with 61 tiles (1.49 s before the solver's
 two-word propagation was unrolled; results are byte-identical), an 8³ grid
@@ -608,8 +660,9 @@ counting up from 9300 into salts nothing else uses.
   columns, walls) are the next question.
 - **One library past 64 tiles** (#188): the rock pieces of #182 double the
   solve time; per-type libraries would keep one word.
-- **Catwalk turns** (#187): catwalk records still take a railing across a
-  turn.
+- **Catwalk turns** (#190): platforms on their own backing plates with
+  open catwalk ends (#187), or `4`/`4f` corners at about 60 tiles and a
+  third bitset word.
 - **Parapets over open space** (#185): with air under every walk, a floor
   record can only take the open floor, so stratum walks have no parapets.
 - **Native threshold** (#138): 0.63 s mean per successful 24³ attempt,

@@ -36,7 +36,9 @@ const TREADS := 5
 const TREAD := 0.4
 const STAIR_HALF := 0.9
 const TREAD_PLATE := 0.1
-const CATWALK_WIDTH := 1.0
+## Deck width of a catwalk from the rock it hangs on, which keeps its railing
+## CATWALK_WIDTH - H off the walk line, outside the passage strip (#187).
+const CATWALK_WIDTH := 1.4
 const CATWALK_DECK := 0.2
 const RAIL := 0.06
 const CATWALK_END := 0.2
@@ -151,6 +153,8 @@ static func build() -> TileSet3D:
 		_prototype("slab_edge_end", _mesh(_slab_edge_end_boxes(1.0)), 0.5, FAMILY.FLOOR, ["2", "0s", "0i", "1i", "0s", "0s"], 4),
 		_prototype("slab_edge_end_f", _mesh(_slab_edge_end_boxes(-1.0)), 0.5, FAMILY.FLOOR, ["0s", "2f", "0i", "1i", "0s", "0s"], 4),
 		_prototype("stair_open", _mesh(_open_stair_boxes()), 0.5, FAMILY.STAIR, ["0s", "0s", "0i", "0i", "0s", "0s"], 4),
+		# Open at the end, so a walk steps on to a platform, ladder or portal
+		# beside it (#187).
 		_prototype("catwalk_end", _mesh(_catwalk_end_boxes(1.0)), 0.25, FAMILY.CATWALK, ["4", "0s", "0i", "0i", "1s", "0s"], 4),
 		_prototype("catwalk_end_f", _mesh(_catwalk_end_boxes(-1.0)), 0.25, FAMILY.CATWALK, ["0s", "4f", "0i", "0i", "1s", "0s"], 4),
 		# No lintel: over the 0.6 m slab one cell leaves 1.4 m, so the frame is
@@ -203,6 +207,16 @@ static func build() -> TileSet3D:
 		_prototype("portal_tunnel", _mesh(_tunnel_boxes([4, 5], SLAB_TOP)), 0.25, FAMILY.PORTAL_OPENING, _rock_sockets([4, 5], "1i", "1i"), 2),
 		_prototype("portal_tunnel_end", _mesh(_tunnel_boxes([4], SLAB_TOP)), 0.25, FAMILY.PORTAL_OPENING, _rock_sockets([4], "1i", "1i"), 4),
 	])
+	# Where a catwalk walk turns, branches or crosses it steps on to a
+	# platform: a deck on its own backing plates on every side the walk does
+	# not cross, with a railing either side of a 0.8 m gate on every side it
+	# does. The plates are part of the tile, so two platforms touching at a
+	# corner never ask for two plates in one cell; the catwalks around it
+	# meet it with an open end (#187).
+	for shape: String in TUNNEL_SHAPES:
+		var open: Array = TUNNEL_SHAPES[shape]
+		if shape in ["corner", "t", "cross"]:
+			tileset.prototypes.append(_prototype("catwalk_%s" % shape, _mesh(_platform_boxes(open)), 0.25, FAMILY.CATWALK, ["0s", "0s", "0i", "0i", "0s", "0s"], _shape_rotations(open)))
 	return tileset
 
 
@@ -310,21 +324,43 @@ static func _slab_edge_end_boxes(side: float) -> Array[AABB]:
 	]
 
 
-## A catwalk deck that runs out of the cell towards `side` (+1 +x, -1 -x)
-## and stops CATWALK_END short of the other face, with a railing on its open
-## side and across its end. It keeps CATWALK_END off the +z face too, so the
-## rock face it hangs on shows no lopsided profile.
+## A catwalk deck with its railing that runs out of the cell towards `side`
+## (+1 +x, -1 -x) and stops INSET short of the other face, open there so a
+## walk steps on to what is beside it. It keeps CATWALK_END off the +z face
+## too, so the rock face it hangs on shows no lopsided profile.
 static func _catwalk_end_boxes(side: float) -> Array[AABB]:
-	var end := -side * (H - CATWALK_END)
+	var end := -side * (H - INSET)
 	var near := minf(end, side * H)
 	var far := maxf(end, side * H)
-	var back := H - CATWALK_END
-	var boxes: Array[AABB] = [
-		_box(Vector3(near, SLAB_TOP - CATWALK_DECK, H - CATWALK_WIDTH), Vector3(far, SLAB_TOP, back)),
+	return [
+		_box(Vector3(near, SLAB_TOP - CATWALK_DECK, H - CATWALK_WIDTH), Vector3(far, SLAB_TOP, H - CATWALK_END)),
 		_box(Vector3(near, SLAB_TOP, H - CATWALK_WIDTH), Vector3(far, PARAPET_TOP, H - CATWALK_WIDTH + RAIL)),
 	]
-	var post := end if side > 0 else end - RAIL
-	boxes.append(_box(Vector3(post, SLAB_TOP, H - CATWALK_WIDTH + RAIL), Vector3(post + RAIL, PARAPET_TOP, back)))
+
+
+## A catwalk platform open on the side faces `open`: a deck over the whole
+## cell, a BACKING thick full-height plate along every other side face
+## (`_side_boxes`) and, along every open face, a railing either side of a
+## gate as wide as twice a catwalk railing's offset from the walk line. The
+## railings stop INSET short of the faces beside them, so every face shows
+## a mirror-symmetric profile.
+static func _platform_boxes(open: Array) -> Array[AABB]:
+	var gate := CATWALK_WIDTH - H
+	var boxes: Array[AABB] = [_box(Vector3(-H, SLAB_TOP - CATWALK_DECK, -H), Vector3(H, SLAB_TOP, H))]
+	boxes.append_array(_side_boxes(open, -H, H, BACKING))
+	for face: int in open:
+		var axis := face >> 1
+		var across := 2 if axis == 0 else 0
+		for span: Array in [[-(H - INSET), -gate], [gate, H - INSET]]:
+			var from := Vector3.ZERO
+			var to := Vector3.ZERO
+			from.y = SLAB_TOP
+			to.y = PARAPET_TOP
+			from[axis] = H - RAIL if face & 1 == 0 else -H
+			to[axis] = H if face & 1 == 0 else -H + RAIL
+			from[across] = span[0]
+			to[across] = span[1]
+			boxes.append(_box(from, to))
 	return boxes
 
 
