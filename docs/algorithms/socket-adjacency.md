@@ -20,9 +20,12 @@ status: current
 > table is derived once at load time as bitsets. A validation task catches
 > sockets that can never match and tiles that can never be placed. The tile
 > format and the socket string grammar below are implemented
-> (`TilePrototype`, `TileSet3D`); matching, rotation expansion and the table
-> come next. The convention follows [[RESEARCH_WFC]], which takes it from
-> Marian42's infinite city, and is proposed for approval in issue #140.
+> (`TilePrototype`, `TileSet3D`), and so are matching,
+> [[GLOSSARY#Rotation expansion|rotation expansion]] and the
+> [[GLOSSARY#Adjacency table|adjacency table]] (`TileLibrary`); the
+> validation task comes next. The convention follows [[RESEARCH_WFC]], which
+> takes it from Marian42's infinite city, and is proposed for approval in
+> issue #140.
 
 ## Sockets
 
@@ -109,15 +112,21 @@ four rotations.
 
 A tile prototype declares `rotations = 1`, `2` or `4` depending on its own
 symmetry (a column needs one, a straight wall two, a corner four). Each
-generated rotation turns the tile 90° about `y`:
+generated rotation turns the tile one [[GLOSSARY#Quarter turn|quarter turn]]
+about `y`:
 
-- the four horizontal sockets move round one face (the convention to pin in
-  code is counter-clockwise seen from above, as Godot rotates about `+y`:
-  `+x` goes to `-z`, `-z` to `-x`, `-x` to `+z`, `+z` to `+x`);
-- the horizontal labels themselves do not change, because a rotation does not
-  mirror anything;
+- the four horizontal sockets move round one face, counter-clockwise seen
+  from above, as `Basis(Vector3.UP, PI / 2)` turns a vector: `+x` goes to
+  `-z`, `-z` to `-x`, `-x` to `+z`, `+z` to `+x`. This is the order of
+  `EdgeRasteriser` orientations (0 `+x`, 1 `-z`, 2 `-x`, 3 `+z`), so a stair
+  record of orientation k asks for a stair tile turned k quarter turns;
+- the horizontal labels themselves do not change. A turn is a proper
+  rotation: the face and the viewer outside it turn together, so the profile
+  is not mirrored and `3` stays `3`. The `f` flag would only flip under a
+  mirror, and mirrored variants are not generated;
 - both vertical sockets increment their rotation index modulo 4, and `i`
-  stays `i`.
+  stays `i`. Top and bottom indices are counted in the same frame (seen from
+  above), so a landing turned with its stair still matches it.
 
 Mirrored variants are left out for now: they flip mesh winding and normals,
 and the first tileset has no chiral pieces that need them.
@@ -172,6 +181,120 @@ removed yet. Once the cell is B alone (`010`), the neighbour is intersected
 with `100` and must be C. With two 64-bit words per domain, this is a handful
 of CPU instructions per neighbour.
 
+## Expansion and derivation
+
+`TileLibrary.build(tileset)` turns a validated `TileSet3D` into the list of
+rotated tiles and the six-direction table. It is the code of the two
+sections above; this section pins every detail the solver relies on.
+
+### Steps
+
+1. **Validate.** Run `TileSet3D.validate()`. If it reports anything, the
+   library keeps the messages in `errors` and has no tiles; nothing below
+   runs on a broken tileset.
+2. **Expand.** For each prototype in authoring order, for each turn `k` from
+   0 to `rotations - 1`, append one tile. Its index is its position in that
+   order, its label `name@k`, its weight the prototype's full weight
+   (decision #146), and its [[GLOSSARY#Effective socket|effective sockets]]
+   the prototype's sockets turned `k` times:
+   `turned[QUARTER_TURN[face]] = turn(prototype[face])` per turn, where
+   `QUARTER_TURN = [5, 4, 2, 3, 0, 1]` (face index to face index: `+x`→`-z`,
+   `-x`→`+z`, `+y` and `-y` stay, `+z`→`+x`, `-z`→`-x`) and `turn` advances
+   a vertical `N_R` to `N_((R + 1) % 4)`.
+3. **Key the sockets.** Give every socket an integer key, equal for equal
+   sockets: horizontal `2 × (3 × id + kind)` with kind 0 for `N`, 1 for `Ns`,
+   2 for `Nf`; vertical `2 × (5 × id + R + 1) + 1` with `R + 1 = 0` for `Ni`.
+   The *partner key* of a socket is the key of the one socket that matches
+   it: the same key for `Ns`, `N_R` and `Ni`, the key with `f` toggled for
+   `N` and `Nf`. So matching is key equality, no string comparison.
+4. **Exclusion masks.** For each prototype, collect the prototypes it
+   excludes and the ones that exclude it (exclusions apply both ways), and
+   build one bitset with the bits of all their tiles, every rotation.
+5. **Table, per direction `d`.** Group the tiles by the key of their socket
+   on the opposite face `d ^ 1`: key → bitset of tiles showing it. Then for
+   each tile `a`, `allowed[d][a]` is the group of the partner key of `a`'s
+   socket on `d`, with `a`'s exclusion mask cleared.
+
+The table is stored as six flat `PackedInt64Array`s, one per direction,
+`tile_count × word_count` words each, with
+`word_count = ceil(tile_count / 64)`. Tile `a`'s entry starts at
+`a × word_count`; bit `b` lives in word `b >> 6` at position `b & 63`, so
+tile 63 is the sign bit of word 0 and tile 64 bit 0 of word 1.
+`allowed(dir, a)` returns a copy of the entry, `is_allowed(dir, a, b)` reads
+one bit.
+
+Because matching is symmetric and exclusions apply both ways, the table is
+symmetric: `b` is in `allowed[d][a]` exactly when `a` is in
+`allowed[d ^ 1][b]`.
+
+### Worked example: a quarter turn
+
+A prototype with every face different, sockets in face order
+`+x, -x, +y, -y, +z, -z`:
+
+| | `+x` | `-x` | `+y` | `-y` | `+z` | `-z` |
+| --- | --- | --- | --- | --- | --- | --- |
+| prototype (`@0`) | `1` | `2s` | `5_0` | `6_3` | `3f` | `4` |
+| one turn (`@1`) | `3f` | `4` | `5_1` | `6_0` | `2s` | `1` |
+| two turns (`@2`) | `2s` | `1` | `5_2` | `6_1` | `4` | `3f` |
+
+Read the first turn column by column: `+x` of `@1` shows what was on `+z`
+(`3f`), because `+z` goes to `+x`; `-z` shows what was on `+x` (`1`); the
+labels `1`, `2s`, `3f`, `4` are unchanged; `5_0` becomes `5_1` and `6_3`
+wraps to `6_0`. Two turns swap opposite faces. `mise run adjacency-check`
+checks exactly these rows, and that turning each face normal with
+`Basis(Vector3.UP, PI / 2)` lands on the face `QUARTER_TURN` names.
+
+### Worked example: the fixture tileset
+
+`tests/fixtures/tilesets/fixture_tileset.tres` has four prototypes; the wall
+declares `rotations = 2`, so there are 5 tiles and one word per entry:
+
+| index | tile | sockets | `+x` | `+y` | `-y` | `+z` |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | solid@0 | `1s 1s 1i 1i 1s 1s` | 0 | 0, 2 | 0 | 0 |
+| 1 | air@0 | `0s 0s 0i 0i 0s 0s` | 1, 3 | 1 | 1, 2 | 1, 4 |
+| 2 | floor@0 | `2s 2s 0i 1i 2s 2s` | 2 | 1 | 0 | 2 |
+| 3 | wall@0 | `0s 0s 3_0 3_0 3s 3s` | 1, 3 | 3 | 3 | 3 |
+| 4 | wall@1 | `3s 3s 3_1 3_1 0s 0s` | 4 | 4 | 4 | 1, 4 |
+
+Every horizontal socket here is symmetric, so `-x` equals `+x` and `-z`
+equals `+z`. Floor sits on solid (`+y` of solid holds 2, `-y` of floor holds
+0) and has air above. The turned wall moved its `3s` from `±z` to `±x` and
+its tops to `3_1`, so `wall@0` and `wall@1` never stack on each other.
+`mise run adjacency-dump res://tests/fixtures/tilesets/fixture_tileset.tres`
+prints this table, one line per tile.
+
+### Complexity
+
+With `P` prototypes, `n ≤ 4P` tiles and `w = ceil(n / 64)` words: expansion
+is `O(n)` socket parses; the table is `O(6 × n × w)` word writes plus one
+dictionary insert per tile and direction, so it grows with `n² / 64`
+instead of the `6 × n²` pairwise comparisons of the direct rule; exclusions
+add `O(E × n)` for `E` excluded prototype pairs. Memory is `6 × n × w`
+64-bit words: 80 tiles take 960 words, under 8 KB. Built in GDScript, the
+5-tile fixture takes about 0.6 ms and a 66-tile set about 7 ms, once at
+load.
+
+### Determinism
+
+No randomness and no hashing: tile order is authoring order then turn, the
+dictionaries only group tiles and are never iterated for output, and the
+words are plain integers. The same tileset always gives the same indices and
+the same table on every platform, which the solver's seeded choices need
+(see [[wave-function-collapse]]).
+
+### Parameters
+
+| Parameter | Where | Effect |
+| --- | --- | --- |
+| `rotations` | `TilePrototype` | 1, 2 or 4 tiles per prototype, turns 0 to `rotations - 1`. |
+| `sockets` | `TilePrototype` | The six strings turned and matched. |
+| `exclusions` | `TilePrototype` | Prototype names whose tiles are cleared from every entry, both ways. |
+| `weight` | `TilePrototype` | Copied to every rotation unchanged (#146). |
+| `QUARTER_TURN` | `TileLibrary` | The face permutation of one turn; fixed, matches Godot's basis. |
+| `WORD_BITS` | `TileLibrary` | 64, the bits per `PackedInt64Array` word. |
+
 ## Validation
 
 Today `mise run tileset-check` checks only the format: the socket grammar,
@@ -195,16 +318,24 @@ task, planned as `tiles-check`, will run in CI and fail the build on:
    print how often each tile was placed. A tile that never appears usually
    has a weight or socket mistake.
 
-Unit tests cover the matching rules (`s` with `s`, `n` with `nf`, vertical
-rotation indices), a 90° rotation permuting sockets correctly, and the
-two-way consistency of the derived table.
+`mise run adjacency-check` (part of `check`) covers the matching rules (`s`
+with `s`, `N` with `Nf`, vertical rotation indices), the quarter and half
+turn above, the A/B/C worked example, exclusions in every direction and
+rotation, the fixture table, the word layout past 64 tiles, and for every
+table it builds that it equals the direct pairwise rule and is symmetric.
 
 ## Open questions
 
-- **Rotation direction.** The face permutation above has to match how the
-  placement code builds the instance basis (GridMap orthogonal indices, then
-  MultiMesh transforms). One test that places a rotated asymmetric tile next
-  to its partner settles it.
+- **Rotation direction.** Pinned in `TileLibrary.QUARTER_TURN` and checked
+  against `Basis(Vector3.UP, PI / 2)`. The placement code must build the
+  instance basis the same way (GridMap orthogonal indices, then MultiMesh
+  transforms); one test that places a rotated asymmetric tile next to its
+  partner will confirm it.
+- **Weight of a rotation.** Every rotation carries the full prototype
+  weight for now; splitting it by `rotations` is decision #146.
+- **Vertical index of half-turn symmetric tiles.** A `rotations = 2` tile
+  only generates indices `R` and `R + 1`, so a partner authored at `R + 2`
+  never matches although the geometry would; decision #147.
 - **Hand-written or derived socket ids.** Hand-written ids in a resource are
   faster for the box-only placeholder tileset; derived ids from face profiles
   remove a class of authoring bugs once real meshes arrive.
@@ -225,7 +356,9 @@ Sources:
 - Mills, Notes on Wave Function Collapse for 3D
 
 Related notes: [[wave-function-collapse]], [[model-synthesis-and-sectors]],
-[[RESEARCH_WFC]], [[MEGASTRUCTURE_CONCEPT]] (tile vocabulary).
+[[RESEARCH_WFC]] (section 2, the convention and the derivation),
+[[MEGASTRUCTURE_CONCEPT]] (tile vocabulary). Terms: [[GLOSSARY#Socket]],
+[[GLOSSARY#Bitset]], [[GLOSSARY#Tile library]], [[GLOSSARY#Exclusion list]].
 
-Code: [[tileset]] (the resource format and socket parser); the matching
-and the table are not written yet.
+Code: [[tileset]] (the resource format, the socket parser and
+`TileLibrary`, the expansion and the table).
