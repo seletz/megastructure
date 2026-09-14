@@ -3,7 +3,7 @@ extends RefCounted
 ## The walkable graph: portals on the faces between adjacent sectors, one
 ## interior node per non-solid sector and the edges that connect them.
 ##
-##     var graph := WalkableGraph.new(seed)          # default Skeleton
+##     var graph := WalkableGraph.new(seed)          # default Skeleton and scheme
 ##     var p := graph.portal(Vector3i(0, 0, 0), Vector3i(1, 0, 0))
 ##     var n := graph.interior_node(Vector3i(0, 0, 0))
 ##     var edges := graph.edges_for_sector(Vector3i(0, 0, 0))
@@ -24,14 +24,25 @@ extends RefCounted
 ## its terminals (the non-solid sectors and the sectors the boundary edges
 ## land on), plus hashed loops. Edges through solid sectors are tunnels.
 ## Between face-adjacent regions, `boundary_edges` keyed on the lower region
-## adds at least one edge per shared face. A region's edges read the sector
-## types of the region and of the sector layers across its six faces, never
-## another region's edges (docs/decisions/0017).
+## adds the lightest pair of a shared face; `boundary_scheme` decides whether
+## every face gets one or only the faces a region-level spanning tree of the
+## 2^3 region blocks around the face needs. A region's edges read sector types
+## of the region and of nearby regions, never another region's edges
+## (docs/decisions/0017).
 ##
 ## Sector i spans cells i * n to (i + 1) * n with n = cells_per_sector, so the
 ## sector edge is taken as n * CELL_SIZE (48 m by default). Positions in
 ## metres are exact on the grid as long as they fit a float32, about
 ## +-2^25 m; `face_cell` and `local_cell` stay exact everywhere.
+
+## Which faces between regions get their lightest pair (docs/decisions/0017):
+## PER_FACE every face; PER_REGION_PAIR every face with an open-open pair,
+## the others only where a block tree needs them; SKIP_SOLID_FACES every face
+## with a non-solid sector, faces solid on both sides only where a block tree
+## needs them.
+enum BoundaryScheme { PER_FACE, PER_REGION_PAIR, SKIP_SOLID_FACES }
+
+const BOUNDARY_SCHEME_NAMES: Array[String] = ["per_face", "per_region_pair", "skip_solid_faces"]
 
 ## What the fill layer builds along an edge.
 enum EdgeKind { CORRIDOR, STAIR, LADDER, BRIDGE, CATWALK, TUNNEL }
@@ -65,6 +76,20 @@ const WEIGHT_TUNNEL_HORIZONTAL := 3
 const WEIGHT_TUNNEL_HORIZONTAL_SOLID := 4
 const WEIGHT_TUNNEL_VERTICAL := 5
 const WEIGHT_TUNNEL_VERTICAL_SOLID := 6
+## With `void_wall_tunnels_last`, a one-solid tunnel whose open end is a
+## cavity or chasm takes these classes, above every other tunnel, so a tree
+## drills from strata and shafts first and opens a chasm or cavity wall only
+## where the chasm or cavity has no other way out.
+const WEIGHT_TUNNEL_VOID_WALL_HORIZONTAL := 7
+const WEIGHT_TUNNEL_VOID_WALL_VERTICAL := 8
+
+## Face classes for the boundary schemes: some pair open on both sides, some
+## sector non-solid but no open-open pair, all eighteen sectors solid.
+const FACE_OPEN := 0
+const FACE_WALL := 1
+const FACE_SOLID := 2
+## The face and region caches are dropped when they grow past this size.
+const MAX_CACHED_FACES := 100000
 
 ## Portal salts: the first and second face coordinate of an x, y and z face.
 ## The height salts 140 (x face) and 145 (z face) are no longer drawn: those
@@ -165,11 +190,29 @@ class Edge:
 
 var world_seed: int
 var skeleton: Skeleton
+## Which region faces get a boundary edge.
+var boundary_scheme := BoundaryScheme.PER_FACE:
+	set(value):
+		boundary_scheme = value
+		_clear_caches()
+## When true a tunnel from a cavity or chasm into solid weighs more than every
+## other tunnel, so trees drill from strata and shafts first.
+var void_wall_tunnels_last := false:
+	set(value):
+		void_wall_tunnels_last = value
+		_clear_caches()
+
+## Vector4i(region, axis) -> PackedInt64Array [face class, best pair, weight].
+var _face_cache := {}
+## Region -> whether it holds a non-solid sector.
+var _occupied_cache := {}
 
 
-func _init(seed_value: int, sector_skeleton: Skeleton = null) -> void:
+func _init(seed_value: int, sector_skeleton: Skeleton = null, scheme := BoundaryScheme.PER_FACE, void_walls_last := false) -> void:
 	world_seed = seed_value
 	skeleton = sector_skeleton if sector_skeleton != null else Skeleton.new()
+	boundary_scheme = scheme
+	void_wall_tunnels_last = void_walls_last
 
 
 static func edge_kind_name(kind: EdgeKind) -> String:
@@ -355,15 +398,16 @@ func edges_in_region(region: Vector3i) -> Array[Edge]:
 
 ## The edges across the face between `region` and the region above it along
 ## `axis`, keyed on `region`: the lightest pair of the face (open-open before
-## tunnels, same weights as inside a region) plus hashed loops between the
-## other open-open pairs, ordered by `a`. Never empty.
+## tunnels, same weights as inside a region) when `boundary_scheme` keeps the
+## face, plus hashed loops between the other open-open pairs, ordered by `a`.
+## Empty only for a face without open-open pairs that the scheme skips.
 func boundary_edges(region: Vector3i, axis: int) -> Array[Edge]:
 	var origin := region * REGION_SECTORS
 	var others := _other_axes(axis)
-	var best := -1
-	var best_weight := 0
-	var pairs: Array[Vector3i] = []
-	var pair_types: Array[PackedInt32Array] = []
+	var face := _face(region, axis)
+	var keep := _face_kept(region, axis)
+	var edges: Array[Edge] = []
+	var p := 0
 	for u in REGION_SECTORS:
 		for v in REGION_SECTORS:
 			var local := Vector3i.ZERO
@@ -371,21 +415,24 @@ func boundary_edges(region: Vector3i, axis: int) -> Array[Edge]:
 			local[others[0]] = u
 			local[others[1]] = v
 			var a := origin + local
-			var type_a := skeleton.sector_type(world_seed, a)
-			var type_b := skeleton.sector_type(world_seed, a + _UNITS[axis])
-			var weight := _weight(a, type_a, type_b, axis)
-			if best < 0 or weight < best_weight:
-				best = pairs.size()
-				best_weight = weight
-			pairs.append(a)
-			pair_types.append(PackedInt32Array([type_a, type_b]))
-	var edges: Array[Edge] = []
-	for p in pairs.size():
-		var type_a := pair_types[p][0] as Skeleton.SectorType
-		var type_b := pair_types[p][1] as Skeleton.SectorType
-		if p == best or _is_loop(pairs[p], type_a, type_b, axis):
-			edges.append(_make_edge(pairs[p], axis, type_a, type_b))
+			var lightest := p == face[1] and keep
+			# The loop hash is cheaper than two sector types, so it goes first.
+			if lightest or (face[0] == FACE_OPEN and _is_loop_cell(a, axis)):
+				var type_a := skeleton.sector_type(world_seed, a)
+				var type_b := skeleton.sector_type(world_seed, a + _UNITS[axis])
+				if lightest or _is_loop(a, type_a, type_b, axis):
+					edges.append(_make_edge(a, axis, type_a, type_b))
+			p += 1
 	return edges
+
+
+## Whether the face between `region` and the region above it along `axis`
+## gets its lightest pair. PER_FACE keeps every face. The other schemes keep a
+## face unconditionally when it is open (PER_REGION_PAIR) or holds a non-solid
+## sector (SKIP_SOLID_FACES), and any other face only when the spanning tree
+## of one of the four 2^3 region blocks containing it takes it.
+func boundary_face_kept(region: Vector3i, axis: int) -> bool:
+	return _face_kept(region, axis)
 
 
 ## Every edge touching a sector: the edges of its region and the boundary
@@ -407,6 +454,148 @@ func edges_for_sector(cell: Vector3i) -> Array[Edge]:
 				if edge.a == cell:
 					edges.append(edge)
 	return edges
+
+
+## [face class, index of the lightest of the nine pairs in u, v order, its
+## weight] for the face between `region` and the region above it along `axis`.
+func _face(region: Vector3i, axis: int) -> PackedInt64Array:
+	var key := Vector4i(region.x, region.y, region.z, axis)
+	if _face_cache.has(key):
+		return _face_cache[key]
+	var origin := region * REGION_SECTORS
+	var others := _other_axes(axis)
+	var best := -1
+	var best_weight := 0
+	var open := false
+	var solid := true
+	var p := 0
+	for u in REGION_SECTORS:
+		for v in REGION_SECTORS:
+			var local := Vector3i.ZERO
+			local[axis] = REGION_SECTORS - 1
+			local[others[0]] = u
+			local[others[1]] = v
+			var a := origin + local
+			var type_a := skeleton.sector_type(world_seed, a)
+			var type_b := skeleton.sector_type(world_seed, a + _UNITS[axis])
+			var solid_a := type_a == Skeleton.SectorType.SOLID
+			var solid_b := type_b == Skeleton.SectorType.SOLID
+			open = open or (not solid_a and not solid_b)
+			solid = solid and solid_a and solid_b
+			var weight := _weight(a, type_a, type_b, axis)
+			if best < 0 or weight < best_weight:
+				best = p
+				best_weight = weight
+			p += 1
+	var face_class := FACE_OPEN if open else (FACE_SOLID if solid else FACE_WALL)
+	var result := PackedInt64Array([face_class, best, best_weight])
+	if _face_cache.size() >= MAX_CACHED_FACES:
+		_face_cache.clear()
+	_face_cache[key] = result
+	return result
+
+
+func _face_unconditional(region: Vector3i, axis: int) -> bool:
+	match boundary_scheme:
+		BoundaryScheme.PER_REGION_PAIR:
+			return _face(region, axis)[0] == FACE_OPEN
+		BoundaryScheme.SKIP_SOLID_FACES:
+			return _face(region, axis)[0] != FACE_SOLID
+	return true
+
+
+func _face_kept(region: Vector3i, axis: int) -> bool:
+	if _face_unconditional(region, axis):
+		return true
+	var others := _other_axes(axis)
+	for du in [-1, 0]:
+		for dv in [-1, 0]:
+			var block := region
+			block[others[0]] += du
+			block[others[1]] += dv
+			if _block_tree_takes(block, region, axis):
+				return true
+	return false
+
+
+## True when the spanning tree of the 2^3 regions at `block` takes the face
+## between `region` and the region above it along `axis`. Unconditional faces
+## join first; the others follow by their lightest pair's weight, then by
+## index, and Kruskal keeps those that join two groups. Tree faces leading
+## only to regions without a non-solid sector are pruned, so the tree joins
+## the occupied regions of the block and nothing else.
+func _block_tree_takes(block: Vector3i, region: Vector3i, axis: int) -> bool:
+	# Region index in the block: x * 4 + y * 2 + z. Faces as [weight, index, axis].
+	var parent := PackedInt32Array([0, 1, 2, 3, 4, 5, 6, 7])
+	var degree := PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0])
+	var candidates: Array[PackedInt64Array] = []
+	for i in 8:
+		var local := Vector3i(i >> 2, (i >> 1) & 1, i & 1)
+		for k in 3:
+			if local[k] != 0:
+				continue
+			var j := i + (4 >> k)
+			if _face_unconditional(block + local, k):
+				degree[i] += 1
+				degree[j] += 1
+				parent[_find(parent, i)] = _find(parent, j)
+			else:
+				candidates.append(PackedInt64Array([_face(block + local, k)[2], i, k]))
+	candidates.sort_custom(_lighter)
+	var tree: Array[Vector2i] = []
+	for candidate in candidates:
+		var i := int(candidate[1])
+		var k := int(candidate[2])
+		var j := i + (4 >> k)
+		var ri := _find(parent, i)
+		var rj := _find(parent, j)
+		if ri == rj:
+			continue
+		parent[ri] = rj
+		tree.append(Vector2i(i, k))
+		degree[i] += 1
+		degree[j] += 1
+	var in_tree := {}
+	for key in tree:
+		in_tree[key] = true
+	var pruned := true
+	while pruned:
+		pruned = false
+		for key in tree:
+			if not in_tree[key]:
+				continue
+			var i := key.x
+			var j := i + (4 >> key.y)
+			for end: int in [i, j]:
+				if degree[end] == 1 and not _occupied(block + Vector3i(end >> 2, (end >> 1) & 1, end & 1)):
+					in_tree[key] = false
+					degree[i] -= 1
+					degree[j] -= 1
+					pruned = true
+					break
+	var offset := region - block
+	return in_tree.get(Vector2i((offset.x * 2 + offset.y) * 2 + offset.z, axis), false)
+
+
+## Whether a region holds a non-solid sector.
+func _occupied(region: Vector3i) -> bool:
+	if _occupied_cache.has(region):
+		return _occupied_cache[region]
+	var origin := region * REGION_SECTORS
+	var result := false
+	for i in REGION_SECTORS * REGION_SECTORS * REGION_SECTORS:
+		if not _is_solid(origin + _local(i)):
+			result = true
+			break
+	if _occupied_cache.size() >= MAX_CACHED_FACES:
+		_occupied_cache.clear()
+	_occupied_cache[region] = result
+	return result
+
+
+func _clear_caches() -> void:
+	_face_cache.clear()
+	_occupied_cache.clear()
 
 
 func _is_solid(cell: Vector3i) -> bool:
@@ -466,10 +655,14 @@ func _weight(lower: Vector3i, type_a: Skeleton.SectorType, type_b: Skeleton.Sect
 		key = Vector3i(lower.x, _floor_div(lower.y, VERTICAL_RUN_SECTORS), lower.z)
 		if solid == 0:
 			weight_class = WEIGHT_VOID_VERTICAL if _vertical_void(type_a) and _vertical_void(type_b) else WEIGHT_OPEN_VERTICAL
+		elif solid == 1 and void_wall_tunnels_last and (is_void_wall(type_a) or is_void_wall(type_b)):
+			weight_class = WEIGHT_TUNNEL_VOID_WALL_VERTICAL
 		else:
 			weight_class = WEIGHT_TUNNEL_VERTICAL if solid == 1 else WEIGHT_TUNNEL_VERTICAL_SOLID
 	elif solid == 0:
 		weight_class = WEIGHT_OPEN_HORIZONTAL
+	elif solid == 1 and void_wall_tunnels_last and (is_void_wall(type_a) or is_void_wall(type_b)):
+		weight_class = WEIGHT_TUNNEL_VOID_WALL_HORIZONTAL
 	else:
 		weight_class = WEIGHT_TUNNEL_HORIZONTAL if solid == 1 else WEIGHT_TUNNEL_HORIZONTAL_SOLID
 	return (weight_class << 32) | Hash.hash3_u(world_seed, key, _WEIGHT_SALTS[axis])
@@ -479,6 +672,11 @@ func _weight(lower: Vector3i, type_a: Skeleton.SectorType, type_b: Skeleton.Sect
 func _is_loop(lower: Vector3i, type_a: Skeleton.SectorType, type_b: Skeleton.SectorType, axis: int) -> bool:
 	if type_a == Skeleton.SectorType.SOLID or type_b == Skeleton.SectorType.SOLID:
 		return false
+	return _is_loop_cell(lower, axis)
+
+
+## The loop hash alone, before the sector types are read.
+func _is_loop_cell(lower: Vector3i, axis: int) -> bool:
 	var chance := LOOP_PROBABILITY_VERTICAL if axis == Vector3i.AXIS_Y else LOOP_PROBABILITY_HORIZONTAL
 	return Hash.hash3(world_seed, lower, _LOOP_SALTS[axis]) < chance
 
@@ -507,6 +705,11 @@ func _pick(key: Vector3i, salt: int, lo: int, hi: int) -> int:
 	if hi <= lo:
 		return lo
 	return lo + Hash.hash3_u(world_seed, key, salt) % (hi - lo + 1)
+
+
+## Cavity and chasm sectors: open space whose solid neighbours are its walls.
+static func is_void_wall(type: Skeleton.SectorType) -> bool:
+	return type == Skeleton.SectorType.CAVITY or type == Skeleton.SectorType.CHASM
 
 
 static func _vertical_void(type: Skeleton.SectorType) -> bool:
