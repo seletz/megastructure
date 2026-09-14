@@ -29,23 +29,38 @@ sources:
 > [[GLOSSARY#AC-3|AC-3]], with the union of a domain's allowed sets read
 > from [[GLOSSARY#Byte-sliced table|byte-sliced tables]]. An empty
 > [[GLOSSARY#Domain|domain]] is a [[GLOSSARY#Contradiction|contradiction]]
-> and ends the solve; restarts and pre-collapsed cells come next (#91). On
-> the placeholder tileset an 8³ grid takes about 19 ms and a 24³ sector
-> about 0.63 s in typed GDScript, but only 11 of 20 unconstrained 24³
-> solves finish without a contradiction.
+> and ends the attempt. `SectorDomains` turns the edge rasteriser's records,
+> the sector type and optional [[GLOSSARY#Fixed face|fixed faces]] into the
+> [[GLOSSARY#Starting domains|starting domains]]; the solver propagates them
+> once, fails at once if they cannot hold, and otherwise
+> [[GLOSSARY#Restart|restarts]] with the next attempt seed after a
+> contradiction, up to 8 attempts, before the
+> [[GLOSSARY#All-solid degradation|all-solid degradation]]. On the
+> placeholder tileset an 8³ grid takes about 19 ms and a 24³ attempt about
+> 0.63 s in typed GDScript; every unconstrained 24³ sector of seeds 0 to 19
+> solves within 4 attempts (mean 1.55), but most real sectors' records
+> cannot be tiled with this tileset yet (#159).
 
-This is milestone 0.2.0 item D1 of [[RESEARCH_WFC]] section 7, following
-sections 3 and 4 of the research. Code: [[solver]].
+This is milestone 0.2.0 items D1 (the core) and D2 (pre-collapse and the
+restart policy) of [[RESEARCH_WFC]] section 7, following sections 3 and 4 of
+the research. Code: [[solver]].
 
 ## Interface
 
 ```gdscript
 var library := TileLibrary.build(load("res://resources/tilesets/placeholder.tres"))
+var rasteriser := EdgeRasteriser.new(WalkableGraph.new(seed))
+var built := SectorDomains.for_sector(library, rasteriser, sector)   # optional faces
+if not built.error.is_empty():
+	push_error(built.error)                      # records that cannot hold
 var solver := SectorSolver.new(library, Vector3i(24, 24, 24))
 solver.use_entropy = false                       # the default: MRV
-var result := solver.solve(seed, sector)         # optional third argument: domains
-# result.ok, result.cells (PackedInt32Array), result.steps, result.propagations,
-# result.restarts (0), result.time_usec, result.contradiction_cell, result.error
+solver.max_attempts = 8                          # the default
+var result := solver.solve(seed, sector, built.words)
+# result.outcome (SOLVED, DEGRADED, FAILED), result.ok, result.degraded,
+# result.cells (PackedInt32Array), result.attempts, result.restarts,
+# result.precollapsed, result.steps, result.propagations, result.time_usec,
+# result.contradiction_cell, result.error
 ```
 
 - **Cells** are indexed `x + size.x * (y + size.y * z)`, the layout of
@@ -53,13 +68,91 @@ var result := solver.solve(seed, sector)         # optional third argument: doma
   library (rotation included), empty unless `ok`.
 - **`domains`** (optional) is a `PackedInt64Array` of `cell_count *
   word_count` words ANDed into the starting wave and propagated before the
-  first observation. It is the entry point for
+  first attempt. It is the entry point for
   [[GLOSSARY#Pre-collapsed cell|pre-collapsed cells]] and fixed sector
-  faces: #91 turns edge rasteriser records into it and #92 fixed faces.
-- **`result.restarts`** stays 0: the attempt number is already folded into
-  the per-attempt seed (below), so #91 only has to loop.
+  faces; `SectorDomains` builds it (below), and the face-first boundary
+  solve (#92) will feed the faces.
+- **Outcomes.** `SOLVED`: an attempt filled every cell. `DEGRADED`: all
+  `max_attempts` attempts hit a contradiction and every cell holds the solid
+  tile (`ok` and `degraded` are true). `FAILED`: bad arguments or starting
+  domains that are empty after propagation, with `attempts` 0, no cells and
+  `error` saying which cell. `ok` is true for the first two: the cells are a
+  valid tiling either way.
+- **`result.precollapsed`** lists, ascending, the cells whose starting
+  domain `domains` narrowed (record cells, sector defaults and fixed face
+  cells alike). `steps` and `propagations` add up over all attempts;
+  `contradiction_cell` is the last attempt's.
 
-## Steps
+## Starting domains
+
+`SectorDomains.build(library, size, type, records, faces, support_radius)`
+turns one sector's inputs into the `domains` words:
+
+1. **Check each record.** Its cell lies inside the grid, no other record
+   has the same cell, its orientation suits its family (a stair a yaw 0 to 3,
+   a ladder up, a portal opening a yaw, up or down, every other family 0),
+   and at least one tile matches it. The first failure is the `error`,
+   naming the record.
+2. **Record mask.** A tile matches a record when its prototype's family is
+   the record's family and, for the families with a direction, its rotation
+   turns the prototype's authored forward yaw onto the record's:
+   `(rotation - (yaw - authored)) mod rotations == 0`. A stair is authored
+   climbing +x (authored yaw 0), so its rotation is the record's yaw. A
+   portal opening is authored as a wall along x whose passage runs along z
+   (authored yaw 3), so on a side face its rotation is `yaw + 1` modulo its
+   2 rotations. Floor, bridge, catwalk, ladder and tunnel records, and portal
+   openings in the floor or ceiling, take every rotation of their family.
+3. **Record pairs.** For every two records that are face neighbours, some
+   tile of the first must allow some tile of the second in that direction
+   (the byte union of step 6 below, done once per pair). Otherwise the
+   `error` names both records and the direction: the records are
+   inconsistent whatever the seed.
+4. **Sector default** for every other cell: free in a stratum, the solid
+   tile alone in a solid sector, the air tile alone in a shaft, cavity or
+   chasm. Cells in a [[GLOSSARY#Support column|support column]], a full
+   height column within `support_radius` (default 1, Chebyshev in x and z)
+   of a record's column, stay free, because on the placeholder tileset rock
+   only continues down to the grid bottom and open space only up to the top,
+   so a stair's rock and headroom need whole columns (decision #158).
+5. **Fixed faces** (optional): six arrays in face order +x, −x, +y, −y, +z,
+   −z, each empty (free) or one entry per boundary cell, indexed `u +
+   size_u * v` with u and v the other two axes in xyz order, holding the
+   tile of the neighbour sector's cell across the face or −1. A boundary
+   cell with neighbour tile `n` across face `d` keeps `allowed(d ^ 1, n)`:
+   the tiles `n` accepts from the opposite side. A cell left empty is an
+   `error`.
+
+Starting domains that pass these checks can still be inconsistent across a
+few cells (a floor needs rock below, a bridge two cells below needs open
+space above it). The solver finds that when it propagates them.
+
+## Restart policy
+
+1. **Propagate the starting domains once.** AND `domains` into the full
+   wave, record every narrowed cell in `precollapsed`, fail with `FAILED` on
+   an empty cell, queue the narrowed cells and propagate. An empty domain
+   here is `FAILED` too: the starting domains do not depend on the seed, so
+   no restart could help, and the error says so at once.
+2. **Keep the propagated wave**, counts and keys as the start of every
+   attempt.
+3. **Attempt `a`** (0 to `max_attempts − 1`): restore the kept wave, draw
+   the attempt seed `s = hash3_u(seed, sector, 9100 + a)`, the tie-break
+   priorities and the heap from it, then observe and propagate (steps 4 to 7
+   below, the observation counter starting at 0). All cells filled:
+   `SOLVED`, `attempts = a + 1`.
+4. **Contradiction:** remember the cell, `restarts += 1`, clear the queue
+   and go to the next attempt.
+5. **Degrade** after the last attempt: every cell the library's solid tile
+   (`TileLibrary.solid_tile`), `DEGRADED`. Records and fixed faces are not
+   kept: solid next to solid is always allowed, while record cells beside
+   solid would break sockets on this tileset (decision #157). The caller
+   logs the sector.
+
+`max_attempts` is clamped to 1 to 100, so the attempt salts stay below the
+tie-break salt. With `max_attempts = 1` a solve behaves as before #91 except
+that a contradiction degrades instead of returning no cells.
+
+## Steps of one attempt
 
 1. **Build once per solver** (about 4 ms for the placeholder set): the
    border bits of every cell (which of the six neighbours exist), the full
@@ -69,11 +162,12 @@ var result := solver.solve(seed, sector)         # optional third argument: doma
    byte. The same layout holds the popcount, summed integer weight and
    summed `w log w` of each byte value.
 2. **Reset.** Attempt seed `s = hash3_u(seed, sector, 9100 + attempt)`. Every
-   cell gets the full domain (ANDed with `domains` if given), its tile count
-   and a [[GLOSSARY#Tie-break priority|tie-break priority]]
+   cell starts from the propagated starting wave (the full domain without
+   `domains`) with its tile count and gets a
+   [[GLOSSARY#Tie-break priority|tie-break priority]]
    `hash3_u(s, cell position, 9200)`.
-3. **Starting domains.** If `domains` is given, fail on any empty cell,
-   queue every cell with fewer than all tiles and propagate (step 6).
+3. **Starting domains** were propagated once before the first attempt
+   (Restart policy, step 1).
 4. **Heap.** Put every open cell (count above 1) into an
    [[GLOSSARY#Indexed heap|indexed min-heap]]
    keyed by `count << 32 | priority`, ties by cell index.
@@ -122,6 +216,41 @@ hash above `2000 / 3000` of the range would have reached C.
 keys `3·2³² + 7`, `2·2³² + 9` and `2·2³² + 4`: the third cell is observed
 first (fewest tiles, lowest priority among equals).
 
+## Worked example: records, restarts and degradation
+
+**Tiles.** The placeholder library numbers its 30 tiles air 0, solid 1,
+floor 2, slab_edge 3 to 6, column 7, wall 8 and 9, wall_doorway 10 and 11,
+stair 12 to 15, bridge 16 and 17, catwalk 18 to 21, ladder 22 to 25, tunnel
+26 and 27, portal_opening 28 and 29.
+
+**Record masks.** A stair record with yaw 1 (climbing −z) matches only
+`stair@1`, bit 13: `(1 − (1 − 0)) mod 4 = 0`. A portal opening on the +x
+face has yaw 0: `(r − (0 − 3)) mod 2 = (r + 3) mod 2 = 0` holds for `r = 1`,
+so it matches `portal_opening@1`, bit 29, the wall along z with its passage
+along x. On the −z face (yaw 1) it matches bit 28. A floor record matches
+bits 2 to 6, floor and every slab edge.
+
+**Record pair.** A floor at (2, 2, 2) under a stair at (2, 3, 2): the
+floor tiles' `+y` sockets are all `0i`, so their union in `+y` holds only
+tiles with `0i` below (air, column, bridge, catwalk, ladder, wall_doorway,
+portal_opening), and every stair has `1i` below. The intersection is empty,
+so `build` returns `Record((2, 2, 2) floor 0 …) and Record((2, 3, 2) stair 0
+…) cannot touch across +y` without touching the solver.
+
+**Inconsistent across cells.** A bridge at (4, 2, 4) and a floor at
+(4, 4, 4) are not neighbours, so the pair check passes. Propagating them
+narrows (4, 3, 4) to tiles with open space below (for the bridge) and rock
+on top (for the floor): none. The solve returns `FAILED` with `attempts 0`
+and `inconsistent starting domains: cell (4, 2, 4) is left empty by
+propagating them` in about half a millisecond.
+
+**Restarts.** An unconstrained 8³ grid at seed 14: attempt 0 uses `s =
+hash3_u(14, (0, 0, 0), 9100)` and contradicts after 234 observations,
+attempt 1 (salt 9101) too; attempt 2 (salt 9102) solves. With the default
+8 attempts the result is `SOLVED`, `attempts 3`, `restarts 2`, and `steps`
+counts the observations of all three. With `max_attempts = 2` it is
+`DEGRADED`: 512 cells of tile 1, `attempts 2`, `restarts 2`.
+
 ## Propagation design: AC-3, not AC-4
 
 [[GLOSSARY#AC-4|AC-4]] support counts are the textbook fast propagator
@@ -168,6 +297,12 @@ bytes:
   `O(log C)` per changed neighbour.
 - **Whole solve:** at most `C` observations and `C·T` domain changes, so
   `O(C·T·(b·k + log C))` in the worst case; measured much lower (below).
+- **With restarts:** one propagation of the starting domains, then at most
+  `max_attempts` attempts, each restoring `C·k` words and redrawing `C`
+  priorities before the work above; a degraded sector costs every attempt.
+- **Starting domains:** `O(R·T)` for `R` record masks, `O(R·6·T·k)` for the
+  record pairs, `O(C·k)` to write the words and `O(F·k)` per fixed face of
+  `F` cells; about 4 ms for a real 24³ sector.
 
 ## Measurements
 
@@ -182,16 +317,36 @@ headless:
 | 24³ | MRV | 11 / 20 | 633 / 654 ms | 10 334 / 137 577 |
 | 24³ | entropy | 16 / 20 | 760 / 1 070 ms | 8 686 / 134 545 |
 
-Failed solves stop at the contradiction, so they are faster. The 24³
-failure rate is what restarts (#91) and the solid policy (#136) must bring
-down; the time is the first input to the native threshold (#138) and the
-benchmark (#93).
+Failed attempts stop at the contradiction, so they are faster. The table
+counts single attempts (`max_attempts = 1`); the time is the first input to
+the native threshold (#138) and the benchmark (#93).
+
+With restarts (default 8 attempts, MRV):
+
+| Run | Solved | Degraded | Failed before an attempt | Attempts |
+| --- | --- | --- | --- | --- |
+| 8³ unconstrained, seeds 0–19 | 20 | 0 | 0 | 17 at the first, 2 at the second, 1 at the third |
+| 24³ unconstrained, seeds 0–19 | 20 | 0 | 0 | 11 × 1, 8 × 2, 1 × 4; mean 1.55, 793 ms mean per sector |
+| 20 real stratum sectors with records, seed 0 | 6 | 0 | 14 | 4, 2, 6, 8, 3, 2; mean 4.17 over the solved |
+
+Of the 14 real sectors that fail, 4 are rejected by the record pair check
+(a floor beside a portal opening's wall side, a floor over a stair, a stair
+beside a portal's wall side) and 10 empty a cell when their records
+propagate, mostly on a sector face where a portal opening's wall plane meets
+another record. Records need about three times the attempts of an empty
+grid. Sampled solid, shaft, cavity and chasm sectors all fail before an
+attempt (tunnel corners, walls beside portal openings, catwalks and ladders
+beside openings). These are mismatches between the rasteriser and the
+placeholder tileset, not solver failures (#159). `mise run solver-check`
+prints the real-sector table; `mise run solver-sector <x> <y> <z>`
+reproduces one sector.
 
 ## Determinism
 
 - Every random value is `Hash.hash3_u`: the attempt seed from `(seed,
-  sector)`, the tie-break from `(attempt seed, cell position)`, the tile
-  draw from `(attempt seed, cell position, step)`. No
+  sector, attempt)`, the tie-break from `(attempt seed, cell position)`, the
+  tile draw from `(attempt seed, cell position, step)`, the step counted
+  from 0 in every attempt. No
   `RandomNumberGenerator`, no `Dictionary` iteration, no floats in the
   default path: weights become integers once, and the draw is an integer
   multiply-shift (a bias below `total / 2³²`, which settles the modulo bias
@@ -202,6 +357,13 @@ benchmark (#93).
   requires identical cells, and compares the seed 0 SHA-256 with
   [[solver_reference_seed0]], so a change to the hash, the tileset, the
   library or the solver that alters the output fails `check`.
+- **Restarts** start every attempt from the same propagated starting wave
+  and nothing of a failed attempt survives but the counters, so attempt `a`
+  gives the same cells whether it runs first or after `a` failures, and the
+  degradation is a constant. `SectorDomains` iterates records in their given
+  order and cells in index order; its `Dictionary` lookups are by cell and
+  never iterated. `solver-check` repeats a restarted and a degraded solve on
+  a second instance.
 - **Entropy mode** computes `log` on doubles. Within one binary it is
   reproducible, but `log` may differ in the last bit between C libraries,
   so it is not guaranteed bit-identical across platforms or a native port.
@@ -213,12 +375,15 @@ benchmark (#93).
 | --- | --- | --- |
 | `size` | `Vector3i(24, 24, 24)` | Cells per axis; tests use 8³. |
 | `use_entropy` | false | Shannon entropy instead of tile count as the heap key. |
+| `max_attempts` | `DEFAULT_MAX_ATTEMPTS` = 8 | Attempts before the all-solid degradation, clamped to 1..`ATTEMPT_LIMIT` (100). |
 | `ATTEMPT_SALT` | 9100 (+ attempt, below 100) | Attempt seed from `(seed, sector)`. |
 | `TIE_SALT` | 9200 | Per-cell tie-break priority. |
 | `CHOICE_SALT` | 9300 (+ step) | Weighted tile draw of the observation `step`. |
 | `WEIGHT_SCALE` | 1000 | Fixed-point tile weights; weights have 0.001 steps. |
 | `MAX_TOTAL_WEIGHT` | 2³¹ − 1 | Largest summed domain weight (an error beyond). |
 | `ENTROPY_SCALE` | 2²⁴ | Fixed-point scale of the entropy key. |
+| `SectorDomains.SUPPORT_RADIUS` | 1 | Chebyshev radius in x and z of the free support columns around records in solid and void sectors. |
+| `SectorDomains.AUTHORED_YAW` | stair 0, portal opening 3 | Forward yaw of the prototype at rotation 0 for the families whose rotation follows the record. |
 
 The salts sit above every other salt in the project (the tile placement of
 `tiles-check` uses 8701 to 8703), and each counter has its own range: up
@@ -229,17 +394,23 @@ counting up from 9300 into salts nothing else uses.
 
 - **MRV or entropy** (#137): entropy solved 16 of 20 sectors against 11
   of 20 at 24³ on the placeholder set, at 20 % more mean time.
-- **Restarts and the solid policy** (#91, #136): at this failure rate a 24³
-  sector needs several attempts; a more universal solid tile would lower it.
-- **Native threshold** (#138): 0.63 s mean per successful 24³ solve, before
-  restarts; a failed attempt costs up to that again.
+- **The solid policy** (#136): restarts solve every unconstrained sector
+  measured; records raise the attempts to about 4 per solved sector.
+- **Records against the tileset** (#159): most real sectors fail before an
+  attempt.
+- **What degradation keeps** and whether inconsistent sectors degrade
+  instead of failing (#157).
+- **Default domains** of solid and void sectors (#158).
+- **Native threshold** (#138): 0.63 s mean per successful 24³ attempt,
+  0.79 s per unconstrained sector with restarts.
 
 ## References
 
 - [[wave-function-collapse]]: the algorithm explained, with the sea, coast
   and land example.
 - [[socket-adjacency]]: where the allowed bitsets come from.
-- [[RESEARCH_WFC]], sections 1, 3, 4 and 7 (D1).
+- [[RESEARCH_WFC]], sections 1, 3, 4 and 7 (D1, D2).
+- [[edge-rasteriser]]: the records the starting domains come from.
 - [[0010-near-universal-solid-tile-with-seeded-restarts]],
   [[0011-typed-gdscript-solver-first]].
 - Papers: [[gumin-2016-wavefunctioncollapse]],

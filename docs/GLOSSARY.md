@@ -84,6 +84,17 @@ materials; see `concrete_albedo` and `metal_albedo` in
 
 See also: [[MEGASTRUCTURE_CONCEPT]].
 
+### All-solid degradation
+
+What a sector solve returns when every attempt ends in a contradiction:
+every cell holds the solid tile. It is always a valid tiling, because solid
+may sit next to solid, but it has no path through the sector.
+
+In this project: `SectorSolver.Outcome.DEGRADED`, after `max_attempts`
+attempts; records and fixed faces are not kept (decision #157).
+
+See also: [[sector-solver#Restart policy]], Restart, Solid tile.
+
 ### Ambient occlusion
 
 A darkening of creases, corners and crevices, where surrounding geometry
@@ -482,6 +493,17 @@ In this project: `grain_amount` and `grain_fps` in
 [post.gdshaderinc](../shaders/include/post.gdshaderinc), off by default
 because it flickers at half render resolution
 ([[0013-film-grain-off-by-default]]).
+
+### Fixed face
+
+A sector boundary face whose neighbour tiles are already known, so the
+boundary cells may only hold tiles those neighbours accept.
+
+In this project: an optional argument of `SectorDomains.build`, one tile
+index or -1 per boundary cell of each of the six faces; the face-first
+boundary solve (#92) will provide it.
+
+See also: [[sector-solver#Starting domains]], Face-first boundary solve.
 
 ### Fog
 
@@ -892,6 +914,9 @@ See also: [[sector-skeleton-and-walkable-graph]], [[MEGASTRUCTURE_CONCEPT]],
 A cell whose options are fixed or narrowed before the solver runs, for example
 along a path or at a sector boundary.
 
+In this project: every cell whose starting domain `SectorDomains` narrowed,
+listed by the solver in `Result.precollapsed`.
+
 See also: [[MEGASTRUCTURE_CONCEPT]], Domain restriction.
 
 ### Preset
@@ -966,8 +991,10 @@ See also: [[PLAN_0.1.0]].
 
 Discarding a failed solve and starting again with a different sub-seed.
 
-In this project: capped at a few attempts per sector, then all-solid
-degradation fills the rest.
+In this project: `SectorSolver` retries from the propagated starting
+domains with attempt seed `hash3_u(seed, sector, 9100 + attempt)`, up to
+`max_attempts` (8), then returns the all-solid degradation
+([[sector-solver#Restart policy]]).
 
 See also: [[RESEARCH_WFC]], Contradiction.
 
@@ -1143,6 +1170,18 @@ In this project: steps are shortened by `step_scale` for safety.
 
 See also: Ray marching, Lower bound.
 
+### Starting domains
+
+The domains every cell holds before the first observation of a solve: the
+full tile set narrowed by pre-collapsed cells, sector defaults and fixed
+faces, then propagated.
+
+In this project: built by `SectorDomains`, propagated once per solve and
+restored at every restart. If propagating them empties a cell, the solve
+fails at once, since no seed can help.
+
+See also: [[sector-solver#Starting domains]], Domain, Pre-collapsed cell.
+
 ### Stratum
 
 A horizontal habitable layer with a 6 m pitch; also the default sector type
@@ -1164,6 +1203,17 @@ A seed derived from the main seed plus an attempt counter, so a restart gets
 different yet still reproducible random choices.
 
 See also: [[MEGASTRUCTURE_CONCEPT]], Restart.
+
+### Support column
+
+A full-height column of cells around a record that keeps every tile
+possible even in a solid or void sector, so the record's rock below or
+headroom above can be tiled.
+
+In this project: the columns within `SectorDomains.SUPPORT_RADIUS` (1,
+Chebyshev in x and z) of a record's column (decision #158).
+
+See also: [[sector-solver#Starting domains]], Chebyshev distance.
 
 ### Symmetry tag
 
