@@ -133,7 +133,7 @@ salts 9100 and up as usual.
 **Corners.** `corner((0, 0, 0))` is `air@0`, `corner((0, −1, 0))` is
 `bridge@0` and `corner((0, 0, −1))` is `air@0`. None of them has a lower
 level, so each is a 1 × 1 × 1 solve. The open boundary rule leaves only
-tiles that accept air on all six sides: air, column, bridge and ladder.
+tiles that accept air on all six sides: air, column and the two bridges.
 
 **Edges.** The edge along z of (0, 0, 0) covers cells `(3, 3, z)` for z = 0
 to 2. Its +z neighbour is `(3, 3, 3)`, the corner of (0, 0, 0). Its −z
