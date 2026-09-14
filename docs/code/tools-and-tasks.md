@@ -34,8 +34,8 @@ up to date.
 | `run-skeleton` | import | Runs the skeleton viewer scene, wireframe sector cubes around the camera ([[skeleton]]). |
 | `import` | | Imports all assets headlessly and regenerates `.godot/`. |
 | `check-scripts` | import | Parses every `.gd` file with `--check-only` and fails if any has errors. |
-| `smoke` | import | Runs the main scene, then the skeleton viewer scene, headlessly for 60 frames each (120 s timeout per run) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
-| `check` | import, check-scripts, smoke, panel-check, skeleton-histogram, skeleton-stats, graph-check, graph-connectivity, raster-check, tileset-check, adjacency-check, tiles-check-fixtures | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
+| `smoke` | import | Runs the main scene, then the skeleton viewer and the tile contact sheet scenes, headlessly for 60 frames each (120 s timeout per run) and fails if the log contains `SCRIPT ERROR`, `ERROR:`, `Parse Error` or `invalid UID`, printing the offending lines. Catches scene wiring, missing resource and runtime load errors that parsing alone misses. |
+| `check` | import, check-scripts, smoke, panel-check, skeleton-histogram, skeleton-stats, graph-check, graph-connectivity, raster-check, tileset-check, adjacency-check, tiles-check-fixtures, tileset-build-check, tiles-check-placeholder | Additionally loads the project headlessly in editor mode and quits. This is what CI runs ([[ci-and-export]]). |
 | `templates` | | Downloads the export templates for the pinned Godot version into `~/.local/share/godot/export_templates/`, skipping if present. |
 | `export` | import | Exports a release build: `mise run export <preset> <output>`. |
 | `export-debug` | import | Same as `export` with a debug build. |
@@ -67,6 +67,9 @@ up to date.
 | `adjacency-dump` | import | Prints the rotated tiles and adjacency table of a tileset: `mise run adjacency-dump <res://…tres>`; exits 1 with the validation errors of an invalid one ([[tileset]]). |
 | `tiles-check` | import | Validates a tileset beyond its format: `mise run tiles-check <tileset.tres> [--max-contradiction-rate R] [--runs N] [--seed N]`. Fails on dead sockets, directions with no allowed tile, tiles unreachable from air and solid, `Ns` faces whose mesh profile is not mirror-symmetric, a tile never placed in 100 runs on a 6³ grid, or a contradiction rate above the threshold (default 0.5); prints the placement histogram ([[socket-adjacency#Validation]]). Headless. |
 | `tiles-check-fixtures` | import | Self-test of `tiles-check`: the fixture tileset passes, the dead socket fixture fails with exactly its expected categories, placement is deterministic per seed, and the mesh symmetry check passes, fails and skips built meshes ([[tileset]]). Headless; part of `check`. |
+| `tileset-build` | import | Regenerates `resources/tilesets/placeholder.tres` from `resources/tilesets/placeholder_builder.gd`, the box-only placeholder tileset ([[tileset#The placeholder tileset]]). Headless. |
+| `tileset-build-check` | import | Builds the placeholder tileset into a temporary file and fails when the committed resource differs (script ids aside) or when it misses a tile family ([[tileset]]). Headless; part of `check`. |
+| `tiles-check-placeholder` | import | `tiles-check` on the placeholder tileset with the default options ([[socket-adjacency#Worked example: the placeholder tileset]]). Headless; part of `check`. |
 | `panel-check` | import | Clicks every kind of script-backed widget in the skeleton viewer's tweak panel and checks each setter ran ([[tweak-ui]]). Headless; part of `check`. |
 
 `smoke` matches the patterns case-sensitively. Its allow-list for known
@@ -119,7 +122,7 @@ exit with status 1 on any failure.
 - Run the check matching what you changed: `preset-check` for presets and the
   registry, `seed-check` and `screenshot-check` (with a display) for the seed
   and HUD, `hash-vectors` for the hash, `skeleton-histogram` and `skeleton-stats` for the
-  sector grammar, `graph-check`, `graph-connectivity` and `raster-check` for the walkable graph, `tileset-check` for tile resources, `adjacency-check` for rotation expansion and the adjacency table, `panel-check` for the tweak panel widgets, `code-map-check` after adding, moving or removing a source file or
+  sector grammar, `graph-check`, `graph-connectivity` and `raster-check` for the walkable graph, `tileset-check` for tile resources, `adjacency-check` for rotation expansion and the adjacency table, `tileset-build` then `tiles-check-placeholder` for the placeholder tileset, `panel-check` for the tweak panel widgets, `code-map-check` after adding, moving or removing a source file or
   editing these notes.
 - Need to see a change? `mise run shot scenes/main.tscn build/shots/main.png`
   renders it without a window.
