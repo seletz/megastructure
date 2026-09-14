@@ -13,8 +13,8 @@ extends SceneTree
 ## Connectivity, with union-find over all sectors of a window using only the
 ## edges whose both endpoints lie in the window, counting the components
 ## that hold a non-solid sector:
-##   - every region-aligned window of 1^3 and 2^3 regions (3^3 and 6^3
-##     sectors) must have exactly one; the task fails otherwise;
+##   - every region-aligned window of 1^3, 2^3 and 3^3 regions (3^3, 6^3
+##     and 9^3 sectors) must have exactly one; the task fails otherwise;
 ##   - every 5^3 window at every offset is counted and reported, next to the
 ##     count a graph with every open-open adjacency and no tunnels would
 ##     reach. Windows that cut a region cannot be guaranteed one component
@@ -115,7 +115,7 @@ func _init() -> void:
 			_expect(bad.fresh == 0, "%s a fresh graph computes the same region and boundary edges for all %d regions of every seed, %d differ" % [label, SAMPLE_REGIONS ** 3, bad.fresh])
 			_expect(bad.tunnel == 0, "%s regions open-connected without solid terminals have no tunnels, %d do" % [label, bad.tunnel])
 			_expect(bad.sector == 0, "%s edges_for_sector matches region and boundary edges for %d sectors per seed, %d differ" % [label, SECTOR_SAMPLES, bad.sector])
-			_expect(totals.split == 0, "%s %d region-aligned 3^3 and 6^3 windows have one non-solid component, %d have more" % [label, totals.windows, totals.split])
+			_expect(totals.split == 0, "%s %d region-aligned 3^3, 6^3 and 9^3 windows have one non-solid component, %d have more" % [label, totals.windows, totals.split])
 			var tunnel_pct: float = 100.0 * totals.tunnel / maxi(totals.edges, 1)
 			var void_pct: float = 100.0 * totals.void_wall / maxi(totals.edges, 1)
 			var run := float(totals.run_sectors) / maxi(totals.runs, 1)
@@ -240,7 +240,7 @@ func _check_seed(graph: WalkableGraph, fresh: WalkableGraph, name: String, base:
 		run_sectors += length
 
 	var split := 0
-	for size in [1, 2]:
+	for size in [1, 2, 3]:
 		var width: int = size * r
 		for x in range(0, _n - width + 1, r):
 			for y in range(0, _n - width + 1, r):

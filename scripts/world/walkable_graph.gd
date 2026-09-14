@@ -88,7 +88,7 @@ const WEIGHT_TUNNEL_VOID_WALL_VERTICAL := 8
 const FACE_OPEN := 0
 const FACE_WALL := 1
 const FACE_SOLID := 2
-## The face and region caches are dropped when they grow past this size.
+## The face cache is dropped when they grow past this size.
 const MAX_CACHED_FACES := 100000
 
 ## Portal salts: the first and second face coordinate of an x, y and z face.
@@ -204,8 +204,6 @@ var void_wall_tunnels_last := true:
 
 ## Vector4i(region, axis) -> PackedInt64Array [face class, best pair, weight].
 var _face_cache := {}
-## Region -> whether it holds a non-solid sector.
-var _occupied_cache := {}
 
 
 func _init(seed_value: int, sector_skeleton: Skeleton = null, scheme := BoundaryScheme.PER_FACE, void_walls_last := true) -> void:
@@ -521,13 +519,12 @@ func _face_kept(region: Vector3i, axis: int) -> bool:
 ## True when the spanning tree of the 2^3 regions at `block` takes the face
 ## between `region` and the region above it along `axis`. Unconditional faces
 ## join first; the others follow by their lightest pair's weight, then by
-## index, and Kruskal keeps those that join two groups. Tree faces leading
-## only to regions without a non-solid sector are pruned, so the tree joins
-## the occupied regions of the block and nothing else.
+## index, and Kruskal keeps those that join two groups. The tree spans all
+## eight regions, solid ones included, so blocks that overlap in solid
+## regions still join.
 func _block_tree_takes(block: Vector3i, region: Vector3i, axis: int) -> bool:
 	# Region index in the block: x * 4 + y * 2 + z. Faces as [weight, index, axis].
 	var parent := PackedInt32Array([0, 1, 2, 3, 4, 5, 6, 7])
-	var degree := PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0])
 	var candidates: Array[PackedInt64Array] = []
 	for i in 8:
 		var local := Vector3i(i >> 2, (i >> 1) & 1, i & 1)
@@ -536,66 +533,27 @@ func _block_tree_takes(block: Vector3i, region: Vector3i, axis: int) -> bool:
 				continue
 			var j := i + (4 >> k)
 			if _face_unconditional(block + local, k):
-				degree[i] += 1
-				degree[j] += 1
 				parent[_find(parent, i)] = _find(parent, j)
 			else:
 				candidates.append(PackedInt64Array([_face(block + local, k)[2], i, k]))
 	candidates.sort_custom(_lighter)
-	var tree: Array[Vector2i] = []
+	var offset := region - block
+	var target := Vector2i((offset.x * 2 + offset.y) * 2 + offset.z, axis)
 	for candidate in candidates:
 		var i := int(candidate[1])
 		var k := int(candidate[2])
-		var j := i + (4 >> k)
 		var ri := _find(parent, i)
-		var rj := _find(parent, j)
+		var rj := _find(parent, i + (4 >> k))
 		if ri == rj:
 			continue
+		if Vector2i(i, k) == target:
+			return true
 		parent[ri] = rj
-		tree.append(Vector2i(i, k))
-		degree[i] += 1
-		degree[j] += 1
-	var in_tree := {}
-	for key in tree:
-		in_tree[key] = true
-	var pruned := true
-	while pruned:
-		pruned = false
-		for key in tree:
-			if not in_tree[key]:
-				continue
-			var i := key.x
-			var j := i + (4 >> key.y)
-			for end: int in [i, j]:
-				if degree[end] == 1 and not _occupied(block + Vector3i(end >> 2, (end >> 1) & 1, end & 1)):
-					in_tree[key] = false
-					degree[i] -= 1
-					degree[j] -= 1
-					pruned = true
-					break
-	var offset := region - block
-	return in_tree.get(Vector2i((offset.x * 2 + offset.y) * 2 + offset.z, axis), false)
-
-
-## Whether a region holds a non-solid sector.
-func _occupied(region: Vector3i) -> bool:
-	if _occupied_cache.has(region):
-		return _occupied_cache[region]
-	var origin := region * REGION_SECTORS
-	var result := false
-	for i in REGION_SECTORS * REGION_SECTORS * REGION_SECTORS:
-		if not _is_solid(origin + _local(i)):
-			result = true
-			break
-	if _occupied_cache.size() >= MAX_CACHED_FACES:
-		_occupied_cache.clear()
-	_occupied_cache[region] = result
-	return result
+	return false
 
 
 func _clear_caches() -> void:
 	_face_cache.clear()
-	_occupied_cache.clear()
 
 
 func _is_solid(cell: Vector3i) -> bool:
