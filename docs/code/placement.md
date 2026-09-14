@@ -27,7 +27,7 @@ status: current
 > show the two placements put every tile and every collision surface in the
 > same place, and walk the capsule along a route of cells on both.
 
-![Inside sector (-1, 1, -1) at seed 0: floor slab, stair flights, bridges and ladders placed as MultiMeshes](../images/first-sector.png)
+![Inside sector (-1, 1, -1) at seed 0: floor slabs, stair flights, bridges and ladders placed as MultiMeshes, translucent impostor boxes of the sectors beyond](../images/first-sector.png)
 
 ## Files
 
@@ -262,8 +262,8 @@ The player is frozen until the first solved sector with records is placed;
 then its feet go onto that sector's hub cell (the interior node every
 walk of the sector meets at, a floor record) and it walks. While the
 collision around its feet is not added yet, its physics process stops
-(decision #178) and the legend says "holding: collision loading". At seed 0
-on the current tileset 19 of the 27 sectors around the origin solve.
+(decision #178) and the legend says "holding: collision loading". How many
+sectors solve at seed 0 is under [[#Acceptance status]].
 
 | Key | Action |
 | --- | --- |
@@ -350,7 +350,7 @@ the tree. Whether to keep one merged trimesh per sector, split it, cut
 more triangles or build it off the main thread is decision #175; #96
 keeps the merged trimesh for `place` without chunks, and streaming (#98)
 adds chunks of 3³ cells as shapes of 8 bodies per sector over frames,
-4.8 to 6.1 ms each at most ([[sector-streaming#The collision cook strategy]]).
+5.0 to 5.3 ms each at most ([[sector-streaming#The collision cook strategy]]).
 
 ## How to run or check it
 

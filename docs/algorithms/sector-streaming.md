@@ -116,17 +116,17 @@ entry, and eviction removes the first key.
 
 Jolt builds a `ConcavePolygonShape3D` on the main thread when the shape
 first meets a body in a space, about 5 µs per triangle. Measured with
-`mise run collision-cook-bench` on sector (-1, 1, -1) at seed 0 (303 176
-triangles, 512 chunks of 3³ cells with at most 1268 triangles each):
+`mise run collision-cook-bench` on sector (-1, 1, -1) at seed 0 (286 108
+triangles, 512 chunks of 3³ cells with at most 1368 triangles each):
 
 | Strategy | Bodies | Main thread, placing to the end of the frame after | Longest frame | Freeing |
 | --- | ---: | ---: | ---: | ---: |
-| merged (what #96 shipped) | 1 | 1491 to 1543 ms | 1491 to 1543 ms | 0.3 ms |
-| merged, through `PhysicsServer3D` | 1 | 1446 to 1503 ms | 1446 to 1503 ms | 4.9 to 5.0 ms |
-| shape created on a worker thread | 1 | 1503 to 1512 ms | 1503 to 1512 ms | 4.5 to 4.7 ms |
-| one body per chunk, one per frame | 512 | 8538 to 8542 ms | 5.1 to 6.3 ms | 8.2 to 8.3 ms |
-| chunks as shapes of one body, one per frame | 1 | 8533 ms | 6.2 to 6.5 ms | 7.0 to 7.3 ms |
-| **chunks as shapes of 8 bodies, one per frame (shipped)** | 8 | 8533 ms | 4.8 to 6.1 ms | 7.6 to 7.7 ms |
+| merged (what #96 shipped) | 1 | 1446 to 1457 ms | 1446 to 1457 ms | 0.3 ms |
+| merged, through `PhysicsServer3D` | 1 | 1401 to 1439 ms | 1401 to 1439 ms | 4.9 to 5.0 ms |
+| shape created on a worker thread | 1 | 1439 to 1448 ms | 1439 to 1448 ms | 4.2 to 5.1 ms |
+| one body per chunk, one per frame | 512 | 8539 to 8540 ms | 5.1 to 5.5 ms | 8.0 to 8.1 ms |
+| chunks as shapes of one body, one per frame | 1 | 8533 ms | 7.6 ms | 6.7 to 7.0 ms |
+| **chunks as shapes of 8 bodies, one per frame (shipped)** | 8 | 8533 ms | 5.0 to 5.3 ms | 7.8 ms |
 
 Two runs each, headless with the frame pacing sleep off; the chunked rows
 take 8.5 s only because the bench waits for a physics frame (60 per second)
