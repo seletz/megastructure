@@ -27,7 +27,7 @@ status: current
 > show the two placements put every tile and every collision surface in the
 > same place, and walk the capsule along a route of cells on both.
 
-![Inside sector (-1, 1, -1) at seed 0: floor slabs, stair flights, bridges and ladders placed as MultiMeshes, translucent impostor boxes of the sectors beyond](../images/first-sector.png)
+![Inside sector (-1, 1, -1) at seed 0: an open floor walk turning towards a stair flight and a portal frame in open space, placed as MultiMeshes, with translucent impostor boxes of the sectors beyond](../images/first-sector.png)
 
 ## Files
 

@@ -38,8 +38,8 @@ sources:
 > [[GLOSSARY#All-solid degradation|all-solid degradation]]. On the
 > placeholder tileset an 8³ grid takes about 19 ms and a 24³ attempt about
 > 0.63 s in typed GDScript; every unconstrained 24³ sector of seeds 0 to 19
-> solves within 2 attempts, and every real stratum sector sampled reaches an
-> attempt, 17 of the 20 at seed 0 solving with headroom records (#173).
+> solves within 2 attempts, and since voids stay open (#180) every sampled
+> real stratum sector of seeds 0 to 4 solves at the first attempt.
 
 This is milestone 0.2.0 items D1 (the core) and D2 (pre-collapse and the
 restart policy) of [[RESEARCH_WFC]] section 7, following sections 3 and 4 of
@@ -85,8 +85,8 @@ var result := solver.solve(seed, sector, built.words)
 
 ## Starting domains
 
-`SectorDomains.build(library, size, type, records, faces, support_radius)`
-turns one sector's inputs into the `domains` words:
+`SectorDomains.build(library, size, type, records, faces)` turns one
+sector's inputs into the `domains` words:
 
 1. **Check each record.** Its cell lies inside the grid, no other record
    has the same cell, its orientation suits its family (a stair a yaw 0 to 3,
@@ -116,14 +116,32 @@ turns one sector's inputs into the `domains` words:
    (the byte union of step 6 below, done once per pair). Otherwise the
    `error` names both records and the direction: the records are
    inconsistent whatever the seed.
-4. **Sector default** for every other cell: free in a stratum, the solid
-   tile alone in a solid sector, the air tile alone in a shaft, cavity or
-   chasm. Cells in a [[GLOSSARY#Support column|support column]], a full
-   height column within `support_radius` (default 1, Chebyshev in x and z)
-   of a record's column, stay free, because on the placeholder tileset rock
-   only continues down to the grid bottom and open space only up to the top,
-   so a stair's rock and headroom need whole columns (decision #158).
-5. **Fixed faces** (optional): six arrays in face order +x, −x, +y, −y, +z,
+4. **Sector default** for every other cell: the fill tile alone, solid in a
+   solid sector and air in a stratum, shaft, cavity or chasm, so
+   walk-family tiles stand only in record cells
+   ([[0018-walk-tiles-only-in-record-cells]], #179, #180). Stratum
+   interiors stay open until their slabs, columns and walls get an issue of
+   their own.
+5. **Support cells.** A cell beside a record, across face `d`, that holds no
+   record itself also admits the free tiles (tiles of no family) that some
+   tile `t` of the record needs there: for each `t` whose `allowed(d, t)`
+   holds no fill tile, the free tiles of `allowed(d, t)`. The cell keeps the
+   fill tile too, and the solver's propagation decides. On the placeholder
+   tileset the rock socket `1s` admits solid or a `backing` plate beside a
+   catwalk, a ladder or a stair's high end and solid under a floor, slab
+   edge or stair; the wall ends `3s` of a wall doorway in a headroom cell
+   admit a wall or doorway beside it. Propagation removes solid, walls and
+   doorways again (solid cannot touch air sideways, a wall stack has to run
+   to the grid top), and the open stair and open floor need nothing, so
+   only **catwalks and ladders** end up with support: a `backing` behind
+   them. No family needs a slab under it, as every walk tile that may stand
+   over open space carries its own deck (open floor, open stair, bridge,
+   portal frame, short catwalk). Measured on three solved sectors each at
+   seed 0, the cells outside records hold only air in strata and only air
+   and 61 backings in shafts. The full-height support columns of decision
+   #158 are dropped: they let the solver place floors, stairs, catwalks and
+   ladders around every record.
+6. **Fixed faces** (optional): six arrays in face order +x, −x, +y, −y, +z,
    −z, each empty (free) or one entry per boundary cell, indexed `u +
    size_u * v` with u and v the other two axes in xyz order, holding the
    tile of the neighbour sector's cell across the face or −1. A boundary
@@ -228,12 +246,13 @@ first (fewest tiles, lowest priority among equals).
 
 ## Worked example: records, restarts and degradation
 
-**Tiles.** The placeholder library numbers its 53 tiles air 0, solid 1,
+**Tiles.** The placeholder library numbers its 61 tiles air 0, solid 1,
 floor 2, slab_edge 3 to 6, column 7, wall 8 and 9, wall_doorway 10 and 11,
 stair 12 to 15, bridge 16 and 17, catwalk 18 to 21, ladder 22 to 25, tunnel
 26 and 27, portal_opening 28 and 29, floor_open 30, slab_edge_end 31 to 34,
 slab_edge_end_f 35 to 38, stair_open 39 to 42, catwalk_end 43 to 46,
-catwalk_end_f 47 to 50, portal_frame 51 and 52.
+catwalk_end_f 47 to 50, portal_frame 51 and 52, catwalk_short 53 to 56,
+backing 57 to 60.
 
 **Record masks.** A stair record with yaw 1 (climbing −z) matches
 `stair@1` and `stair_open@1`, bits 13 and 40: `(1 − (1 − 0)) mod 4 = 0`. A
@@ -244,6 +263,18 @@ face (yaw 1) it matches bits 28 and 51. A floor record matches bits 2 to 6
 and 30 to 38: floor, open floor and every slab edge and slab edge end. A
 headroom record matches bits 0, 10 and 11: air and both rotations of the
 wall doorway, whose lintel starts 1.8 m up.
+
+**Support cells.** A catwalk record at (5, 3, 5) in a shaft matches bits
+18 to 21, 43 to 50 and 53 to 56. `catwalk_short@0` (bit 53) has `1s` on
+`+z`, and air shows `0s` there, so it accepts no air at (5, 3, 6); what it
+does accept there is solid, the rock faces of other catwalks, ladders,
+stairs and tunnels, and `backing@0` (bit 57, its plate and `1s` on `−z`,
+facing the catwalk). Of those, solid and `backing@0` have no family, so
+(5, 3, 6) starts as air, solid or `backing@0`; the rotations with rock on
+`+x`, `−z` and `−x` add `backing@1`, `backing@2` and `backing@3` to the
+cells there.
+Propagation drops solid (it needs rock beside it), and the observation of
+the catwalk picks one rotation and so one backing.
 
 **Floor faces a walk crosses.** A floor record at (5, 3, 5) with a floor
 record at (5, 3, 6) drops every tile whose `blocked_faces` has `+z` (bit 4):
@@ -265,14 +296,14 @@ on top (for the tunnel): none. The solve returns `FAILED` with `attempts 0`
 and `inconsistent starting domains: cell (4, 2, 4) is left empty by
 propagating them` in a few milliseconds.
 
-**Restarts.** An unconstrained 8³ grid at seed 36: attempt 0 uses `s =
-hash3_u(36, (0, 0, 0), 9100)` and contradicts after 84 observations;
+**Restarts.** An unconstrained 8³ grid at seed 374: attempt 0 uses `s =
+hash3_u(374, (0, 0, 0), 9100)` and contradicts after 104 observations;
 attempt 1 (salt 9101) solves. With the default 8 attempts the result is
-`SOLVED`, `attempts 2`, `restarts 1`, and `steps` (479) counts the
+`SOLVED`, `attempts 2`, `restarts 1`, and `steps` (568) counts the
 observations of both. With `max_attempts = 1` it is `DEGRADED`: 512 cells
-of tile 1, `attempts 1`, `restarts 1`. Seed 36 is the first seed that
-restarts at all on the 53-tile set; none of seeds 0 to 2 999 needs a third
-attempt.
+of tile 1, `attempts 1`, `restarts 1`. Seed 374 is the first seed that
+restarts at all on the 61-tile set (seed 36 was on the 53-tile set before
+#180); none of seeds 0 to 401 needs a third attempt.
 
 ## Propagation design: AC-3, not AC-4
 
@@ -362,6 +393,7 @@ With restarts (default 8 attempts, MRV):
 | 24³ unconstrained, 53 tiles, seeds 0–19 | 20 | 0 | 0 | 16 × 1, 4 × 2; mean 1.2 |
 | 20 real stratum sectors with records, 53 tiles, seed 0 | 18 | 2 | 0 | mean 3.10 over the 20 searched |
 | the same with headroom and walkable floor faces (#173) | 17 | 3 | 0 | mean 3.25 over the 20 searched |
+| the same with open voids, 61 tiles (#180) | 20 | 0 | 0 | all at the first |
 
 **Real sectors (#161).** On the 30-tile set, 14 of the 20 real sectors of
 seed 0, and 71 of the 100 of seeds 0 to 4, failed before an attempt. `mise
@@ -397,13 +429,46 @@ to 4, 18, 19, 19, 20 and 19 of the 20 sectors solve; the rest degrade.
 | headroom, door cells, walkable routings first, floor faces (this) | 90 | 37 | 2.97 |
 | the same without the floor face filter | 97 | 56 | – |
 | floor faces free of parapets entirely, no headroom | 77 | 41 | – |
+| open voids: air outside records and support cells (#180) | 100 | 100 | 1.00 |
 
 Headroom does not cost solves: air above a walk is easy to tile. What does
 is keeping parapets off the faces a walk crosses, since a parapet line
 along a walk has to run on and end with end pieces. It is also what makes
 the sectors walkable: `mise run walk-check --all-solving` at seed 0 walks
 66 of 66 solving sectors with it and 37 of 78 without ([[placement]]).
-Solid, shaft, cavity and chasm sectors are not sampled yet. `mise run
+
+**Open voids (#180).** With air outside record and support cells the same
+`mise run solver-real` run solves all 100 sectors at the first attempt,
+against 90 solved and 37 at the first attempt before; no sector degrades.
+`mise run walk-check --all-solving` at seed 0 finds 84 candidate sectors
+both times: before, 66 solved (23 at the first attempt) and all 66 walked;
+now all 84 solve at the first attempt and all 84 walk portal to portal.
+A 24³ stratum attempt takes about 0.54 s in `solver-check`, most cells
+collapsing to air in propagation. The void types, sampled the same way
+(the first 10 sectors of each type with records at seeds 0 and 1, 20 per
+type):
+
+| Type | Before: solved / at the first attempt / walk tiles outside records | Open voids with support cells | Air only, no support |
+| --- | --- | --- | --- |
+| shaft | 20 / 15 / 34 455 | 20 / 15 / 0 | 0, all 20 empty a cell |
+| cavity | 20 / 18 / 29 207 | 20 / 20 / 0 | 20 / 20 / 0 |
+| chasm | 20 / 19 / 26 243 | 20 / 20 / 0 | 4, 16 empty a cell |
+| solid | 0, all 20 rejected by the record checks | the same | the same |
+
+Without support cells a catwalk or ladder has nothing to hang on, and a
+single catwalk cell (a door cell or the foot of a ladder) has no catwalk
+tile open at both ends: the old support columns filled both gaps with
+catwalk, ladder and stair tiles outside the records, which is where the
+tens of thousands of stray walk tiles came from. `backing` and
+`catwalk_short` close them. Restricting the support columns to air and
+solid does not help (the same 0 and 4 solved), because solid cannot touch
+air sideways. Solid sectors fail as before: a tunnel turning or opening
+into headroom has no tile ([[edge-rasteriser]]).
+`tiles-check` on the placeholder tileset, which places unconstrained 6³
+grids, now contradicts in 42 of 142 attempts (0.296, from 0.259) with the
+two new prototypes.
+
+`mise run
 solver-check` prints the seed 0 table and checks that seeds 1 to 4 reach an
 attempt; `mise run solver-sector <x> <y> <z>` reproduces one sector.
 
@@ -466,7 +531,6 @@ machine before deciding #138.
 | `WEIGHT_SCALE` | 1000 | Fixed-point tile weights; weights have 0.001 steps. |
 | `MAX_TOTAL_WEIGHT` | 2³¹ − 1 | Largest summed domain weight (an error beyond). |
 | `ENTROPY_SCALE` | 2²⁴ | Fixed-point scale of the entropy key. |
-| `SectorDomains.SUPPORT_RADIUS` | 1 | Chebyshev radius in x and z of the free support columns around records in solid and void sectors. |
 | `SectorDomains.AUTHORED_YAW` | stair 0, portal opening 3 | Forward yaw of the prototype at rotation 0 for the families whose rotation follows the record. |
 
 The salts sit above every other salt in the project (the tile placement of
@@ -487,7 +551,11 @@ counting up from 9300 into salts nothing else uses.
   still open.
 - **What degradation keeps** and whether inconsistent sectors degrade
   instead of failing (#157).
-- **Default domains** of solid and void sectors (#158).
+- **Default domains** of solid and void sectors (#158): settled by
+  [[0018-walk-tiles-only-in-record-cells]]; stratum interiors (slabs,
+  columns, walls) are the next question.
+- **Parapets over open space** (#185): with air under every walk, a floor
+  record can only take the open floor, so stratum walks have no parapets.
 - **Native threshold** (#138): 0.63 s mean per successful 24³ attempt,
   0.79 s per unconstrained sector with restarts.
 

@@ -413,7 +413,7 @@ appears.
 
 `resources/tilesets/placeholder.tres` ([[tileset#The placeholder tileset]]
 has every prototype, its geometry and the meaning of each socket id) is the
-reference a real tileset is checked against. 20 prototypes expand to 53 tiles:
+reference a real tileset is checked against. 22 prototypes expand to 61 tiles:
 
 | prototype | sockets `+x -x +y -y +z -z` | rotations | family |
 | --- | --- | --- | --- |
@@ -437,6 +437,8 @@ reference a real tileset is checked against. 20 prototypes expand to 53 tiles:
 | catwalk_end | `4 0s 0i 0i 1s 0s` | 4 | catwalk |
 | catwalk_end_f | `0s 4f 0i 0i 1s 0s` | 4 | catwalk |
 | portal_frame | `0s 0s 0i 0i 0s 0s` | 2 | portal opening |
+| catwalk_short | `0s 0s 0i 0i 1s 0s` | 4 | catwalk |
+| backing | `0s 0s 0i 0i 0s 1s` | 4 | none |
 
 **Why it is closed.** Every socket's partner is shown on the opposite face
 by some tile, most often by the tile itself: `0s`, `1s`, `3s`, `0i` and `1i`
@@ -477,7 +479,8 @@ through the whole grid and collides with the rock around it. Measured with
 | walls stack, columns and ladders open (committed) | 138 | 38 | 0.275 |
 | everything open | 135 | 35 | 0.259 |
 | committed, but catwalk and ladder backs open instead of `1s` | 173 | 73 | 0.422 |
-| all 20 prototypes (committed, #161) | 135 | 35 | 0.259 |
+| all 20 prototypes (#161) | 135 | 35 | 0.259 |
+| all 22 prototypes, with `catwalk_short` and `backing` (committed, #180) | 142 | 42 | 0.296 |
 
 The last row shows the other pressure: without its wildcard (#141) solid
 only matches rock faces, so every face of a rock region needs a tile showing
@@ -486,7 +489,15 @@ catwalk and ladder backs) lower the rate; taking them away raises it. Seeds 1
 and 2 give 0.213 and 0.206. Which of these approximations to keep is decision
 #153; the one-cell doorway, stair and tunnel proportions are #154.
 
-Placement histogram of the 20 prototypes, 100 runs, 0 failed:
+The last row adds two tiles that offer `1s` beside open space, which the
+unconstrained 6³ grid uses to start more rock faces it then cannot close;
+real sectors only admit them where a record needs them
+([[sector-solver#Starting domains]]).
+
+Placement histogram of the 20 prototypes, 100 runs, 0 failed (with the 22
+prototypes of #180: air 27.0 %, tunnel 15.0 %, solid 10.4 %, ladder 7.6 %,
+backing 7.5 %, catwalk ends 4.1 %, catwalk_short 3.6 %, the rest within a
+percentage point of the table):
 
 | tiles | cells | share |
 | --- | --- | --- |

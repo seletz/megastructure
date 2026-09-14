@@ -78,7 +78,7 @@ The tiles and their sockets are described in
 
 ### First walkable sector
 
-![Inside sector (-1, 1, -1) at seed 0: floor slabs, stair flights, bridges and ladders placed as GridMap cells](docs/images/first-sector.png)
+![Inside sector (-1, 1, -1) at seed 0: an open floor walk turning towards a stair flight and a portal frame in open space, with a solid neighbour on the left](docs/images/first-sector.png)
 
 The solver's output can now be walked. The walk scene solves the 27 sectors
 around the origin on worker threads and places each one as a Godot
