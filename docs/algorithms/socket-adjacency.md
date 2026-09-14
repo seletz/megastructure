@@ -413,7 +413,8 @@ appears.
 
 `resources/tilesets/placeholder.tres` ([[tileset#The placeholder tileset]]
 has every prototype, its geometry and the meaning of each socket id) is the
-reference a real tileset is checked against. 22 prototypes expand to 61 tiles:
+reference a real tileset is checked against. 40 prototypes expand to 118 tiles
+(two bitset words):
 
 | prototype | sockets `+x -x +y -y +z -z` | rotations | family |
 | --- | --- | --- | --- |
@@ -439,6 +440,21 @@ reference a real tileset is checked against. 22 prototypes expand to 61 tiles:
 | portal_frame | `0s 0s 0i 0i 0s 0s` | 2 | portal opening |
 | catwalk_short | `0s 0s 0i 0i 1s 0s` | 4 | catwalk |
 | backing | `0s 0s 0i 0i 0s 1s` | 4 | none |
+| tunnel_corner | `0s 1s 1i 1i 0s 1s` | 4 | tunnel |
+| tunnel_t | `0s 0s 1i 1i 0s 1s` | 4 | tunnel |
+| tunnel_cross | `0s 0s 1i 1i 0s 0s` | 1 | tunnel |
+| tunnel_end | `0s 1s 1i 1i 1s 1s` | 4 | tunnel |
+| vault | `0s 0s 1i 1i 1s 1s` | 2 | none |
+| vault_corner | `0s 1s 1i 1i 0s 1s` | 4 | none |
+| vault_t | `0s 0s 1i 1i 0s 1s` | 4 | none |
+| vault_cross | `0s 0s 1i 1i 0s 0s` | 1 | none |
+| vault_end | `0s 1s 1i 1i 1s 1s` | 4 | none |
+| bridge_corner, bridge_t, bridge_cross, bridge_end | `0s 0s 0i 0i 0s 0s` | 4, 4, 1, 4 | bridge |
+| stair_tunnel | `1s 0s 0i 1i 1s 1s` | 4 | stair |
+| stairwell | `0s 0s 1i 0i 1s 1s` | 2 | none |
+| stairwell_end | `0s 1s 1i 0i 1s 1s` | 4 | none |
+| portal_tunnel | `1s 1s 1i 1i 0s 0s` | 2 | portal opening |
+| portal_tunnel_end | `1s 1s 1i 1i 0s 1s` | 4 | portal opening |
 
 **Why it is closed.** Every socket's partner is shown on the opposite face
 by some tile, most often by the tile itself: `0s`, `1s`, `3s`, `0i` and `1i`
@@ -480,7 +496,8 @@ through the whole grid and collides with the rock around it. Measured with
 | everything open | 135 | 35 | 0.259 |
 | committed, but catwalk and ladder backs open instead of `1s` | 173 | 73 | 0.422 |
 | all 20 prototypes (#161) | 135 | 35 | 0.259 |
-| all 22 prototypes, with `catwalk_short` and `backing` (committed, #180) | 142 | 42 | 0.296 |
+| all 22 prototypes, with `catwalk_short` and `backing` (#180) | 142 | 42 | 0.296 |
+| all 40 prototypes, with the passages in rock and bridge shapes (committed, #182) | 103 | 3 | 0.029 |
 
 The last row shows the other pressure: without its wildcard (#141) solid
 only matches rock faces, so every face of a rock region needs a tile showing
@@ -489,15 +506,32 @@ catwalk and ladder backs) lower the rate; taking them away raises it. Seeds 1
 and 2 give 0.213 and 0.206. Which of these approximations to keep is decision
 #153; the one-cell doorway, stair and tunnel proportions are #154.
 
-The last row adds two tiles that offer `1s` beside open space, which the
+The #180 row adds two tiles that offer `1s` beside open space, which the
 unconstrained 6³ grid uses to start more rock faces it then cannot close;
 real sectors only admit them where a record needs them
-([[sector-solver#Starting domains]]).
+([[sector-solver#Starting domains]]). The #182 row goes the other way: the
+tunnel, vault and stairwell shapes close a rock region against open space
+in almost any outline, so the rate falls to 0.029 (seeds 1 and 2: 0.074 and
+0.038).
+
+**Passages in rock (#182).** The tunnel and vault shapes show `0s` on their
+open sides and `1s` on the closed ones, `1i` top and bottom, so a straight
+run, a turn, a junction or an end matches its neighbours in rock by the
+same two ids; a vault stands on a tunnel (`1i` on `1i`) although both are
+open there, as the straight tunnel already was. The stair in rock keeps the
+stair's `0i` top, so only a stairwell (`0i` below, `1i` above) or an open
+tile fits over it, and the vault over the stairwell keeps the top tread's
+second cell of room; a vault cannot stand on a stair. Measured on 20 solid
+sectors per world seed 0 to 4 ([[sector-solver#Measurements]]).
 
 Placement histogram of the 20 prototypes, 100 runs, 0 failed (with the 22
 prototypes of #180: air 27.0 %, tunnel 15.0 %, solid 10.4 %, ladder 7.6 %,
 backing 7.5 %, catwalk ends 4.1 %, catwalk_short 3.6 %, the rest within a
-percentage point of the table):
+percentage point of the table; with the 40 of #182: air 16.6 %, solid
+8.1 %, floor 7.0 %, stairwell_end 6.6 %, backing 4.8 %, ladder 4.5 %,
+stairwell 4.2 %, the straight tunnel down to 2.8 % with its corner, T,
+cross and end at 7.6 % together, every vault shape 8.3 %, bridge_cross the
+rarest at 0.2 %):
 
 | tiles | cells | share |
 | --- | --- | --- |
