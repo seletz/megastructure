@@ -23,7 +23,8 @@ status: current
 > (`TilePrototype`, `TileSet3D`), and so are matching,
 > [[GLOSSARY#Rotation expansion|rotation expansion]], the
 > [[GLOSSARY#Adjacency table|adjacency table]] (`TileLibrary`) and the
-> validation task (`mise run tiles-check`). The convention follows
+> validation task (`mise run tiles-check`), and a box-only placeholder
+> tileset passes it as the worked reference below. The convention follows
 > [[RESEARCH_WFC]], which takes it from Marian42's infinite city, and is
 > proposed for approval in issue #140.
 
@@ -408,6 +409,93 @@ island fills whole grids (27.0 %), because an unconstrained grid is not a
 sector. Only plug, dead on two opposite sides of a 6-wide grid, never
 appears.
 
+### Worked example: the placeholder tileset
+
+`resources/tilesets/placeholder.tres` ([[tileset#The placeholder tileset]]
+has every prototype, its geometry and the meaning of each socket id) is the
+reference a real tileset is checked against. 13 prototypes expand to 30 tiles:
+
+| prototype | sockets `+x -x +y -y +z -z` | rotations | family |
+| --- | --- | --- | --- |
+| air | `0s 0s 0i 0i 0s 0s` | 1 | none |
+| solid | `1s 1s 1i 1i 1s 1s` | 1 | none |
+| floor | `0s 0s 0i 1i 0s 0s` | 1 | floor |
+| slab_edge | `2 2f 0i 1i 0s 0s` | 4 | floor |
+| column | `0s 0s 0i 0i 0s 0s` | 1 | none |
+| wall | `3s 3s 3_0 3_0 0s 0s` | 2 | none |
+| wall_doorway | `3s 3s 3_0 0i 0s 0s` | 2 | none |
+| stair | `1s 0s 0i 1i 0s 0s` | 4 | stair |
+| bridge | `0s 0s 0i 0i 0s 0s` | 2 | bridge |
+| catwalk | `4 4f 0i 0i 1s 0s` | 4 | catwalk |
+| ladder | `0s 0s 0i 0i 1s 0s` | 4 | ladder |
+| tunnel | `0s 0s 1i 1i 1s 1s` | 2 | tunnel |
+| portal_opening | `3s 3s 3_0 0i 0s 0s` | 2 | portal opening |
+
+**Why it is closed.** Every socket's partner is shown on the opposite face
+by some tile, most often by the tile itself: `0s`, `1s`, `3s`, `0i` and `1i`
+are symmetric or invariant and appear on both faces of an axis; the
+asymmetric parapet and catwalk ends pair `2` with `2f` and `4` with `4f`
+across the same prototype, so a run of either continues straight and a
+half-turned copy, whose parapet is on the other side, cannot join it; and
+`3_0`, `3_1` stay within the two wall rotations. So there are no dead
+sockets, no empty directions, and every tile touches air or solid through
+some open or rock face.
+
+**Stairs.** A stair cell climbs one cell towards its `+x`. Its high end is
+`1s` and its bottom `1i`: the stair is cut into rock, and the rock in front
+of it carries the next flight one cell up (whose own bottom is `1i`) or the
+landing floor (whose bottom is also `1i`). Its low end is `0s`, so it opens
+onto a floor at the foot and onto the open cell above the previous flight.
+Three stair cells turned the same way climb a stratum, exactly as
+`EdgeRasteriser` lays a stair run.
+
+**Walls** stack strictly: `wall` has `3_0` on both vertical faces, so a wall
+continues upwards, and a stack ends at the bottom only in `wall_doorway` or
+`portal_opening`, whose `-y` is `0i` because nothing crosses the bottom of an
+opening. **Columns and ladders** are open (`0i`) at both ends instead. With
+stacking ids for them too, nothing ends a column or a ladder, so every one runs
+through the whole grid and collides with the rock around it. Measured with
+`mise run tiles-check`, seed 0:
+
+| variant | attempts | contradictions | rate |
+| --- | --- | --- | --- |
+| walls, columns and ladders stack | 249 | 150 | 0.602, fails |
+| walls stack, columns and ladders open (committed) | 138 | 38 | 0.275 |
+| everything open | 135 | 35 | 0.259 |
+| committed, but catwalk and ladder backs open instead of `1s` | 173 | 73 | 0.422 |
+
+The last row shows the other pressure: without its wildcard (#141) solid
+only matches rock faces, so every face of a rock region needs a tile showing
+`1s` or `1i`. Tiles that offer one (stair fronts, tunnel sides and tops,
+catwalk and ladder backs) lower the rate; taking them away raises it. Seeds 1
+and 2 give 0.213 and 0.206. Which of these approximations to keep is decision
+#153; the one-cell doorway, stair and tunnel proportions are #154.
+
+Placement histogram, 100 runs, 0 failed:
+
+| tiles | cells | share |
+| --- | --- | --- |
+| air@0 | 6 903 | 32.0 % |
+| solid@0 | 2 779 | 12.9 % |
+| tunnel@0, @1 | 3 621 | 16.8 % |
+| ladder@0 to @3 | 3 516 | 16.3 % |
+| floor@0 | 1 060 | 4.9 % |
+| wall@0, @1 | 758 | 3.5 % |
+| stair@0 to @3 | 1 183 | 5.5 % |
+| bridge@0, @1 | 680 | 3.1 % |
+| slab_edge@0 to @3 | 366 | 1.7 % |
+| column@0 | 202 | 0.9 % |
+| portal_opening@0, @1 | 182 | 0.8 % |
+| wall_doorway@0, @1 | 158 | 0.7 % |
+| catwalk@0 to @3 | 192 | 0.9 % |
+
+Tunnels and ladders are placed far more often than their weights suggest.
+Below a rock cell only rock or a tunnel may sit, so propagation forces
+tunnels under every solid region the unconstrained grid starts; a ladder
+fits wherever air fits and also offers a rock face, so it fills the open
+cells beside rock. Catwalks are rarest, because their asymmetric
+ends need a straight run of catwalks along a rock face across the grid.
+
 ### Complexity
 
 With `n` tiles, `w` words and `c = 216` cells: dead sockets and empty
@@ -451,8 +539,12 @@ table it builds that it equals the direct pairwise rule and is symmetric.
   faster for the box-only placeholder tileset; derived ids from face profiles
   remove a class of authoring bugs once real meshes arrive.
 - **Contradiction threshold.** `tiles-check` fails above a rate of 0.5 by
-  default, lenient on purpose until the placeholder tileset (#88) shows
-  real numbers; decision #149.
+  default; the placeholder tileset measures 0.21 to 0.28 over seeds 0 to 2,
+  so a threshold of 0.1 would fail it until solid gets its wildcard;
+  decision #149.
+- **Floor-level variants and vertical continuation.** The placeholder keeps
+  slab edges, columns and ladders open rather than adding floor-level copies
+  and stacking ids; decision #153.
 - **Histogram boundary.** The placement grid is unconstrained, so a tile
   with a dead socket still appears on the grid boundary and a
   self-contained group of tiles fills whole grids. The reachability and
