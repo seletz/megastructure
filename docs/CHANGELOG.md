@@ -18,6 +18,7 @@ status: current
 
 ### Added
 
+- `mise run wfc-bench` times the first stratum sectors from the origin through the real pipeline, unconstrained and optionally through the face-first boundaries, and prints markdown tables with a verdict against the 1 s native threshold. (#167)
 - `SectorBoundaries` solves each sector's border corner, edges and faces from their own keys before its interior, so neighbouring sectors compute identical borders in any order, checked over 100 faces and 50 adjacent pairs by `mise run boundary-check`. (#164)
 - `SectorSolver` takes starting domains built by `SectorDomains` from edge rasteriser records, the sector type and fixed boundary faces, fails fast on inconsistent records, restarts with the next attempt seed up to 8 times and then degrades to all solid, with `mise run solver-sector` running the whole pipeline for one real sector. (#160)
 - `SectorSolver` fills a cell grid with tiles by Wave Function Collapse: a bitset wave, AC-3 propagation over byte-sliced tables, minimum remaining values with a hashed tie-break (Shannon entropy behind a flag) and hashed integer weighted draws, checked for determinism against a recorded reference by `mise run solver-check`, about 0.63 s per 24³ sector. (#156)

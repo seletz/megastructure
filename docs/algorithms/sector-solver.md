@@ -341,6 +341,24 @@ placeholder tileset, not solver failures (#159). `mise run solver-check`
 prints the real-sector table; `mise run solver-sector <x> <y> <z>`
 reproduces one sector.
 
+`mise run wfc-bench --boundaries` (#93) at seed 0, the first 10 stratum
+sectors walking outwards from the origin, on an Intel i9-9880H shared with
+four other headless Godot runs:
+
+| Run | Searched | Mean / max time | Mean attempts | Contradictions | Degraded | Failed before an attempt |
+| --- | --- | --- | --- | --- | --- | --- |
+| real pipeline | 3 of 10 | 3 359 / 3 568 ms | 1.33 | 1 | 0 | 7 (5 rejected, 2 inconsistent) |
+| unconstrained 24³ | 10 of 10 | 3 869 / 5 638 ms | 1.20 | 2 | 0 | 0 |
+| face-first boundaries, cold | 10 of 10 | 700 / 861 ms | 10.2 pieces' attempts | 0 | 0 | 10 (every interior) |
+
+A single 24³ attempt took about 3.4 s there against 0.63 s in the table
+above, the same slowdown [[face-first-boundaries#Measurements]] saw, so the
+machine and its load dominate. Both runs are above the 1 s threshold of
+decision #138 as measured; scaled to the 0.63 s attempt above, 1.2 to 1.33
+mean attempts would be about 0.8 s, just below it. The boundaries run is
+only fast because every interior fails before an attempt. Re-run on an idle
+machine before deciding #138.
+
 ## Determinism
 
 - Every random value is `Hash.hash3_u`: the attempt seed from `(seed,

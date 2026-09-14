@@ -221,6 +221,22 @@ usage = '''
 flag "--quick" help="4 faces per seed and 10 unconstrained 8³ pairs; no 24³ pairs or timings (the check tier)"
 '''
 
+[tasks.wfc-bench]
+depends = ["import"]
+description = "Benchmark the sector solver on the placeholder tileset: the first N stratum sectors walking outwards from the origin through the real pipeline (records, domains, solve), the same sectors solved unconstrained, and with --boundaries cold through the face-first boundaries; print markdown tables of outcome, attempts, steps, propagations and time per sector, mean and max time, mean attempts, contradiction, degraded and failed-before-attempt counts and a verdict against the 1 s threshold of #138. Usage: mise run wfc-bench [--seed N] [--sectors N] [--boundaries] (headless, not part of check)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+args=(--seed "${usage_seed:-0}" --sectors "${usage_sectors:-10}")
+[[ "${usage_boundaries:-false}" == "true" ]] && args+=(--boundaries)
+godot --headless --path . --script res://scripts/tools/wfc_bench.gd -- "${args[@]}"
+'''
+usage = '''
+flag "--seed <n>" default="0" help="World seed and solve seed"
+flag "--sectors <n>" default="10" help="Stratum sectors to benchmark"
+flag "--boundaries" help="Also solve each sector cold through SectorBoundaries.solve_sector"
+'''
+
 [tasks.panel-check]
 depends = ["import"]
 description = "Click every kind of script-backed widget in the skeleton viewer's tweak panel (bool boxes and labels, int and float spin boxes, a slider) and check each setter ran (headless)"

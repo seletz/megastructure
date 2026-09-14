@@ -82,6 +82,9 @@ class Piece:
 	var cells := PackedInt32Array()
 	var outcome := SectorSolver.Outcome.FAILED
 	var attempts := 0
+	## Observations and propagation queue pops of the piece's solve.
+	var steps := 0
+	var propagations := 0
 	## Why the piece failed (its cells are solid), or "".
 	var error := ""
 	var time_usec := 0
@@ -100,6 +103,8 @@ class SectorResult:
 	var failed := 0
 	## Errors of the failed pieces.
 	var errors := PackedStringArray()
+	## Every piece the sector uses: corners, edges, faces, then the interior.
+	var pieces: Array[Piece] = []
 	var interior: Piece
 	## Wall time of this call per level (corner, edge, face, interior); pieces
 	## already cached cost nothing.
@@ -224,6 +229,7 @@ func solve_sector(solve_seed: int, sector: Vector3i) -> SectorResult:
 			for offset in _owner_offsets(kind):
 				used.append(_piece(kind, sector + offset))
 		result.level_usec[level] = Time.get_ticks_usec() - started
+	result.pieces = used
 	result.interior = used[used.size() - 1]
 	result.solved = true
 	for piece in used:
@@ -393,6 +399,8 @@ func _solve_piece(kind: int, owner: Vector3i) -> Piece:
 		var result := _solver(size).solve(Hash.hash3_u(seed, owner, PIECE_SALT + kind), owner, domains)
 		piece.outcome = result.outcome
 		piece.attempts = result.attempts
+		piece.steps = result.steps
+		piece.propagations = result.propagations
 		piece.error = result.error
 		piece.cells = result.cells
 	if piece.outcome == SectorSolver.Outcome.FAILED:
