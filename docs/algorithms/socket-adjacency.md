@@ -4,7 +4,6 @@ tags:
   - wfc
   - tileset
   - milestone/0.2.0
-  - planned
 status: current
 ---
 
@@ -19,9 +18,11 @@ status: current
 > when the sockets on their touching faces match. Rotated copies of a tile are
 > generated automatically, their sockets permuted, and the full adjacency
 > table is derived once at load time as bitsets. A validation task catches
-> sockets that can never match and tiles that can never be placed. Nothing is
-> implemented yet; the convention follows [[RESEARCH_WFC]], which takes it
-> from Marian42's infinite city.
+> sockets that can never match and tiles that can never be placed. The tile
+> format and the socket string grammar below are implemented
+> (`TilePrototype`, `TileSet3D`); matching, rotation expansion and the table
+> come next. The convention follows [[RESEARCH_WFC]], which takes it from
+> Marian42's infinite city, and is proposed for approval in issue #140.
 
 ## Sockets
 
@@ -34,6 +35,45 @@ line up.
 
 Horizontal and vertical faces use different labels because they can go wrong
 in different ways.
+
+### Socket strings
+
+A socket is written as one short string. This is the exact grammar the tile
+resource accepts (`TilePrototype.parse_socket`); anything else is a
+validation error.
+
+```text
+horizontal = id [ "s" | "f" ]            ; faces +x, -x, +z, -z
+vertical   = id ( "_" rotation | "i" )   ; faces +y, -y
+id         = "0" | nonzero { digit }
+rotation   = "0" | "1" | "2" | "3"
+nonzero    = "1" | "2" | ... | "9"
+digit      = "0" | nonzero
+```
+
+- The id is a decimal profile number without sign, spaces or leading zeros,
+  so `3` and `03` can never both name profile 3. It has no upper bound.
+- Suffixes are lower case and at most one: `3sf`, `3S` and `3i` on a
+  horizontal face are errors.
+- A vertical socket always has a suffix: a bare `5` on `+y` is an error, as
+  is `5_4`, `5_01` or `05_1`.
+- A horizontal face never takes a vertical suffix and the other way round:
+  `3_0` on `+x` and `3s` on `-y` are errors.
+
+| string | face | id | parsed as |
+| --- | --- | --- | --- |
+| `0s` | horizontal | 0 | symmetric |
+| `3` | horizontal | 3 | asymmetric |
+| `3f` | horizontal | 3 | flipped (the mirror of `3`) |
+| `5_0` ... `5_3` | vertical | 5 | rotation index 0 to 3 |
+| `0i` | vertical | 0 | rotation-invariant |
+
+A prototype stores its six socket strings in a fixed order,
+`+x, -x, +y, -y, +z, -z` (face indices 0 to 5), so the opposite of face `d`
+is `d ^ 1`. The ids are numbers rather than names because the suffix
+letters would be ambiguous at the end of a name (is `bus` profile `bu`,
+symmetric?); a table of what each number means belongs next to the tileset
+that uses it. The format itself is in [[tileset]].
 
 ### Horizontal sockets: symmetric and asymmetric
 
@@ -84,14 +124,17 @@ and the first tileset has no chiral pieces that need them.
 
 ### Special tiles
 
-- **Air**: every socket `0s` or `0i`.
+- **Air**: every socket `0s` or `0i`, and the only tile allowed no mesh.
 - **Solid**: every socket `1s` or `1i`, plus a wildcard so solid may sit next
-  to almost anything. This is the pressure valve that keeps contradictions
+  to almost anything. The format has no wildcard yet: how to spell it is
+  decision issue #141, how universal solid should be is #136. Until then
+  solid matches only `1s` and `1i`. This is the pressure valve that keeps contradictions
   rare (see [[wave-function-collapse#Contradictions and restarts]]). A few
   sockets, such as stair exits and bridge ends, refuse the wildcard so the
   solver cannot end a stair in rock.
 - An optional **exclusion list** can forbid pairs that match by socket but
-  look wrong. It should rarely be needed.
+  look wrong. It should rarely be needed. It holds prototype names and
+  applies in every direction and to every rotation of both tiles.
 
 ## Deriving the adjacency table
 
@@ -131,8 +174,10 @@ of CPU instructions per neighbour.
 
 ## Validation
 
-A headless `mise` task, planned as `tiles-check`, runs in CI and fails the
-build on:
+Today `mise run tileset-check` checks only the format: the socket grammar,
+unique names, weights, rotations, families, meshes and the names that
+exclusions, solid and air refer to (see [[tileset]]). A headless `mise`
+task, planned as `tiles-check`, will run in CI and fail the build on:
 
 1. **Dead sockets.** A socket used on some `+d` face that no `-d` face
    matches. The tile can never have a neighbour there and causes a
@@ -165,8 +210,9 @@ two-way consistency of the derived table.
   remove a class of authoring bugs once real meshes arrive.
 - **How many sockets refuse solid.** Too many and contradictions return; too
   few and stairs end in walls.
-- **Tile format.** A Godot `Resource` per tileset, edited in the inspector, is
-  the plan; its exact fields are part of the tileset epic.
+- **Tile format.** Settled as `TileSet3D` holding `TilePrototype`s
+  ([[tileset]]). The socket convention awaits approval in #140; one family
+  per prototype is decision #142.
 
 ## References
 
@@ -181,4 +227,5 @@ Sources:
 Related notes: [[wave-function-collapse]], [[model-synthesis-and-sectors]],
 [[RESEARCH_WFC]], [[MEGASTRUCTURE_CONCEPT]] (tile vocabulary).
 
-Code: none yet.
+Code: [[tileset]] (the resource format and socket parser); the matching
+and the table are not written yet.
